@@ -112,7 +112,7 @@ header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background
 .thead{display:flex;gap:12px;align-items:flex-start;justify-content:space-between;padding:14px 14px 10px;border-top:5px solid var(--tc,var(--accent))}
 .thead h3{margin:0;font-family:var(--display);font-weight:900;font-size:26px;text-transform:uppercase;letter-spacing:.02em}
 .thead p{margin:2px 0 0;color:var(--muted);font-size:13px}
-.tier-primo{--tc:#B7791F} .tier-safe{--tc:var(--chance)} .tier-middle{--tc:var(--accent)} .tier-high{--tc:var(--s-mma)}
+.tier-primo{--tc:#B7791F} .tier-best{--tc:#2F855A} .tier-safe{--tc:var(--chance)} .tier-middle{--tc:var(--accent)} .tier-high{--tc:var(--s-mma)}
 .btn.sm{padding:8px 13px;font-size:13px;white-space:nowrap}
 .btn.ghost{background:transparent;color:var(--fg);border:1px solid var(--line)}
 .totals{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);border-block:1px solid var(--line)}
@@ -330,6 +330,7 @@ const TYPES = [["winner","Winner"],["spread","Spread"],["total","Over / Under"],
 const MONTHS = {JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11};
 const TIERS = {
   primo:  {name:"Primo's picks", lo:.25, hi:.97, sort:"p", liked:true, blurb:"Only bets Primo's own research likes, most likely first."},
+  best:   {name:"Best value", lo:.60, hi:.90, sort:"score", blurb:"Primo's smartest mix: likely bets (60–90%) that are cheaper on Kalshi than at the sportsbooks, liked by Primo's research, or that the money is moving toward. All legs point the same way, so they tend to win together."},
   safe:   {name:"Safe",   lo:.80, hi:.97, sort:"p",   blurb:"Biggest favorites. Smallest payout, best chance."},
   middle: {name:"Middle", lo:.58, hi:.82, sort:"vol", blurb:"Solid favorites with a few closer calls."},
   high:   {name:"High risk", lo:.30, hi:.60, sort:"vol", blurb:"Close games and underdogs. Big payout, long odds."}
@@ -702,6 +703,16 @@ const COMBO_OK = new Set(("KXNFLGAME KXNFLSPREAD KXNFLTOTAL KXNFLTD KXNFLFIRSTTD
  "KXUFCFIGHT KXUFCMOF KXUFCMOV KXUFCROUNDS KXUFCDISTANCE KXATPMATCH KXATPSETWINNER KXATPGTOTAL KXATPEXACTMATCH KXATPCHALLENGERMATCH KXWTAMATCH KXWTASETWINNER KXWTAGTOTAL KXWTACHALLENGERMATCH").split(" "));
 const COMBO_FAMILIES = /^KX(NFL|NBA|WNBA|NHL|MLB|MLS|NCAAF|UFC|ATP|WTA)/;
 const comboOK = m => !COMBO_FAMILIES.test(m.series) || COMBO_OK.has(m.series);
+// "Best value" score: real edges first (cheaper than sportsbooks, research likes it, money moving in), then the likelier bet
+function smartScore(m){
+  let s = 0;
+  if ((m.value || 0) >= 3) s += 3; else if ((m.value || 0) <= -4) s -= 3;
+  if (likedBy(m)) s += 3;
+  if (m.move >= 3) s += 1.5; else if (m.move <= -6) s -= 3;
+  if (m.vol < 100) s -= 1;
+  const pi = playerInjury(m); if (pi && pi.status === "Questionable") s -= 2;
+  return s + m.p;   // likelier bets break ties
+}
 function candidatesFor(tierKey){
   const t = TIERS[tierKey];
   const out = [];
@@ -720,11 +731,12 @@ function candidatesFor(tierKey){
   }
   if (t.liked) return out.filter(m => likedBy(m) && m.p >= t.lo && m.p <= t.hi).sort((a,b) => b.p - a.p);
   const inRange = out.filter(m => m.p >= t.lo && m.p <= t.hi && m.vol >= 10);
-  const key = t.sort === "p" ? (a,b) => b.p - a.p || b.vol - a.vol : (a,b) => b.vol - a.vol;
+  const key = t.sort === "score" ? (a,b) => smartScore(b) - smartScore(a) || b.p - a.p : t.sort === "p" ? (a,b) => b.p - a.p || b.vol - a.vol : (a,b) => b.vol - a.vol;
   // bets Primo's research likes go first, then bets the money is moving toward; bets the money is leaving drop to the back
   const mv = m => m.move >= 3 ? 1 : m.move <= -6 ? -1 : 0;
   const vl = m => (m.value || 0) >= 3 ? 1 : (m.value || 0) <= -5 ? -1 : 0;   // cheaper on Kalshi than at the sportsbooks = value
-  inRange.sort((a,b) => (likedBy(b) ? 1 : 0) - (likedBy(a) ? 1 : 0) || vl(b) - vl(a) || mv(b) - mv(a) || key(a,b));   // bets Primo's research likes go first
+  if (t.sort === "score") inRange.sort(key);
+  else inRange.sort((a,b) => (likedBy(b) ? 1 : 0) - (likedBy(a) ? 1 : 0) || vl(b) - vl(a) || mv(b) - mv(a) || key(a,b));   // bets Primo's research likes go first
   const backup = out.filter(m => !inRange.includes(m) && m.p >= .2 && m.p <= .98).sort((a,b) => Math.abs((t.lo+t.hi)/2 - a.p) - Math.abs((t.lo+t.hi)/2 - b.p));
   return inRange.concat(backup);
 }
