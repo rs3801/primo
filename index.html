@@ -1152,10 +1152,63 @@ function renderAsk(res){
   ${compare}${alt(res.same_risk, "Same risk, better deal", "tier-primo")}${alt(res.safer, "Safer version", "tier-safe")}${alt(res.high_risk, "High-risk version", "tier-high")}
   <p class="stakenote" style="margin:10px 0 0">Based on Kalshi prices as of ${esc(D.asof)} and Primo's research as of ${esc(R.asof||"")}. Check live prices before you bet. Market odds and research, not guarantees.</p>`;
 }
+
+// Ask Primo outside Claude (the public website): Primo packs the picks plus its own data for those games
+// into one message, copies it, and opens Claude or ChatGPT (free accounts work). Screenshots can be attached there.
+function askOutside(){
+  $("askstop").hidden = true;
+  $("askshot").hidden = true;
+  $("askgo").textContent = "Ask in Claude";
+  const brow = $("askgo").parentNode;
+  const gpt = document.createElement("button"); gpt.className = "btn ghost sm"; gpt.type = "button"; gpt.id = "askgpt"; gpt.textContent = "Ask in ChatGPT";
+  brow.appendChild(gpt);
+  $("askstatus").innerHTML = "Type your picks (or tap Use My combo), then tap a button. Primo adds its latest prices and research for those games, copies everything, and opens the chat. If the box in the chat is empty, just tap Paste and send. Want to check a screenshot of a ticket? Add the picture in the chat before sending.";
+  $("askcombo").addEventListener("click", () => {
+    const legs = slipLegs();
+    if (!legs.length){ toast("My combo is empty"); return; }
+    $("asktext").value = legs.map(m => `${m.pick} (${m.g.title}, ${m.g.leagueName}) — Kalshi ${Math.round(m.p*100)}%`).join("\n") + `\nBet: $${state.stake}`;
+  });
+  const build = () => {
+    const text = $("asktext").value.trim();
+    const seen = new Map();
+    const tries = [text].concat(text.split(/\n+/));
+    for (const q of tries) for (const g of findGames(q)) if (!seen.has(g.code) && seen.size < 6) seen.set(g.code, g);
+    const facts = [...seen.values()].map(g => { const f = gameFacts(g); f.bets_on_kalshi = f.bets_on_kalshi.slice(0, 25); return f; });
+    return `You are Primo, a sports-betting research helper for a family that bets on Kalshi and sometimes at sportsbooks. Answer in plain, simple English for someone who is not a bettor.
+${text ? `My picks:\n"""${text.slice(0, 3000)}"""` : "I will attach a screenshot of my ticket."}
+If I attached a screenshot, read every leg, its odds, the stake and the payout from it.
+
+Primo's data (Kalshi prices as of ${D.asof}; Primo research as of ${R.asof || "unknown"}), for the games that match my picks:
+${facts.length ? JSON.stringify(facts) : "(No matching games found in Primo's data. Use your own knowledge and say the prices may be out of date.)"}
+
+Please:
+1. For each leg: say the sport and league, Kalshi's chance for that bet (from the data above), what my odds imply, Primo's research view, and a verdict (agree / close / against).
+2. The whole ticket: chance all legs hit, what my stake pays back, and whether it's a fair price.
+3. "Instead of this, do this": better bets on the same games, using only bets in the data above, each with its Kalshi chance and Yes price, and why.
+4. Same risk, better deal: a Kalshi combo with about the same chance that pays more (or same payout, better chance). Show my ticket vs yours: chance, payout and profit for my stake. If nothing truly beats mine, say so.
+5. A safer version and a high-risk version, each with chance, payout and a one-line why per leg.
+Rules: write every bet in plain words ("Guardians score 3 or more runs, win or lose", not "over 2.5 team runs"); name the player and his team every time; for injured players say the injury and status; never invent stats or prices; Kalshi combos can't include bets marked single_bet_only. These are market odds and research, not guarantees.`;
+  };
+  const go = async (where) => {
+    const text = $("asktext").value.trim();
+    const prompt = build();
+    let copied = false;
+    try { await navigator.clipboard.writeText(prompt); copied = true; } catch (e) {}
+    const short = encodeURIComponent(prompt).length < 7000;
+    const url = where === "gpt" ? (short ? "https://chatgpt.com/?q=" + encodeURIComponent(prompt) : "https://chatgpt.com/")
+                                : (short ? "https://claude.ai/new?q=" + encodeURIComponent(prompt) : "https://claude.ai/new");
+    window.open(url, "_blank", "noopener");
+    $("askout").innerHTML = `<div class="empty">${copied ? "Copied! " : ""}The chat opened in a new tab.${short ? "" : " Your question is long, so tap the message box there, then <b>Paste</b> and send."} Add a screenshot there if you have one.</div>
+      <button class="btn ghost sm" type="button" id="askcopy" style="margin-top:8px">Copy the message again</button><details style="margin-top:8px"><summary>Show the message Primo prepared</summary><textarea class="search" rows="8" style="width:100%" readonly>${esc(prompt)}</textarea></details>`;
+  };
+  $("askout").addEventListener("click", async e => { if (e.target.id !== "askcopy") return; const t = $("askout").querySelector("textarea"); try { await navigator.clipboard.writeText(t.value); toast("Copied"); } catch (er) { t.select(); document.execCommand("copy"); toast("Copied"); } });
+  $("askgo").addEventListener("click", () => go("claude"));
+  gpt.addEventListener("click", () => go("gpt"));
+}
 (async () => {
   const sample = window.claude ? await window.claude.use("sample") : null;
   const box = $("askbox");
-  if (!sample){ box.innerHTML = `<div class="empty">Ask Primo works when Primo is opened in the Claude app or on claude.ai while signed in. You can also send your picks or a screenshot to Claude in chat.</div>`; return; }
+  if (!sample){ askOutside(); return; }
   const lim = await sample.limits().catch(() => null);
   const canImg = !!(lim && lim.images);
   $("askshot").hidden = !canImg;
