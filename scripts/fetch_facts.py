@@ -15,10 +15,14 @@ def get(url, tries=3):
 
 def nfl():
     games, inj = [], {}
-    d0 = datetime.datetime.now(PT).date()
-    sb = get("https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=%s-%s"
-             % (d0.strftime("%Y%m%d"), (d0 + datetime.timedelta(days=8)).strftime("%Y%m%d"))) or {}
-    if not sb.get("events"): sb = get("https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard") or {}
+    base = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
+    sb = get(base) or {}
+    evs = {e.get("id"): e for e in sb.get("events", [])}
+    wk = (sb.get("week") or {}).get("number"); stype = ((sb.get("season") or {}).get("type")) or 2
+    if wk:
+        nx = get(base + "?week=%d&seasontype=%s" % (wk + 1, stype)) or {}
+        for e in nx.get("events", []): evs.setdefault(e.get("id"), e)
+    sb = {"events": list(evs.values())}
     for ev in sb.get("events", []):
         comp = (ev.get("competitions") or [{}])[0]
         teams = []
