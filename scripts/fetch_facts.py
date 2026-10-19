@@ -56,7 +56,7 @@ def odds_of(comp):
 
 def team(c):
     t = c.get("team", {})
-    return {"name": t.get("displayName", ""), "short": t.get("shortDisplayName", ""), "loc": t.get("location", ""),
+    return {"id": t.get("id", ""), "name": t.get("displayName", ""), "short": t.get("shortDisplayName", ""), "loc": t.get("location", ""),
             "nick": t.get("name", ""), "abbr": t.get("abbreviation", ""), "home": c.get("homeAway") == "home"}
 
 def lineups(path, eid):
@@ -65,6 +65,35 @@ def lineups(path, eid):
     for r in j.get("rosters") or []:
         starters = [p.get("athlete", {}).get("displayName", "") for p in (r.get("roster") or []) if p.get("starter")]
         if starters: out[(r.get("team") or {}).get("displayName", "")] = starters
+    return out
+
+def rosters(games):
+    """Which team each player is on (so Primo can say "McCaffrey plays for the San Francisco 49ers").
+    Team rosters are saved in data/rosters.json and refreshed once a day, only for teams playing soon."""
+    path_ = "data/rosters.json"
+    try: R = json.load(open(path_))
+    except Exception: R = {}
+    now = time.time(); fetched = 0; out = {}
+    soon = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=3)
+    for g in games:
+        if g["league"] == "College football": continue
+        try:
+            if datetime.datetime.fromisoformat(g["start"].replace("Z", "+00:00")) > soon: continue
+        except ValueError: continue
+        for t in g["teams"]:
+            if not t.get("id"): continue
+            k = g["path"] + "|" + str(t["id"])
+            if (k not in R or now - R[k].get("t", 0) > 20 * 3600) and fetched < 120:
+                j = get(ESPN + g["path"] + "/teams/" + str(t["id"]) + "/roster", tries=1); fetched += 1
+                if j:
+                    names = []
+                    for a in j.get("athletes") or []:
+                        if isinstance(a, dict) and a.get("items"): names += [x.get("displayName", "") for x in a["items"]]
+                        elif isinstance(a, dict): names.append(a.get("displayName", ""))
+                    R[k] = {"t": now, "team": t["name"], "players": [n for n in names if n]}
+            for n in (R.get(k) or {}).get("players", []): out[n] = t["name"]
+    json.dump(R, open(path_, "w"), separators=(",", ":"))
+    print("rosters:", fetched, "teams fetched,", len(out), "players mapped")
     return out
 
 def main():
@@ -103,6 +132,7 @@ def main():
             if start and sport in ("Soccer", "Basketball") and state == "pre" and (start - now).total_seconds() < 3 * 3600 and CALLS["n"] < 150:
                 lu = lineups(path, ev.get("id"))
                 if lu: g["lineups"] = lu
+            g["path"] = path
             games.append(g)
         if has_inj:
             for t in (get(ESPN + path + "/injuries") or {}).get("injuries", []):
@@ -115,8 +145,10 @@ def main():
                     rows.append({"player": a.get("displayName", ""), "pos": (a.get("position") or {}).get("abbreviation", ""), "status": stt,
                                  "injury": (d.get("type") or "").replace("Undisclosed", "undisclosed injury"), "date": (e.get("date") or "")[:10], "sport": sport})
                 if rows: inj[t.get("displayName", "")] = rows
+    players = rosters(games)
+    for g in games: g.pop("path", None)
     t = datetime.datetime.now(PT)
-    out = {"asof": t.strftime("%a, %b ") + str(t.day) + ", " + t.strftime("%I:%M %p").lstrip("0") + " PT", "games": games, "injuries": inj}
+    out = {"players": players, "asof": t.strftime("%a, %b ") + str(t.day) + ", " + t.strftime("%I:%M %p").lstrip("0") + " PT", "games": games, "injuries": inj}
     if not games and not inj: raise SystemExit("No facts found; keeping the old file.")
     with open("data/facts.js", "w") as f:
         f.write("window.PRIMO_FACTS=" + json.dumps(out, separators=(",", ":")).replace("</", "<\\/") + ";\n")

@@ -932,6 +932,11 @@ function factsHTML(g){
   const od = g.facts && g.facts.odds && g.facts.odds.home != null ? `<li><b>Sportsbooks (${esc(g.facts.odds.book || "DraftKings")}):</b> ${g.facts.teams.map(t => `${esc(t.short || t.name)} ${t.home ? g.facts.odds.home : g.facts.odds.away}%`).join(" · ")}${g.facts.odds.draw != null ? ` · Draw ${g.facts.odds.draw}%` : ""}${g.facts.odds.total ? ` · total ${g.facts.odds.total}` : ""}</li>` : "";
   return `<p class="whyh">Official facts (update every hour)</p><ul>${notes}${od}${lu}${inj || (g.sport === "Football" ? "<li>No players listed out, doubtful or questionable on the official injury report.</li>" : "")}</ul><p class="src">From ESPN (injury reports, lineups, DraftKings odds) · as of ${esc(FX.asof || "")}</p>`;
 }
+const PTEAM = new Map(Object.entries(FX.players || {}).map(([n, t]) => [ffold(n), t]));
+function playerTeam(m){   // "Christian McCaffrey: 3+ receptions" -> ["Christian McCaffrey", "San Francisco 49ers"]
+  const who = (/^([^:]+):/.exec(m.label) || [])[1]; if (!who) return null;
+  const t = PTEAM.get(ffold(who.trim())) || (playerInjury(m) || {}).team; return t ? [who.trim(), t] : null;
+}
 function notStarting(m){   // lineups are posted: is this player missing from both starting lineups?
   const lu = m.g.facts && m.g.facts.lineups; if (!lu || Object.keys(lu).length < 2) return false;
   const who = (/^([^:]+):/.exec(m.label) || [])[1]; if (!who) return false;
@@ -1001,7 +1006,7 @@ function legHTML(m, i, tier, legs){
     : tier
     ? `<button class="mini" type="button" data-swap="${tier}:${i}">Swap</button><button class="mini" type="button" data-drop="${tier}:${i}">Remove</button>`
     : `<button class="mini" type="button" data-remove="${esc(m.key)}">Remove</button>`;
-  return `<li class="leg" style="--c:var(${color})"><div class="legmain"><div class="legpick">${esc(m.pick)}</div><div class="legsub">${esc(m.g.title)} · ${esc(fmtShort(m.g.date))}${m.g.start?" · "+esc(fmtTime(m.g.start)):""} · <span class="sp">${esc(m.g.sport)}</span>${m.g.women?" · Women":""}</div><div class="legsub legleague">League: <b>${esc(m.g.leagueName)}</b></div><div class="legsub">On Kalshi: <b>${esc(m.stitle)}</b>${m.type!=="winner"?` · pick “${esc(m.label)}”`:""} · <a href="${kalshiLink(m)}" target="_blank" rel="noopener">Open this game ↗</a></div><div class="legnote mean"><b>To win:</b> ${esc(explain(m))}</div>${comboOK(m)?"":`<div class="legnote mean"><b>Single bet only:</b> Kalshi doesn't let this bet go in a combo. Bet it by itself on Kalshi.</div>`}${gameCall(m)}${legWhy(m, tier, legs)}</div><div class="legright"><div class="pct">${pctTxt(m.p)}</div><div class="legact">${actions}</div></div></li>`;
+  return `<li class="leg" style="--c:var(${color})"><div class="legmain"><div class="legpick">${esc(m.pick)}</div><div class="legsub">${esc(m.g.title)} · ${esc(fmtShort(m.g.date))}${m.g.start?" · "+esc(fmtTime(m.g.start)):""} · <span class="sp">${esc(m.g.sport)}</span>${m.g.women?" · Women":""}</div><div class="legsub legleague">League: <b>${esc(m.g.leagueName)}</b></div>${(pt => pt ? `<div class="legsub legleague">Player: <b>${esc(pt[0])}</b> plays for <b>${esc(pt[1])}</b></div>` : "")(playerTeam(m))}<div class="legsub">On Kalshi: <b>${esc(m.stitle)}</b>${m.type!=="winner"?` · pick “${esc(m.label)}”`:""} · <a href="${kalshiLink(m)}" target="_blank" rel="noopener">Open this game ↗</a></div><div class="legnote mean"><b>To win:</b> ${esc(explain(m))}</div>${comboOK(m)?"":`<div class="legnote mean"><b>Single bet only:</b> Kalshi doesn't let this bet go in a combo. Bet it by itself on Kalshi.</div>`}${gameCall(m)}${legWhy(m, tier, legs)}</div><div class="legright"><div class="pct">${pctTxt(m.p)}</div><div class="legact">${actions}</div></div></li>`;
 }
 function meaning(m){
   const t = m.stitle.toUpperCase();
