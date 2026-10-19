@@ -240,7 +240,7 @@ header.top .hint{color:#FFB52E;border-color:rgba(255,181,46,.6);background:rgba(
       </div>
       <div class="status">
         <span id="stamp"></span>
-        <a class="hint" href="https://claude.ai/artifact/GNSyRewehDtJx831UvnXML" target="_blank" rel="noopener">Refresh ↻</a>
+        <span class="autoupd" style="font-size:12px;opacity:.75">Prices update by themselves every hour</span>
       </div>
     </div>
   </header>
@@ -1214,4 +1214,5 @@ function renderAsk(res){
 })();
 </script>
 
+<script>(function(){var t=Date.now();document.addEventListener("visibilitychange",function(){if(document.visibilityState==="visible"&&Date.now()-t>30*60*1000)location.reload();});setInterval(function(){if(document.visibilityState==="visible"&&Date.now()-t>60*60*1000)location.reload();},5*60*1000);})();</script>
 </body></html>
