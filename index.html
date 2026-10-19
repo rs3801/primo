@@ -712,7 +712,7 @@ function candidatesFor(tierKey){
       if (m.vol < 10 || m.ask - m.p > .08) continue;   // skip thinly traded bets whose price can't be trusted
       if (/^tie$/i.test(m.label)) continue;
       if (started(m.g)) continue;          // game already under way: snapshot price is stale
-      { const pi = playerInjury(m); if (pi && (pi.status === "Out" || pi.status === "Doubtful")) continue; }   // never pick a bet on a player who is out or doubtful
+      { const pi = playerInjury(m); if (pi && (pi.status === "Out" || pi.status === "Doubtful")) continue; if (notStarting(m)) continue; }   // never pick a bet on a player who is out or doubtful
       if (leanClash(m)) continue;          // never pick against Primo's research
       if (tierKey === "safe" && m.g.research && m.g.research.level === "Preseason") continue;
       out.push(m);
@@ -723,7 +723,8 @@ function candidatesFor(tierKey){
   const key = t.sort === "p" ? (a,b) => b.p - a.p || b.vol - a.vol : (a,b) => b.vol - a.vol;
   // bets Primo's research likes go first, then bets the money is moving toward; bets the money is leaving drop to the back
   const mv = m => m.move >= 3 ? 1 : m.move <= -6 ? -1 : 0;
-  inRange.sort((a,b) => (likedBy(b) ? 1 : 0) - (likedBy(a) ? 1 : 0) || mv(b) - mv(a) || key(a,b));   // bets Primo's research likes go first
+  const vl = m => (m.value || 0) >= 3 ? 1 : (m.value || 0) <= -5 ? -1 : 0;   // cheaper on Kalshi than at the sportsbooks = value
+  inRange.sort((a,b) => (likedBy(b) ? 1 : 0) - (likedBy(a) ? 1 : 0) || vl(b) - vl(a) || mv(b) - mv(a) || key(a,b));   // bets Primo's research likes go first
   const backup = out.filter(m => !inRange.includes(m) && m.p >= .2 && m.p <= .98).sort((a,b) => Math.abs((t.lo+t.hi)/2 - a.p) - Math.abs((t.lo+t.hi)/2 - b.p));
   return inRange.concat(backup);
 }
@@ -892,9 +893,8 @@ const FX = window.PRIMO_FACTS || {games:[], injuries:{}};
 const ffold = x => (x||"").normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase();
 const INJ = new Map();   // folded player name -> {team, ...}
 for (const [team, rows] of Object.entries(FX.injuries || {})) for (const r of rows) INJ.set(ffold(r.player), Object.assign({team}, r));
-function teamIn(t, title){ const T = ffold(title); return [t.name, t.nick, t.loc].filter(Boolean).some(x => T.includes(ffold(x))); }
+function teamIn(t, title){ const T = ffold(title); return [t.name, t.short, t.nick, t.loc, (t.name||"").replace(/\b(FC|CF|AFC|SC)\b/g,"").trim()].filter(x => x && x.length > 2).some(x => T.includes(ffold(x))); }
 for (const g of games){
-  if (g.sport !== "Football" && g.sport !== "Baseball") continue;
   const f = (FX.games || []).find(x => x.sport === g.sport && x.teams.length === 2 && x.teams.every(t => teamIn(t, g.title))
     && (!g.start || Math.abs(new Date(x.start) - g.start) < 14*3600000));
   if (!f) continue;
@@ -902,13 +902,28 @@ for (const g of games){
   const st = new Date(f.start), overridden = R.starts && g.codes.some(c => R.starts[c]);
   if (!overridden && !isNaN(st) && (!g.start || Math.abs(st - g.start) > 20*60000)){ g.start = st; g.date = new Date(st.getFullYear(), st.getMonth(), st.getDate(), 12); }
   g.injuries = f.teams.map(t => [t.name, (FX.injuries || {})[t.name] || []]).filter(([, rows]) => rows.length);
+  // sportsbook chance for each winner bet (DraftKings via ESPN, with the sportsbook's cut removed)
+  if (f.odds && f.odds.home != null) for (const m of g.markets){
+    if (m.type !== "winner") continue;
+    let book = null;
+    if (/^(tie|draw)$/i.test(m.label)) book = f.odds.draw;
+    else { const t = f.teams.find(t => teamIn(t, m.label)); if (t) book = t.home ? f.odds.home : f.odds.away; }
+    if (book != null && !isNaN(m.p)){ m.book = book; m.value = Math.round(book - m.p*100); }
+  }
 }
 const injTxt = r => `${r.player} (${r.team}${r.pos ? ", " + r.pos : ""}): <b>${r.status}</b>${r.injury ? ` (${esc(r.injury.toLowerCase())})` : ""}`;
 function factsHTML(g){
   if (!g || (!g.facts && !(g.injuries||[]).length)) return "";
   const notes = (g.facts && g.facts.notes || []).map(n => `<li>${esc(n)}</li>`).join("");
   const inj = (g.injuries || []).map(([team, rows]) => `<li><b>${esc(team)}:</b> ${rows.map(r => `${esc(r.player)}${r.pos ? " (" + esc(r.pos) + ")" : ""} <b>${esc(r.status)}</b>${r.injury ? " – " + esc(r.injury.toLowerCase()) : ""}`).join("; ")}</li>`).join("");
-  return `<p class="whyh">Official facts (update every hour)</p><ul>${notes}${inj || (g.sport === "Football" ? "<li>No players listed out, doubtful or questionable on the official injury report.</li>" : "")}</ul><p class="src">From ${g.sport === "Football" ? "ESPN's NFL injury report" : "MLB.com"} · as of ${esc(FX.asof || "")}</p>`;
+  const lu = Object.entries(g.facts && g.facts.lineups || {}).map(([t, l]) => `<li><b>${esc(t)} starting lineup:</b> ${l.map(esc).join(", ")}</li>`).join("");
+  const od = g.facts && g.facts.odds && g.facts.odds.home != null ? `<li><b>Sportsbooks (${esc(g.facts.odds.book || "DraftKings")}):</b> ${g.facts.teams.map(t => `${esc(t.short || t.name)} ${t.home ? g.facts.odds.home : g.facts.odds.away}%`).join(" · ")}${g.facts.odds.draw != null ? ` · Draw ${g.facts.odds.draw}%` : ""}${g.facts.odds.total ? ` · total ${g.facts.odds.total}` : ""}</li>` : "";
+  return `<p class="whyh">Official facts (update every hour)</p><ul>${notes}${od}${lu}${inj || (g.sport === "Football" ? "<li>No players listed out, doubtful or questionable on the official injury report.</li>" : "")}</ul><p class="src">From ESPN (injury reports, lineups, DraftKings odds) · as of ${esc(FX.asof || "")}</p>`;
+}
+function notStarting(m){   // lineups are posted: is this player missing from both starting lineups?
+  const lu = m.g.facts && m.g.facts.lineups; if (!lu || Object.keys(lu).length < 2) return false;
+  const who = (/^([^:]+):/.exec(m.label) || [])[1]; if (!who) return false;
+  const w = ffold(who.trim()); return !Object.values(lu).some(list => list.some(n => ffold(n) === w));
 }
 function playerInjury(m){
   const who = (/^([^:]+):/.exec(m.label) || [])[1]; if (!who) return null;
@@ -991,6 +1006,7 @@ function legWhy(m, tier, legs){
   const r = m.g.research, p = Math.round(m.p*100), t = tier && TIERS[tier];
   const pts = [];
   pts.push(`Kalshi traders give this a <b>${p}%</b> chance. A Yes costs ${isNaN(m.ask)?"—":Math.round(m.ask*100)+"¢"} and pays $1 if it hits.`);
+  if (m.book != null) pts.push(m.value >= 3 ? `✅ <b>Good value:</b> the sportsbooks (DraftKings) give this ${m.book}%, but Kalshi prices it at ${Math.round(m.p*100)}%, so it's cheaper here.` : m.value <= -3 ? `Sportsbooks (DraftKings) give this only ${m.book}%, less than Kalshi's ${Math.round(m.p*100)}%, so it's on the expensive side here.` : `Sportsbooks (DraftKings) agree: they give this about ${m.book}%.`);
   if (m.move >= 3) pts.push(`📈 The price went <b>up ${m.move} points</b> in the last day, so money is moving toward this bet.`);
   else if (m.move <= -3) pts.push(`📉 The price went <b>down ${-m.move} points</b> in the last day, so money is moving away from this bet. Be careful.`);
   { const pi = playerInjury(m); if (pi) pts.unshift(`⚠️ Official injury report: ${injTxt(pi)}. ${pi.status === "Questionable" ? "He may not play, or may be limited. Check before the game." : "He is not expected to play, so skip this bet."}`); }
