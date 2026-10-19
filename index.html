@@ -740,6 +740,20 @@ function candidatesFor(tierKey){
   const backup = out.filter(m => !inRange.includes(m) && m.p >= .2 && m.p <= .98).sort((a,b) => Math.abs((t.lo+t.hi)/2 - a.p) - Math.abs((t.lo+t.hi)/2 - b.p));
   return inRange.concat(backup);
 }
+// what kind of bet this is, so same-game combos mix different kinds instead of five passing bets
+function betKind(m){
+  const t = m.series.toUpperCase() + " " + (m.stitle || "").toUpperCase();
+  if (/RSHYDS|RUSH/.test(t)) return "rush";
+  if (/PASSYDS|PASSTDS|PASSING|PASSINT|PASS\b/.test(t)) return "pass";
+  if (/RECYDS|RECEIV|NFLREC\b|RECEPTION/.test(t)) return "receiving";
+  if (/FIRSTTD|NFLTD$|TOUCHDOWN|ANYTD|GOAL$|SCORER/.test(t)) return "score";
+  if (/TEAMTOTAL|TEAM TOTAL/.test(t)) return "teamtotal";
+  if (/(1H|2H|1Q|2Q|3Q|4Q|F3|F5|F7|1P|2P|3P|INNING)/.test(m.series)) return "part";
+  if (/TOTAL/.test(t)) return "total";
+  if (isSide(m)) return "side";
+  return m.series;
+}
+const playerOf = m => { const w = (/^([^:]+):/.exec(m.label) || [])[1]; return w ? w.trim().toLowerCase() : ""; };
 function pickLegs(pool, n){
   // pass 1: round-robin across sports so mixed combos really mix; one leg per game
   const bySport = new Map();
@@ -758,13 +772,21 @@ function pickLegs(pool, n){
   // never two picks that can contradict each other
   if (legs.length < n){
     const taken = new Set(legs.map(sgKey)), sided = new Set(legs.filter(isSide).map(m => m.g));
-    for (const m of pool){
-      if (legs.length >= n) break;
-      if (!usedGames.has(m.g) || legs.includes(m)) continue;
-      if (/SCORE$/.test(m.series) || /no goal/i.test(m.label)) continue;   // exact-score bets can clash with totals, so never stack them
-      const k = sgKey(m); if (taken.has(k)) continue;
-      if (isSide(m)){ if (sided.has(m.g)) continue; sided.add(m.g); }
-      taken.add(k); legs.push(m);
+    // mix it up: first pass takes at most one bet of each kind per game (winner, game total, passing, rushing, receiving,
+    // touchdowns, halves...) and at most one bet per player; later passes allow repeats only if more legs are still needed
+    const kinds = new Set(legs.map(m => m.g.code + "|" + betKind(m))), players = new Set(legs.map(playerOf).filter(Boolean));
+    for (let round = 0; round < 3 && legs.length < n; round++){
+      for (const m of pool){
+        if (legs.length >= n) break;
+        if (!usedGames.has(m.g) || legs.includes(m)) continue;
+        if (/SCORE$/.test(m.series) || /no goal/i.test(m.label)) continue;   // exact-score bets can clash with totals, so never stack them
+        const k = sgKey(m); if (taken.has(k)) continue;
+        const kind = m.g.code + "|" + betKind(m), who = playerOf(m);
+        if (round === 0 && (kinds.has(kind) || (who && players.has(who)))) continue;
+        if (round === 1 && who && players.has(who)) continue;
+        if (isSide(m)){ if (sided.has(m.g)) continue; sided.add(m.g); }
+        taken.add(k); kinds.add(kind); if (who) players.add(who); legs.push(m);
+      }
     }
   }
   return legs;
