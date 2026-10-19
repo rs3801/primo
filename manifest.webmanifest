@@ -31,5 +31,7 @@
       "type": "image/png",
       "purpose": "maskable"
     }
-  ]
+  ],
+  "id": "/primo/",
+  "description": "Sports combo builder for Kalshi: prices, injuries and picks that update every hour."
 }
