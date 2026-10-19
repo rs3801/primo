@@ -80,10 +80,74 @@ def main():
     asof = t.strftime("%a, %b ") + str(t.day) + ", " + t.strftime("%I:%M %p").lstrip("0") + " PT"
     data = {"asof": asof, "SER": SER, "G": G}
     if not G: raise SystemExit("No games found; keeping the old prices.")
+    data["moves"] = price_moves(R)
+    try: update_scorecard(R)
+    except Exception as e: print("scorecard skipped:", e)
     os.makedirs("data", exist_ok=True)
     with open("data/prices.js", "w") as f:
         f.write("window.PRIMO_DATA=" + json.dumps(data, separators=(",", ":")).replace("</", "<\\/") + ";\n")
     print(asof, len(G), "games", sum(len(g[3]) for g in G), "markets")
+
+import unicodedata
+def mkey(ticker_row):
+    ev, label = ticker_row[0], ticker_row[1]
+    st, code = ev.split("-")[0], ev.split("-")[1]
+    return st + "|" + code + "|" + label
+
+def price_moves(R):
+    """Price change since about a day ago, per bet: shows where the money is moving."""
+    path = "data/baseline.json"; now = time.time()
+    try: base = json.load(open(path))
+    except Exception: base = {"t": 0, "p": {}}
+    cur = {mkey(v): v[2] for v in R.values()}
+    moves = {k: p - base["p"][k] for k, p in cur.items() if k in base["p"] and p - base["p"][k] != 0}
+    if now - base.get("t", 0) > 24 * 3600:   # start a new 24-hour window
+        json.dump({"t": now, "p": cur, "asof": datetime.datetime.now(PT).isoformat()}, open(path, "w"), separators=(",", ":"))
+    return moves
+
+def fold(x): return "".join(c for c in unicodedata.normalize("NFD", (x or "").lower()) if unicodedata.category(c) != "Mn")
+def base_code(c): return re.sub(r"^(\d{2}[A-Z]{3}\d{2})\d{4}", r"\1", c)
+
+def update_scorecard(R):
+    """Remember every bet Primo's research liked, then grade it with Kalshi's official result."""
+    try:
+        txt = open("data/research.js").read(); RS = json.loads(txt[txt.index("{"):txt.rindex("}") + 1])
+    except Exception: RS = {"games": {}}
+    path = "data/scorecard.json"
+    try: sc = json.load(open(path))
+    except Exception: sc = {"picks": {}}
+    picks = sc["picks"]
+    liked = {}
+    for gcode, g in (RS.get("games") or {}).items():
+        for l in ((g.get("take") or {}).get("likes") or []):
+            liked.setdefault(base_code(gcode), []).append(l)
+    today = datetime.datetime.now(PT).strftime("%Y-%m-%d")
+    for tk, v in R.items():
+        code = v[0].split("-")[1]; lab = fold(v[1])
+        for l in liked.get(base_code(code), []):
+            ok = any((lab == fold(m[1:])) if m.startswith("=") else (fold(m) in lab) for m in (l.get("match") or []))
+            if ok and tk not in picks:
+                picks[tk] = {"bet": v[1], "game": v[0], "text": l.get("text", ""), "price": v[2], "day": today, "result": None}
+    # grade picks whose games are over
+    n = 0
+    for tk, pk in picks.items():
+        if pk.get("result") or n >= 60: continue
+        if tk in R: continue          # still trading, not settled yet
+        n += 1
+        try: m = get("/markets/" + tk, tries=2).get("market", {})
+        except SystemExit: continue
+        if m.get("result") in ("yes", "no") and m.get("status") in ("settled", "finalized", "determined", "closed"):
+            pk["result"] = "win" if m["result"] == "yes" else "loss"
+        time.sleep(0.2)
+    graded = [p for p in picks.values() if p.get("result")]
+    w = sum(p["result"] == "win" for p in graded); l = len(graded) - w
+    exp = sum(p["price"] for p in graded) / 100.0
+    sc["summary"] = {"wins": w, "losses": l, "expected_wins": round(exp, 1), "asof": datetime.datetime.now(PT).strftime("%b %d, %I:%M %p PT")}
+    sc["recent"] = sorted(graded, key=lambda p: p["day"], reverse=True)[:15]
+    json.dump(sc, open(path, "w"), separators=(",", ":"))
+    with open("data/scorecard.js", "w") as f:
+        f.write("window.PRIMO_SCORE=" + json.dumps({"summary": sc["summary"], "recent": sc["recent"]}, separators=(",", ":")).replace("</", "<\\/") + ";\n")
+    print("scorecard", sc["summary"])
 
 if __name__ == "__main__":
     main()
