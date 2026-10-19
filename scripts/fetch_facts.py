@@ -78,6 +78,8 @@ def main():
             wk = (sb.get("week") or {}).get("number"); st = (sb.get("season") or {}).get("type") or 2
             evs = list(sb.get("events", []))
             if wk: evs += (get(ESPN + path + "/scoreboard?week=%d&seasontype=%s" % (wk + 1, st)) or {}).get("events", [])
+        elif league == "College football":   # every FBS game this week, not just the featured ones
+            evs = (get(ESPN + path + "/scoreboard?groups=80&limit=300") or {}).get("events", [])
         else:
             evs = [e for u in urls for e in ((get(u) or {}).get("events", []))]
         for ev in evs:
