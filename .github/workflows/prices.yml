@@ -4,7 +4,7 @@ on:
     - cron: "17 * * * *"   # every hour
   workflow_dispatch: {}
   push:
-    paths: ["scripts/fetch_prices.py", ".github/workflows/prices.yml"]
+    paths: ["scripts/**", ".github/workflows/prices.yml"]
 permissions:
   contents: write
 concurrency:
@@ -20,11 +20,12 @@ jobs:
         with:
           python-version: "3.12"
       - run: python scripts/fetch_prices.py
+      - run: python scripts/fetch_facts.py || echo 'facts skipped'
       - name: Save new prices
         run: |
           git config user.name "primo-bot"
           git config user.email "primo-bot@users.noreply.github.com"
-          git add data/prices.js data/baseline.json data/scorecard.json data/scorecard.js 2>/dev/null || git add data/prices.js
+          for f in data/prices.js data/baseline.json data/scorecard.json data/scorecard.js data/facts.js; do [ -f "$f" ] && git add "$f"; done
           git diff --cached --quiet && exit 0
           git commit -m "Prices update"
           for i in 1 2 3; do git pull --rebase -X theirs origin main && git push && exit 0; sleep 5; done

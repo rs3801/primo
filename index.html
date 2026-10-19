@@ -312,7 +312,7 @@ header.top .hint{color:#FFB52E;border-color:rgba(255,181,46,.6);background:rgba(
 <footer class="foot">Primo is an independent tool for personal use. It is not affiliated with, endorsed by or sponsored by Kalshi or any league or team. Market names and prices are shown only so you can find the same bets yourself. Chances are market estimates, not guarantees.</footer>
 <div class="toast" id="toast" role="status" hidden></div>
 
-<script>(function(){var v=Date.now();document.write('<script src="data/prices.js?v='+v+'"><\/script><script src="data/research.js?v='+v+'"><\/script><script src="data/scorecard.js?v='+v+'"><\/script>')})();</script>
+<script>(function(){var v=Date.now();document.write('<script src="data/prices.js?v='+v+'"><\/script><script src="data/research.js?v='+v+'"><\/script><script src="data/scorecard.js?v='+v+'"><\/script><script src="data/facts.js?v='+v+'"><\/script>')})();</script>
 
 <script>
 (function(){
@@ -712,6 +712,7 @@ function candidatesFor(tierKey){
       if (m.vol < 10 || m.ask - m.p > .08) continue;   // skip thinly traded bets whose price can't be trusted
       if (/^tie$/i.test(m.label)) continue;
       if (started(m.g)) continue;          // game already under way: snapshot price is stale
+      { const pi = playerInjury(m); if (pi && (pi.status === "Out" || pi.status === "Doubtful")) continue; }   // never pick a bet on a player who is out or doubtful
       if (leanClash(m)) continue;          // never pick against Primo's research
       if (tierKey === "safe" && m.g.research && m.g.research.level === "Preseason") continue;
       out.push(m);
@@ -886,12 +887,39 @@ function likedBy(m){
   const lab = fold(m.label);
   return t.likes.find(l => (l.match||[]).some(k => k[0] === "=" ? lab === fold(k.slice(1)) : lab.includes(fold(k)))) || null;
 }
+/* ---------- free hourly facts (official NFL injury report, kickoff times, MLB probable pitchers) ---------- */
+const FX = window.PRIMO_FACTS || {games:[], injuries:{}};
+const ffold = x => (x||"").normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase();
+const INJ = new Map();   // folded player name -> {team, ...}
+for (const [team, rows] of Object.entries(FX.injuries || {})) for (const r of rows) INJ.set(ffold(r.player), Object.assign({team}, r));
+function teamIn(t, title){ const T = ffold(title); return [t.name, t.nick, t.loc].filter(Boolean).some(x => T.includes(ffold(x))); }
+for (const g of games){
+  if (g.sport !== "Football" && g.sport !== "Baseball") continue;
+  const f = (FX.games || []).find(x => x.sport === g.sport && x.teams.length === 2 && x.teams.every(t => teamIn(t, g.title))
+    && (!g.start || Math.abs(new Date(x.start) - g.start) < 14*3600000));
+  if (!f) continue;
+  g.facts = f;
+  const st = new Date(f.start), overridden = R.starts && g.codes.some(c => R.starts[c]);
+  if (!overridden && !isNaN(st) && (!g.start || Math.abs(st - g.start) > 20*60000)){ g.start = st; g.date = new Date(st.getFullYear(), st.getMonth(), st.getDate(), 12); }
+  g.injuries = f.teams.map(t => [t.name, (FX.injuries || {})[t.name] || []]).filter(([, rows]) => rows.length);
+}
+const injTxt = r => `${r.player} (${r.team}${r.pos ? ", " + r.pos : ""}): <b>${r.status}</b>${r.injury ? ` (${esc(r.injury.toLowerCase())})` : ""}`;
+function factsHTML(g){
+  if (!g || (!g.facts && !(g.injuries||[]).length)) return "";
+  const notes = (g.facts && g.facts.notes || []).map(n => `<li>${esc(n)}</li>`).join("");
+  const inj = (g.injuries || []).map(([team, rows]) => `<li><b>${esc(team)}:</b> ${rows.map(r => `${esc(r.player)}${r.pos ? " (" + esc(r.pos) + ")" : ""} <b>${esc(r.status)}</b>${r.injury ? " – " + esc(r.injury.toLowerCase()) : ""}`).join("; ")}</li>`).join("");
+  return `<p class="whyh">Official facts (update every hour)</p><ul>${notes}${inj || (g.sport === "Football" ? "<li>No players listed out, doubtful or questionable on the official injury report.</li>" : "")}</ul><p class="src">From ${g.sport === "Football" ? "ESPN's NFL injury report" : "MLB.com"} · as of ${esc(FX.asof || "")}</p>`;
+}
+function playerInjury(m){
+  const who = (/^([^:]+):/.exec(m.label) || [])[1]; if (!who) return null;
+  return INJ.get(ffold(who.trim())) || null;
+}
 function whyHTML(g){
   const r = g.research;
-  if (!r) return "";
+  if (!r) return factsHTML(g) ? `<details class="why"><summary><span class="whytag">Official facts</span> injuries and starters</summary>${factsHTML(g)}</details>` : "";
   const lean = r.lean ? `Leans <b>${esc(niceName(g.sport, r.lean))}</b> to win` : "No side";
   const players = r.players ? `<p class="whyh">Players to know</p><ul>${Object.entries(r.players).map(([n,x]) => `<li><b>${esc(n)}:</b> ${pHTML(x)}</li>`).join("")}</ul>` : "";
-  return `<details class="why" open><summary><span class="whytag">Primo's read</span> ${lean} <span class="lvl">${esc(r.level)}</span></summary>${takeHTML(r, g.sport)}<p class="whyh">Notes</p><ul>${r.notes.map(n=>`<li>${esc(n)}</li>`).join("")}</ul>${players}<p class="src">Sources: ${srcLinks(r)} · Research as of ${esc(R.asof)}</p></details>`;
+  return `<details class="why" open><summary><span class="whytag">Primo's read</span> ${lean} <span class="lvl">${esc(r.level)}</span></summary>${takeHTML(r, g.sport)}<p class="whyh">Notes</p><ul>${r.notes.map(n=>`<li>${esc(n)}</li>`).join("")}</ul>${players}${factsHTML(g)}<p class="src">Sources: ${srcLinks(r)} · Research as of ${esc(R.asof)}</p></details>`;
 }
 function leanClash(m){
   const r = m.g.research;
@@ -965,6 +993,7 @@ function legWhy(m, tier, legs){
   pts.push(`Kalshi traders give this a <b>${p}%</b> chance. A Yes costs ${isNaN(m.ask)?"—":Math.round(m.ask*100)+"¢"} and pays $1 if it hits.`);
   if (m.move >= 3) pts.push(`📈 The price went <b>up ${m.move} points</b> in the last day, so money is moving toward this bet.`);
   else if (m.move <= -3) pts.push(`📉 The price went <b>down ${-m.move} points</b> in the last day, so money is moving away from this bet. Be careful.`);
+  { const pi = playerInjury(m); if (pi) pts.unshift(`⚠️ Official injury report: ${injTxt(pi)}. ${pi.status === "Questionable" ? "He may not play, or may be limited. Check before the game." : "He is not expected to play, so skip this bet."}`); }
   pts.push(m.vol >= 200 ? `${m.vol.toLocaleString()} contracts traded, so the price is a fair guide.` : `Only ${m.vol.toLocaleString()} contracts traded, so this price can be off. Check it on Kalshi before you add it.`);
   if (t){
     const inRange = m.p >= t.lo && m.p <= t.hi;
@@ -979,10 +1008,10 @@ function legWhy(m, tier, legs){
     tag = r.lean ? (agrees ? `research agrees` : `research leans ${esc(niceName(m.g.sport, r.lean))}`) : `research: ${esc(r.level || "no side")}`;
     const leanLine = r.lean ? (agrees ? `Primo's research also leans <b>${esc(niceName(m.g.sport, r.lean))}</b> to win.` : `Primo's research leans <b>${esc(niceName(m.g.sport, r.lean))}</b> to win this game.`) : `Primo's research doesn't favor either side (${esc(r.level || "toss-up")}).`;
     const pn = playerNote(m);
-    res = `${pn ? `<p class="whyh">About ${esc(pn[0])}</p><ul><li>${pHTML(pn[1])}</li></ul>` : ""}${takeHTML(r, m.g.sport)}<p class="whyh">What Primo's research found</p><ul><li>${leanLine}</li>${r.notes.map(n=>`<li>${esc(n)}</li>`).join("")}</ul><p class="src">Sources: ${srcLinks(r)} · Research as of ${esc(R.asof)}</p>`;
+    res = `${pn ? `<p class="whyh">About ${esc(pn[0])}</p><ul><li>${pHTML(pn[1])}</li></ul>` : ""}${takeHTML(r, m.g.sport)}<p class="whyh">What Primo's research found</p><ul><li>${leanLine}</li>${r.notes.map(n=>`<li>${esc(n)}</li>`).join("")}</ul><p class="src">Sources: ${srcLinks(r)} · Research as of ${esc(R.asof)}</p>${factsHTML(m.g)}`;
   } else {
     tag = "no research yet";
-    res = `<p class="whyh">Research</p><ul><li>Primo has no injury or lineup research for this game yet, so this pick is based on Kalshi's odds only.</li></ul>`;
+    res = `<p class="whyh">Research</p><ul><li>Primo has no written research for this game yet, so this pick is based on Kalshi's odds${factsHTML(m.g) ? " and the official facts below" : " only"}.</li></ul>${factsHTML(m.g)}`;
   }
   const clash = leanClash(m) ? `<div class="legnote clash">Careful: Primo's research leans ${esc(niceName(m.g.sport, r.lean))} in this game.</div>` : "";
   const liked = likedBy(m);
