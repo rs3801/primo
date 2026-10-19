@@ -332,8 +332,8 @@ const TIERS = {
   primo:  {name:"Primo's picks", lo:.25, hi:.97, sort:"p", liked:true, blurb:"Only bets Primo's own research likes, most likely first."},
   best:   {name:"Best value", lo:.60, hi:.90, sort:"score", blurb:"Primo's smartest mix: likely bets (60–90%) that are cheaper on Kalshi than at the sportsbooks, liked by Primo's research, or that the money is moving toward. All legs point the same way, so they tend to win together."},
   safe:   {name:"Safe",   lo:.80, hi:.97, sort:"p",   blurb:"Biggest favorites. Smallest payout, best chance."},
-  middle: {name:"Middle", lo:.58, hi:.82, sort:"vol", blurb:"Solid favorites with a few closer calls."},
-  high:   {name:"High risk", lo:.30, hi:.60, sort:"vol", blurb:"Close games and underdogs. Big payout, long odds."}
+  middle: {name:"Middle", lo:.58, hi:.82, sort:"score", blurb:"Solid favorites with a few closer calls, edges first."},
+  high:   {name:"High risk", lo:.30, hi:.60, sort:"score", blurb:"Close games and underdogs for a big payout, picking the ones with an edge first (cheaper than the sportsbooks, liked by Primo, or money moving in). Expect most of these to miss."}
 };
 
 const state = { tab:"build", when:"week", sports:new Set(), types:new Set(), gender:"all", researched:"all", q:"", shown:30, legs:6 };
