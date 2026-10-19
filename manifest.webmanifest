@@ -1,5 +1,5 @@
 {
-  "name": "Primo – Sports Combo Builder",
+  "name": "Primo Sport Combos",
   "short_name": "Primo",
   "start_url": "./",
   "scope": "./",
@@ -7,8 +7,29 @@
   "background_color": "#141b34",
   "theme_color": "#141b34",
   "icons": [
-    {"src": "icons/icon192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
-    {"src": "icons/icon512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
-    {"src": "icons/icon512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+    {
+      "src": "icons/v2/icon192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/v2/icon512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/v2/icon192-maskable.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "icons/v2/icon512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
   ]
 }
