@@ -3,8 +3,10 @@
 - official injury reports (NFL, NBA, WNBA, NHL)
 - starting lineups when they are announced (soccer, basketball), MLB probable pitchers and series score
 - sportsbook odds (DraftKings via ESPN) so Primo can tell when Kalshi is cheaper (value)
+- recent form (last 5 games), home/road records and head-to-head meetings for team sports (ESPN game pages)
+- ATP and WTA tennis: each player's recent results and head-to-head, from a results archive Primo builds up (data/tennis_results.json)
 Writes data/facts.js."""
-import json, time, datetime, urllib.request
+import json, time, datetime, urllib.request, os, re, unicodedata
 from zoneinfo import ZoneInfo
 PT = ZoneInfo("America/Los_Angeles")
 ESPN = "https://site.api.espn.com/apis/site/v2/sports/"
@@ -53,6 +55,146 @@ def odds_of(comp):
         out.update({"home": round(100 * h / tot, 1), "away": round(100 * a / tot, 1)})
         if d: out["draw"] = round(100 * d / tot, 1)
     return out
+
+def fold(x):
+    x = unicodedata.normalize("NFD", x or "")
+    return re.sub(r"[^a-z]", "", "".join(c for c in x if unicodedata.category(c) != "Mn").lower())
+
+def load_json(path, default):
+    try:
+        with open(path) as f: return json.load(f)
+    except Exception: return default
+
+def save_json(path, obj):
+    with open(path, "w") as f: json.dump(obj, f, separators=(",", ":"))
+
+def form_from_summary(d, my_names):
+    """Last-5 results for each team and recent head-to-head meetings, from an ESPN game page."""
+    out = {"form": {}, "h2h": None}
+    for blk in d.get("lastFiveGames") or []:
+        nm = (blk.get("team") or {}).get("displayName", "")
+        rows = []
+        for e in blk.get("events") or []:
+            res = e.get("gameResult") or ""
+            opp = (e.get("opponent") or {}).get("displayName") or (e.get("opponent") or {}).get("abbreviation") or ""
+            if not res or not opp: continue
+            rows.append("%s %s %s %s" % (res, e.get("score", ""), "at" if e.get("atVs") == "@" else "vs", opp))
+        if nm and rows: out["form"][nm] = rows[:5]
+    for ser in d.get("seasonseries") or []:
+        evs = [e for e in ser.get("events") or [] if (e.get("statusType") or {}).get("completed")]
+        games = []
+        for e in evs[:5]:
+            cs = e.get("competitors") or []
+            if len(cs) != 2: continue
+            h = next((c for c in cs if c.get("homeAway") == "home"), cs[0]); a = next((c for c in cs if c is not h), cs[1])
+            nm = lambda c: (c.get("team") or {}).get("displayName", "")
+            games.append("%s: %s %s, %s %s (at %s)" % ((e.get("date") or "")[:10], nm(a), a.get("score", ""), nm(h), h.get("score", ""), nm(h)))
+        if games or ser.get("summary"):
+            out["h2h"] = {"title": ser.get("title") or ser.get("shortSummary") or "", "summary": ser.get("summary") or "", "games": games}
+            if games: break
+    return out
+
+def team_form(games):
+    """ESPN game pages for games in the next 2 days; cached so each game is fetched about every 8 hours."""
+    cache = load_json("data/form_cache.json", {})
+    now = time.time(); new = 0
+    for g in games:
+        eid = g.get("eid")
+        if not eid or g.get("state") != "pre": continue
+        try: start = datetime.datetime.fromisoformat(g["start"].replace("Z", "+00:00")).timestamp()
+        except ValueError: continue
+        if start - now > 2 * 86400: continue
+        c = cache.get(eid)
+        if (not c or now - c.get("t", 0) > 8 * 3600) and new < 140:
+            d = get(ESPN + g["path"] + "/summary?event=" + eid); new += 1
+            if d: c = cache[eid] = {"t": now, "f": form_from_summary(d, [t["name"] for t in g["teams"]])}
+        if c:
+            if c["f"].get("form"): g["form"] = c["f"]["form"]
+            if c["f"].get("h2h"): g["h2h"] = c["f"]["h2h"]
+    cache = {k: v for k, v in cache.items() if now - v.get("t", 0) < 3 * 86400}
+    save_json("data/form_cache.json", cache)
+    print("team form:", sum(1 for g in games if g.get("form")), "games,", new, "new pages")
+
+def tennis_archive():
+    """Collect finished ATP and WTA singles matches. ESPN's scoreboard for a date returns that whole tournament week."""
+    arc = load_json("data/tennis_results.json", {"m": {}, "back": 0})
+    today = datetime.datetime.now(PT).date()
+    dates = [today, today - datetime.timedelta(days=1), today - datetime.timedelta(days=4)]
+    back = arc.get("back", 0)
+    while back < 140 and len(dates) < 12:   # fill in about 20 weeks of history, a few weeks per run
+        back += 7; dates.append(today - datetime.timedelta(days=back))
+    arc["back"] = back
+    for tour in ("atp", "wta"):
+        for dt in dates:
+            sb = get(ESPN + "tennis/%s/scoreboard?dates=%s" % (tour, dt.strftime("%Y%m%d"))) or {}
+            for ev in sb.get("events", []):
+                for grp in ev.get("groupings") or []:
+                    gname = json.dumps(grp.get("grouping") or {}).lower()
+                    if "double" in gname or "mixed" in gname: continue
+                    for c in grp.get("competitions") or []:
+                        st = ((c.get("status") or {}).get("type") or {})
+                        if not st.get("completed"): continue
+                        cs = c.get("competitors") or []
+                        if len(cs) != 2 or any(not x.get("athlete") for x in cs): continue
+                        w = next((x for x in cs if x.get("winner")), None)
+                        if not w: continue
+                        l = cs[1] if w is cs[0] else cs[0]
+                        sets = []
+                        for a, b in zip(w.get("linescores") or [], l.get("linescores") or []):
+                            sets.append("%d-%d" % (a.get("value", 0), b.get("value", 0)))
+                        ret = " (retired)" if "retir" in (st.get("name", "") + st.get("description", "")).lower() else ""
+                        arc["m"][c.get("id")] = [(c.get("date") or "")[:10], w["athlete"].get("displayName", ""), l["athlete"].get("displayName", ""), " ".join(sets) + ret, ev.get("name", ""), tour.upper()]
+    cut = (today - datetime.timedelta(days=400)).isoformat()
+    arc["m"] = {k: v for k, v in arc["m"].items() if v[0] >= cut}
+    save_json("data/tennis_results.json", arc)
+    return list(arc["m"].values())
+
+def kalshi_tennis_pairs():
+    """Player pairs in Kalshi's tennis matches (from data/prices.js, written just before this script)."""
+    try:
+        s = open("data/prices.js").read(); D = json.loads(s[s.index("{"):s.rindex("}") + 1])
+    except Exception: return []
+    pairs = []
+    for row in D.get("G", []):
+        if row[0] != "Tennis": continue
+        names = []
+        for r in row[3]:
+            lab = r[1]
+            if ":" in lab or " " not in lab.strip() or re.search(r"\b(over|under|wins|set|games?|win)\b", lab, re.I): continue
+            if lab not in names: names.append(lab)
+        if len(names) == 2: pairs.append(names)
+    return pairs
+
+def tennis_stats():
+    matches = tennis_archive()
+    by = {}
+    def key(n): return fold(n)
+    for m in sorted(matches, key=lambda x: x[0], reverse=True):
+        by.setdefault(key(m[1]), []).append(m); by.setdefault(key(m[2]), []).append(m)
+    last = {}   # last name -> keys, for names Kalshi spells a little differently
+    for k in by: pass
+    names = {}
+    for m in matches:
+        for n in (m[1], m[2]): names[key(n)] = n
+    def find(n):
+        k = key(n)
+        if k in by: return k
+        parts = n.split(); ln = fold(parts[-1]) if parts else ""
+        cand = [kk for kk, full in names.items() if fold(full.split()[-1]) == ln and full[:1].lower() == n[:1].lower()]
+        return cand[0] if len(cand) == 1 else None
+    players, h2h = {}, {}
+    for a, b in kalshi_tennis_pairs():
+        ka, kb = find(a), find(b)
+        for n, k in ((a, ka), (b, kb)):
+            if not k or n in players: continue
+            rows = by[k][:10]
+            w = sum(1 for m in rows if key(m[1]) == k)
+            players[n] = {"rec": "%d-%d" % (w, len(rows) - w), "last": [[m[0], "W" if key(m[1]) == k else "L", names.get(key(m[2]) if key(m[1]) == k else key(m[1]), ""), m[3], m[4]] for m in rows[:5]]}
+        if ka and kb:
+            ms = [m for m in by[ka] if {key(m[1]), key(m[2])} == {ka, kb}]
+            if ms: h2h[a + "|" + b] = {"a": sum(1 for m in ms if key(m[1]) == ka), "b": sum(1 for m in ms if key(m[1]) == kb), "games": [[m[0], names[key(m[1])], m[3], m[4]] for m in ms[:5]]}
+    print("tennis:", len(matches), "matches in archive,", len(players), "Kalshi players with results,", len(h2h), "head-to-heads")
+    return {"players": players, "h2h": h2h, "covers": "ATP and WTA main tour"}
 
 def team(c):
     t = c.get("team", {})
@@ -132,7 +274,12 @@ def main():
             if start and sport in ("Soccer", "Basketball") and state == "pre" and (start - now).total_seconds() < 3 * 3600 and CALLS["n"] < 150:
                 lu = lineups(path, ev.get("id"))
                 if lu: g["lineups"] = lu
-            g["path"] = path
+            g["path"] = path; g["eid"] = ev.get("id")
+            recs = {}
+            for c in cs:
+                r = {x.get("type") or x.get("name"): x.get("summary") for x in c.get("records") or [] if x.get("summary")}
+                if r: recs[(c.get("team") or {}).get("displayName", "")] = {"all": r.get("total"), "home": r.get("home") or r.get("homerecord"), "road": r.get("road") or r.get("awayrecord")}
+            if recs: g["records"] = recs
             games.append(g)
         if has_inj:
             for t in (get(ESPN + path + "/injuries") or {}).get("injuries", []):
@@ -146,9 +293,13 @@ def main():
                                  "injury": (d.get("type") or "").replace("Undisclosed", "undisclosed injury"), "date": (e.get("date") or "")[:10], "sport": sport})
                 if rows: inj[t.get("displayName", "")] = rows
     players = rosters(games)
-    for g in games: g.pop("path", None)
+    try: team_form(games)
+    except Exception as e: print("team form failed:", e)
+    try: tennis = tennis_stats()
+    except Exception as e: print("tennis failed:", e); tennis = {}
+    for g in games: g.pop("path", None); g.pop("eid", None)
     t = datetime.datetime.now(PT)
-    out = {"players": players, "asof": t.strftime("%a, %b ") + str(t.day) + ", " + t.strftime("%I:%M %p").lstrip("0") + " PT", "games": games, "injuries": inj}
+    out = {"tennis": tennis, "players": players, "asof": t.strftime("%a, %b ") + str(t.day) + ", " + t.strftime("%I:%M %p").lstrip("0") + " PT", "games": games, "injuries": inj}
     if not games and not inj: raise SystemExit("No facts found; keeping the old file.")
     with open("data/facts.js", "w") as f:
         f.write("window.PRIMO_FACTS=" + json.dumps(out, separators=(",", ":")).replace("</", "<\\/") + ";\n")
