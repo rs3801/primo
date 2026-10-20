@@ -102,11 +102,11 @@ def real_starts(codes):
         for ms in j.get("milestones") or []:
             st = ms.get("start_date") or ""
             status = str((ms.get("details") or {}).get("status") or "").lower()
-            begun = 1 if status and status not in ("not_started", "scheduled", "created", "pre", "upcoming", "delayed") else 0
+            begun = 1 if status in ("live", "in_progress", "inprogress", "started", "playing", "interrupted", "suspended", "ended", "closed", "finished", "complete", "completed", "final", "halftime") else 0
             for ev in (ms.get("related_event_tickers") or []) + (ms.get("primary_event_tickers") or []):
                 parts = ev.split("-")
                 if len(parts) > 1 and parts[1] in codes and st:
-                    out[parts[1]] = [st[:16], begun]
+                    out[parts[1]] = [st[:16], begun, status[:12]]
         cursor = j.get("cursor") or ""
         if not cursor or not j.get("milestones"): break
         time.sleep(0.3)
