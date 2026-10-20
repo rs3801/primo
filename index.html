@@ -534,6 +534,9 @@ for (const [sport, code, , rows, ends] of D.G){
   g.research = g.research || R.games[code] || null;
   // a schedule change found in research (e.g. a game moved to an earlier kickoff) beats Kalshi's posted time
   if (R.starts && R.starts[code]){ const s = new Date(R.starts[code]); if (!isNaN(s)) g.start = s; }
+  // Kalshi's live-score feed: the real start time, and whether the match is already under way (best source, beats everything above)
+  const ks = (D.starts || {})[code];
+  if (ks){ const s = new Date(ks[0] + (ks[0].length <= 16 ? ":00Z" : "")); if (!isNaN(s)){ g.start = s; g.realStart = true; } if (ks[1]) g.live = true; }
 }
 // Kalshi tickers like 26OCT132350BANAUS carry the scheduled start in US Eastern time (23:50 ET); trust that over "end time minus 3 hours"
 function codeStartET(code){
@@ -549,7 +552,7 @@ for (const g of games){
   const overridden = R.starts && g.codes.some(c => R.starts[c]);
   if (!overridden){
     const cs = g.codes.map(codeStartET).filter(Boolean).sort((a,b) => a - b)[0];
-    if (cs) g.start = cs;
+    if (cs && !g.realStart) g.start = cs;
   }
   // file the game under the day it actually starts on your phone's clock
   if (g.start) g.date = new Date(g.start.getFullYear(), g.start.getMonth(), g.start.getDate(), 12);
@@ -600,7 +603,7 @@ function leagueOf(g){
 }
 for (const g of games) g.leagueName = leagueOf(g);
 games.sort((a,b)=> a.date - b.date || (a.start && b.start ? a.start - b.start : 0) || b.vol - a.vol);
-const started = g => !!g.start && Date.now() >= g.start.getTime();
+const started = g => !!g.live || (!!g.start && Date.now() >= g.start.getTime());
 const fmtTime = d => d.toLocaleTimeString([], {hour:"numeric", minute:"2-digit"});
 
 /* ---------- filters ---------- */
@@ -935,7 +938,7 @@ for (const g of games){
   if (!f) continue;
   g.facts = f;
   const st = new Date(f.start), overridden = R.starts && g.codes.some(c => R.starts[c]);
-  if (!overridden && !isNaN(st) && (!g.start || Math.abs(st - g.start) > 20*60000)){ g.start = st; g.date = new Date(st.getFullYear(), st.getMonth(), st.getDate(), 12); }
+  if (!overridden && !g.realStart && !isNaN(st) && (!g.start || Math.abs(st - g.start) > 20*60000)){ g.start = st; g.date = new Date(st.getFullYear(), st.getMonth(), st.getDate(), 12); }
   g.injuries = f.teams.map(t => [t.name, (FX.injuries || {})[t.name] || []]).filter(([, rows]) => rows.length);
   // sportsbook chance for each winner bet (DraftKings via ESPN, with the sportsbook's cut removed)
   if (f.odds && f.odds.home != null) for (const m of g.markets){

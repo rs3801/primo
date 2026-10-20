@@ -81,12 +81,37 @@ def main():
     data = {"asof": asof, "SER": SER, "G": G}
     if not G: raise SystemExit("No games found; keeping the old prices.")
     data["moves"] = price_moves(R)
+    try: data["starts"] = real_starts({g[1] for g in G})
+    except BaseException as e: print("start times skipped:", e)
     try: update_scorecard(R)
     except Exception as e: print("scorecard skipped:", e)
     os.makedirs("data", exist_ok=True)
     with open("data/prices.js", "w") as f:
         f.write("window.PRIMO_DATA=" + json.dumps(data, separators=(",", ":")).replace("</", "<\\/") + ";\n")
     print(asof, len(G), "games", sum(len(g[3]) for g in G), "markets")
+
+def real_starts(codes):
+    """Kalshi's live-score feed ("milestones") has each match's real start time and whether it's under way.
+    The market's own time is only a rough end time (for tennis it can be hours after the start)."""
+    since = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=20)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    out, cursor, page = {}, "", 0
+    while page < 60:
+        params = {"limit": 500, "category": "Sports", "minimum_start_date": since}
+        if cursor: params["cursor"] = cursor
+        j = get("/milestones", params, tries=3); page += 1
+        for ms in j.get("milestones") or []:
+            st = ms.get("start_date") or ""
+            status = str((ms.get("details") or {}).get("status") or "").lower()
+            begun = 1 if status and status not in ("not_started", "scheduled", "created", "pre", "upcoming", "delayed") else 0
+            for ev in (ms.get("related_event_tickers") or []) + (ms.get("primary_event_tickers") or []):
+                parts = ev.split("-")
+                if len(parts) > 1 and parts[1] in codes and st:
+                    out[parts[1]] = [st[:16], begun]
+        cursor = j.get("cursor") or ""
+        if not cursor or not j.get("milestones"): break
+        time.sleep(0.3)
+    print("real start times:", len(out), "of", len(codes), "games,", sum(v[1] for v in out.values()), "under way,", page, "pages")
+    return out
 
 import unicodedata
 def mkey(ticker_row):
