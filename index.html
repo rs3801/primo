@@ -254,7 +254,7 @@ header.top .hint{color:#FFB52E;border-color:rgba(255,181,46,.6);background:rgba(
     <button class="tab" role="tab" type="button" data-tab="build" aria-selected="true">Build</button>
     <button class="tab" role="tab" type="button" data-tab="board" aria-selected="false">All games</button>
     <button class="tab" role="tab" type="button" data-tab="slip" aria-selected="false">My combo <span class="badge" id="slipcount">0</span></button>
-    <button class="tab" role="tab" type="button" data-tab="ask" aria-selected="false">Ask Primo</button>
+    <button class="tab" role="tab" type="button" data-tab="ask" aria-selected="false">📸 Check my bet</button>
   </nav>
 
   <div class="layout">
@@ -294,9 +294,9 @@ header.top .hint{color:#FFB52E;border-color:rgba(255,181,46,.6);background:rgba(
 
       <section id="view-slip" hidden><div id="slipview"></div></section>
       <section id="view-ask" hidden><div id="askbox" class="builder">
-        <div class="blabel">Check my picks</div>
-        <p class="filtsum">Type your picks the way you'd say them (one per line, odds if you have them), or attach a screenshot of a bet slip. Primo checks each leg against Kalshi's odds and its research, then tells you what it would do instead, plus a safer and a high-risk version.</p>
-        <textarea id="asktext" class="search" rows="5" placeholder="Guardians ML +122&#10;Delaware / Middle Tenn under 48.5 -110&#10;Jax State -3 -110&#10;Bet $50"></textarea>
+        <div class="blabel">Check my bet</div>
+        <p class="filtsum">Upload a screenshot of any ticket (a sportsbook or Kalshi), or type your bets one per line with their odds. Primo grades every leg: the real chance it hits, whether your price is fair, injuries and its research, then tells you which leg to drop, a safer swap, and good legs to add.</p>
+        <textarea id="asktext" class="search" rows="5" placeholder="49ers -7 -110&#10;Rays ML -149&#10;Utah Mammoth ML -185&#10;Risk $100&#10;To win $391"></textarea>
         <div class="brow">
           <label id="askshot" class="btn ghost sm" hidden>📷 Add screenshot<input id="askfile" type="file" accept="image/*" multiple hidden></label>
           <button class="btn ghost sm" type="button" id="askcombo">Use My combo</button>
@@ -927,6 +927,7 @@ const FX = window.PRIMO_FACTS || {games:[], injuries:{}};
 const ffold = x => (x||"").normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase();
 const INJ = new Map();   // folded player name -> {team, ...}
 for (const [team, rows] of Object.entries(FX.injuries || {})) for (const r of rows) INJ.set(ffold(r.player), Object.assign({team}, r));
+for (const f of FX.games || []) if (f.sport === "Hockey") f.notes = (f.notes || []).map(n => n.replace("starting pitcher", "starting goalie"));
 function teamIn(t, title){ const T = ffold(title); return [t.name, t.short, t.nick, t.loc, (t.name||"").replace(/\b(FC|CF|AFC|SC)\b/g,"").trim()].filter(x => x && x.length > 2).some(x => T.includes(ffold(x))); }
 for (const g of games){
   const f = (FX.games || []).find(x => x.sport === g.sport && x.teams.length === 2 && x.teams.every(t => teamIn(t, g.title))
@@ -1253,14 +1254,252 @@ function renderAsk(res){
 
 // Ask Primo outside Claude (the public website): Primo packs the picks plus its own data for those games
 // into one message, copies it, and opens Claude or ChatGPT (free accounts work). Screenshots can be attached there.
+/* ---------- Check my bet: grade a sportsbook ticket (typed or a screenshot) with Primo's own data, free, no account ---------- */
+const TK = {
+  impl: o => o < 0 ? -o/(-o+100) : 100/(o+100),
+  dec: o => o < 0 ? 1 + 100/-o : 1 + o/100,
+  ncdf(z){ const t = 1/(1+.2316419*Math.abs(z)), d = .3989423*Math.exp(-z*z/2); const p = d*t*(.3193815+t*(-.3565638+t*(1.781478+t*(-1.821256+t*1.330274)))); return z > 0 ? 1-p : p; },
+  ninv(p){ let lo = -6, hi = 6; for (let i = 0; i < 60; i++){ const m = (lo+hi)/2; if (TK.ncdf(m) < p) lo = m; else hi = m; } return (lo+hi)/2; },
+  sd: (sp, lg) => sp === "Football" ? (/college/i.test(lg) ? 16 : 13.5) : ({Basketball:12, Baseball:4.2, Hockey:2.4, Soccer:1.7})[sp] || 10,
+  tsd: (sp, lg) => sp === "Football" ? (/college/i.test(lg) ? 16 : 13.5) : ({Basketball:18, Baseball:4.4, Hockey:2.3, Soccer:1.6})[sp] || 10,
+  word: s => " " + ffold(s).replace(/[^a-z0-9]+/g, " ").trim() + " ",
+  pct: x => Math.round(x*100) + "%",
+  usd: x => "$" + Math.round(x).toLocaleString()
+};
+const NOTLEG = /risk|ticket|parlay|description|balance|pending|main menu|total|wager|available|teaser|straight/i;
+const PROPW = /\b(yds|yards|yard|rec|receptions|pts|points|rebounds|reb|assists|ast|td|tds|touchdowns?|hits|strikeouts|ks|bases|shots|saves|sog|goals?|completions|attempts|threes|3pt)\b/i;
+function parseTicket(text){
+  const out = {legs:[], risk:null, win:null};
+  for (const raw of text.split(/\n+/)){
+    const L = raw.replace(/^[^a-z0-9+-]+/i, "").replace(/½/g, ".5").replace(/[−–—]/g, "-").replace(/[|]/g, " ").replace(/\s+/g, " ").trim();
+    if (!L) continue;
+    let m;
+    if ((m = /risk\s*:?\s*\$\s*([\d,]+(?:\.\d+)?)/i.exec(L)) || (m = /^\s*(?:bet|stake)\s*:?\s*\$?\s*([\d,]+(?:\.\d+)?)/i.exec(L))) out.risk = +m[1].replace(/,/g, "");
+    if ((m = /win\s*:?\s*\$\s*([\d,]+(?:\.\d+)?)/i.exec(L)) || (m = /(?:pays|payout|to win)\s*:?\s*\$\s*([\d,]+(?:\.\d+)?)/i.exec(L))) out.win = +m[1].replace(/,/g, "");
+    if (/parlay/i.test(L) && (m = L.match(/\$\s*[\d,]+(?:\.\d+)?/g)) && m.length >= 2){ out.risk = out.risk || +m[0].replace(/[$,\s]/g, ""); out.win = out.win || +m[1].replace(/[$,\s]/g, ""); }
+    if (NOTLEG.test(L) || /^\s*(?:bet|stake)\b/i.test(L)) continue;
+    const leg = parseLeg(L);
+    if (leg) out.legs.push(leg);
+  }
+  return out;
+}
+function parseLeg(L){
+  const om = /([+-]\d{3,4})(?!.*[+-]\d{3,4})/.exec(L);
+  const odds = om ? +om[1] : null;
+  let rest = om ? L.slice(0, om.index) + " " + L.slice(om.index + om[0].length) : L, kind = null, line = null, prop = false, m;
+  if ((m = /(?:^|\s)(over|under|o|u)\s*(\d+(?:\.\d)?)/i.exec(rest))){ kind = /^o/i.test(m[1]) ? "over" : "under"; line = +m[2]; prop = PROPW.test(rest.slice(m.index + m[0].length)) && !/^\s*(points|pts|goals|runs)?\s*$/i.test(rest.slice(m.index + m[0].length)) ; rest = rest.slice(0, m.index); }
+  else if (/\b(ML|money ?line|to win|wins?)\b/i.test(rest)){ kind = "ml"; rest = rest.replace(/\b(ML|money ?line|to win|wins?)\b.*/i, ""); }
+  else if ((m = /(?:^|\s)([+-]\d{1,2}(?:\.\d)?)(?=\s|$)/.exec(rest))){ kind = "spread"; line = +m[1]; rest = rest.slice(0, m.index); }
+  else if ((m = /\b(pk|pick ?'?em)\b/i.exec(rest))){ kind = "spread"; line = 0; rest = rest.slice(0, m.index); }
+  else if (odds != null) kind = "ml";
+  if (!kind || !/[a-z]{3}/i.test(rest)) return null;
+  return {raw: L, odds, kind, line, prop, who: rest.replace(/^[^a-z0-9]+/i, "").trim()};
+}
+function findTicketGame(txt){
+  const T = TK.word(txt); let best = null;
+  const now = Date.now();
+  for (const f of FX.games || []){
+    if (f.state === "post") continue;
+    const st = new Date(f.start).getTime(); if (!isNaN(st) && (st - now > 9*86400000 || now - st > 6*3600000)) continue;
+    for (const t of f.teams){
+      const names = [[t.name, 3], [t.loc && t.nick ? t.loc + " " + t.nick : "", 3], [t.short, 2], [t.nick, 2], [t.loc, 1]];
+      for (const [nm, w] of names){
+        if (!nm || nm.length < 3) continue;
+        const n = TK.word(nm); if (n.trim().length < 3 || !T.includes(n)) continue;
+        const sc = w*1000 + n.length*10 - (isNaN(st) ? 0 : Math.max(0, st - now)/86400000);
+        if (!best || sc > best.sc) best = {f, t, sc};
+        break;
+      }
+    }
+  }
+  return best;
+}
+function kalshiGame(f){ return games.find(g => g.facts === f) || null; }
+function kalshiWinner(g, t){
+  if (!g) return null;
+  const ms = g.markets.filter(m => m.type === "winner" && !isNaN(m.p) && !/reg time|:|tie|draw/i.test(m.label) && teamIn(t, m.label));
+  return ms.sort((a, b) => b.vol - a.vol)[0] || null;
+}
+function gradeLeg(leg){
+  const r = {leg, chance: null, how: [], notes: [], warn: []};
+  let hit = findTicketGame(leg.who) || findTicketGame(leg.raw);
+  if (!hit && leg.prop){ const tm = PTEAM.get(ffold(leg.who.replace(/\s+(over|under)\b.*$/i, "").trim())); if (tm) hit = findTicketGame(tm); }
+  if (!hit){ r.warn.push("Primo couldn't find this game in its list (it only knows games in the next week). Check the spelling."); return r; }
+  const f = hit.f, t = hit.t, opp = f.teams.find(x => x !== t) || {}, g = kalshiGame(f), od = f.odds || {};
+  r.f = f; r.t = t; r.opp = opp; r.g = g;
+  const sp = f.sport, lg = f.league, unit = UNIT(sp);
+  const vs = `${t.short || t.name} vs ${opp.short || opp.name}`;
+  r.title = `${f.teams.map(x => x.short || x.name).join(" vs ")} · ${sp}, ${lg}`;
+  const st = new Date(f.start);
+  if (f.state === "in" || st < Date.now()) r.warn.push("🔴 This game has already started, so this leg is locked in. Primo's numbers are from before the start.");
+  // the team's chance to win, from DraftKings (cut removed) and Kalshi
+  const bookWin = od.home != null ? (t.home ? od.home : od.away)/100 : null;
+  const kw = kalshiWinner(g, t), kalWin = kw ? kw.p : null;
+  const winP = bookWin != null && kalWin != null ? (bookWin + kalWin)/2 : (bookWin ?? kalWin);
+  const winTxt = [bookWin != null ? `sportsbooks ${TK.pct(bookWin)}` : "", kalWin != null ? `Kalshi ${TK.pct(kalWin)}` : ""].filter(Boolean).join(", ");
+  if (leg.prop){
+    const pt = PTEAM.get(ffold(leg.who.trim()));
+    r.desc = `Player bet: ${leg.raw.replace(/\s*[+-]\d{3,4}\s*$/, "")}${pt ? ` — ${leg.who} plays for the ${pt}` : ""}`;
+    r.notes.push("Primo can't put a number on player bets from a sportsbook yet, so it uses your odds as the chance.");
+  } else if (leg.kind === "ml"){
+    r.desc = `${t.name} to win the game (by any score)${sp === "Hockey" ? " — at most sportsbooks overtime and shootouts count" : ""}`;
+    if (sp === "Soccer") r.desc = `${t.name} to win in 90 minutes (a draw loses)`;
+    if (winP != null){ r.chance = winP; r.how.push(`Chance ${t.short || t.name} wins: ${winTxt}.`); }
+  } else if (leg.kind === "spread"){
+    const L = leg.line, sd = TK.sd(sp, lg);
+    const u1 = n => n === 1 ? unit.replace(/s$/, "") : unit;
+    r.desc = L < 0 ? (Number.isInteger(L) ? `${t.name} must win by ${-L + 1} or more ${unit} (win by exactly ${-L} = money back on this leg)` : `${t.name} must win by ${Math.ceil(-L)} or more ${u1(Math.ceil(-L))}`)
+           : L > 0 ? (Number.isInteger(L) ? `${t.name} must win, or lose by ${L - 1} ${u1(L - 1)} or fewer (lose by exactly ${L} = money back)` : `${t.name} must win, or lose by ${Math.floor(L)} ${u1(Math.floor(L))} or fewer`)
+           : `${t.name} must win (a tie gives this leg back)`;
+    let mu = null;
+    const bl = /^(\S+)\s+([+-]?\d+(?:\.\d)?)$/.exec(od.line || "");
+    if (bl && Math.abs(+bl[2]) < 40){ const fav = f.teams.find(x => ffold(x.abbr) === ffold(bl[1]) || ffold(x.short || "") === ffold(bl[1])); if (fav) mu = (fav === t ? 1 : -1) * -(+bl[2]); }
+    if (mu == null && winP != null) mu = sd * TK.ninv(Math.min(.98, Math.max(.02, winP)));
+    if (mu != null){
+      const need = -L;   // the team's winning margin has to be more than this
+      if (Number.isInteger(need)){ r.chance = 1 - TK.ncdf((need + .5 - mu)/sd); r.push = TK.ncdf((need + .5 - mu)/sd) - TK.ncdf((need - .5 - mu)/sd); }
+      else r.chance = 1 - TK.ncdf((need - mu)/sd);
+      const km = g && g.markets.filter(m => !isNaN(m.p) && /wins by over\s+([\d.]+)/i.test(m.label) && +/wins by over\s+([\d.]+)/i.exec(m.label)[1] === Math.abs(L) && teamIn(L < 0 ? t : opp, m.label.split(/wins by/i)[0])).sort((a, b) => b.vol - a.vol)[0];
+      if (km && !Number.isInteger(L)){ const kp = L < 0 ? km.p : 1 - km.p; r.how.push(`Kalshi gives this ${TK.pct(kp)}.`); r.chance = (r.chance + kp)/2; }
+      r.how.push(`Sportsbooks expect ${t.short || t.name} to ${mu >= 0 ? "win by about " + Math.round(mu*2)/2 : "lose by about " + Math.round(-mu*2)/2} ${u1(Math.round(Math.abs(mu)*2)/2)}${od.line ? ` (their line: ${od.line})` : ""}.${winP != null ? ` Chance to just win the game: ${TK.pct(winP)}.` : ""}`);
+      if (r.push > .04) r.notes.push(`About ${TK.pct(r.push)} chance it lands exactly on ${need} — that leg comes off and the parlay pays a bit less.`);
+      if (L < 0 && winP != null && winP - r.chance > .12) r.safer = `${t.name} to just win (no point spread): about ${TK.pct(winP)} chance instead of ${TK.pct(r.chance)}, but it pays less.`;
+    }
+  } else {
+    const X = leg.line, sd = TK.tsd(sp, lg), isOver = leg.kind === "over";
+    r.desc = `${isOver ? "Over" : "Under"} ${X} total ${unit} in ${f.teams.map(x => x.short || x.name).join(" vs ")} (both teams added together, ${isOver ? `${Math.floor(X) + 1} or more` : `${Math.ceil(X) - 1} or fewer`})`;
+    const km = g && g.markets.filter(m => !isNaN(m.p) && new RegExp(`^(?:full game:\\s*)?over\\s+${String(X).replace(".", "\\.")}\\s+(?:points|runs|goals)`, "i").test(m.label)).sort((a, b) => b.vol - a.vol)[0];
+    let bookP = null;
+    if (od.total != null){ bookP = 1 - TK.ncdf((X - od.total)/sd); if (Number.isInteger(X)) bookP = 1 - TK.ncdf((X + .5 - od.total)/sd); }
+    const kp = km ? km.p : null;
+    let pOver = bookP != null && kp != null ? (bookP + kp)/2 : (bookP ?? kp);
+    if (pOver != null){ r.chance = isOver ? pOver : 1 - pOver; r.how.push(`Sportsbooks' total: ${od.total ?? "?"}${kp != null ? `; Kalshi gives over ${X} a ${TK.pct(kp)} chance` : ""}.`); }
+  }
+  // your price vs the real chance
+  if (leg.odds != null){
+    r.implied = TK.impl(leg.odds);
+    if (r.chance == null) r.chance = r.implied * .96;
+    const edge = r.chance - r.implied;
+    r.edge = edge;
+    r.price = edge >= .03 ? `✅ Good price: your odds (${leg.odds > 0 ? "+" : ""}${leg.odds}) only need ${TK.pct(r.implied)}, Primo has it at ${TK.pct(r.chance)}.`
+            : edge >= -.03 ? `👍 Fair price: your odds (${leg.odds > 0 ? "+" : ""}${leg.odds}) need ${TK.pct(r.implied)}, Primo has it at ${TK.pct(r.chance)}.`
+            : `⚠️ You're paying too much: your odds (${leg.odds > 0 ? "+" : ""}${leg.odds}) need ${TK.pct(r.implied)}, but Primo only has it at ${TK.pct(r.chance)}.`;
+  }
+  // Primo's research and injuries
+  const rs = g && g.research;
+  if (rs && rs.lean && leg.kind !== "over" && leg.kind !== "under" && !leg.prop){
+    const leanT = f.teams.find(x => teamIn(x, rs.lean));
+    if (leanT) r.notes.push(leanT === t ? `✓ Primo's research also leans ${leanT.short || leanT.name}.` : `✗ Primo's research leans the other side (${leanT.short || leanT.name}).`);
+  }
+  if (rs && rs.take && rs.take.likes && rs.take.likes.length) r.notes.push(`Primo's research likes in this game: ${rs.take.likes.slice(0, 3).map(l => l.text || (l.match || [])[0]).filter(Boolean).join("; ")}.`);
+  for (const x of f.notes || []) if (/starting|series|leads|tied/i.test(x)) r.notes.push(x + ".");
+  const big = (tm) => ((FX.injuries || {})[tm.name] || []).filter(p => /out|doubtful/i.test(p.status));
+  for (const tm of [t, opp]){
+    const rows = big(tm); if (!rows.length) continue;
+    const key = rows.filter(p => /^(QB|G|P|SP|C|PG|SG|SF|PF|F|RB|WR|ST|FW|GK)$/.test(p.pos || "")).concat(rows).filter((v, i, a) => a.indexOf(v) === i).slice(0, 4);
+    r.notes.push(`${tm.name} missing: ${key.map(p => `${p.player} (${p.pos || "?"}, ${p.status.toLowerCase()}${p.injury ? " – " + p.injury.toLowerCase() : ""})`).join("; ")}${rows.length > key.length ? ` and ${rows.length - key.length} more` : ""}.`);
+  }
+  if (r.chance != null) r.tag = r.chance >= .65 ? "Likely" : r.chance >= .52 ? "Leans yes" : r.chance >= .45 ? "Coin flip" : "Long shot";
+  return r;
+}
+function checkTicket(text){
+  const T = parseTicket(text);
+  if (!T.legs.length) return `<div class="empty">Primo couldn't find any bets in that. Put one bet per line with its odds, like <b>49ers -7 -110</b> or <b>Rays ML -149</b>.</div>`;
+  const rs = T.legs.map(gradeLeg);
+  const all = rs.reduce((a, r) => a * (r.chance ?? .5), 1);
+  const multOdds = rs.every(r => r.leg.odds != null) ? rs.reduce((a, r) => a * TK.dec(r.leg.odds), 1) : null;
+  const risk = T.risk || 100;
+  const mult = T.risk && T.win ? (T.win + T.risk)/T.risk : multOdds;
+  const fairMult = 1/all;
+  const legHTML = rs.map((r, i) => `<article class="game" style="--c:var(--s-other);padding:12px 14px;margin-bottom:10px">
+      <div class="gtitle">${i + 1}. ${esc(r.leg.raw)}</div>
+      ${r.title ? `<div class="gsub"><b>${esc(r.title)}</b>${r.f && r.f.start ? ` · ${esc(new Date(r.f.start).toLocaleString([], {weekday:"short", hour:"numeric", minute:"2-digit"}))}` : ""}</div>` : ""}
+      ${r.desc ? `<p style="margin:6px 0">${esc(r.desc)}</p>` : ""}
+      ${r.chance != null ? `<p style="margin:6px 0;font-size:17px"><b>Chance it hits: ${TK.pct(r.chance)}</b> <span class="lvl">${r.tag}</span></p>` : ""}
+      ${r.price ? `<p style="margin:6px 0">${r.price}</p>` : ""}
+      ${r.warn.map(w => `<p class="warn" style="margin:6px 0">${esc(w)}</p>`).join("")}
+      <ul style="margin:6px 0 0;padding-left:18px">${r.how.concat(r.notes).map(n => `<li>${esc(n)}</li>`).join("")}</ul>
+    </article>`).join("");
+  // what Primo would change
+  const tips = [];
+  const priced = rs.filter(r => r.chance != null);
+  const weak = priced.slice().sort((a, b) => a.chance - b.chance)[0];
+  if (weak && rs.length > 1){
+    const without = all / weak.chance, m2 = mult && weak.leg.odds != null ? mult / TK.dec(weak.leg.odds) : null;
+    tips.push(`<b>Riskiest leg: ${esc(weak.leg.raw)}</b> (${TK.pct(weak.chance)}). Take it out and your chance goes from ${TK.pct(all)} to ${TK.pct(without)}${m2 ? `, but a ${TK.usd(risk)} bet would win about ${TK.usd(risk*(m2 - 1))} instead of ${TK.usd(risk*(mult - 1))}` : ""}.`);
+  }
+  const bad = rs.filter(r => r.edge != null && r.edge < -.03 && r !== weak);
+  for (const r of bad) tips.push(`<b>Overpriced: ${esc(r.leg.raw)}</b>. This sportsbook charges more than it should for this one. Kalshi or another book may have it cheaper.`);
+  if (rs.every(r => r.edge == null || r.edge >= -.03) && rs.length) tips.push("No leg is badly overpriced. The prices are about normal for a sportsbook.");
+  const used = new Set(rs.map(r => r.g).filter(Boolean));
+  const adds = [];
+  for (const g of games){
+    if (used.has(g) || !g.start || g.start < Date.now() || g.start - Date.now() > 3*86400000) continue;
+    for (const m of g.markets){ if (isNaN(m.p) || m.p < .58 || m.p > .85) continue; const l = likedBy(m); if (l) adds.push([m, l]); }
+  }
+  adds.sort((a, b) => b[0].p - a[0].p);
+  const addHTML = adds.slice(0, 3).map(([m, l]) => `<li><b>${esc(m.pick)}</b> — ${esc(m.g.title)}, ${esc(m.g.leagueName)}, ${fmtWhen(m.g)}. Kalshi ${TK.pct(m.p)}. ${esc(l.why || l.text || "")}</li>`).join("");
+  const exp = mult ? all*mult - 1 : null;
+  return `<article class="game" style="--c:var(--s-other);padding:14px 16px;margin-bottom:12px">
+      <div class="gtitle">Primo's check: ${rs.length}-leg ${rs.length > 1 ? "parlay" : "bet"}</div>
+      <p style="margin:8px 0;font-size:18px"><b>Chance all ${rs.length} hit: about ${TK.pct(all)}</b> (roughly 1 in ${Math.max(1, Math.round(1/all))})</p>
+      ${mult ? `<p style="margin:6px 0">${T.risk ? `Your ${TK.usd(risk)} bet` : "A $100 bet"} pays ${TK.usd(risk*(mult - 1))} profit (${(mult - 1).toFixed(1)} to 1). A fair payout for this chance would be about ${(fairMult - 1).toFixed(1)} to 1. ${exp >= .02 ? "✅ That's a good deal." : exp >= -.12 ? "👍 That's about normal for a sportsbook parlay (the house keeps a small cut)." : "⚠️ The sportsbook is keeping a big cut on this one."}</p>` : ""}
+      <p class="whyh">What Primo would do</p><ul style="margin:4px 0 0;padding-left:18px">${tips.map(x => `<li>${x}</li>`).join("")}${rs.filter(r => r.safer).map(r => `<li><b>Safer swap:</b> ${esc(r.safer)}</li>`).join("")}</ul>
+      ${addHTML ? `<p class="whyh">Good legs to add (Primo's research likes these)</p><ul style="margin:4px 0 0;padding-left:18px">${addHTML}</ul><p class="muted" style="margin:6px 0 0">Adding a leg pays more but lowers your chance of hitting.</p>` : ""}
+      <p class="src">Chances mix DraftKings odds (cut removed) and Kalshi prices as of ${esc(FX.asof || D.asof)}. Spread and total chances are Primo's estimates. Not guarantees.</p>
+    </article>${legHTML}`;
+}
+let OCR = null;
+function loadOCR(){
+  if (OCR) return OCR;
+  OCR = new Promise((res, rej) => { const s = document.createElement("script"); s.src = "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"; s.onload = () => res(window.Tesseract); s.onerror = () => { OCR = null; rej(new Error("load")); }; document.head.appendChild(s); });
+  return OCR;
+}
+async function readShot(file){
+  const T = await loadOCR();
+  const r = await T.recognize(file, "eng", {logger: m => { if (m.status === "recognizing text") $("askstatus").textContent = `Reading your screenshot… ${Math.round((m.progress || 0)*100)}%`; }});
+  return (r && r.data && r.data.text) || "";
+}
+function cleanShot(text){
+  const P = parseTicket(text), lines = P.legs.map(l => l.raw.replace(/^[^a-z0-9]+/i, ""));
+  if (P.risk) lines.push(`Risk $${P.risk}`);
+  if (P.win) lines.push(`To win $${P.win}`);
+  return lines.join("\n");
+}
 function askOutside(){
   $("askstop").hidden = true;
-  $("askshot").hidden = true;
+  $("askshot").hidden = false;
   $("askgo").textContent = "Ask in Claude";
+  { const n = document.querySelector("#askbox .stakenote"); if (n) n.hidden = true; }
+  $("askgo").className = "btn ghost sm";
   const brow = $("askgo").parentNode;
+  const chk = document.createElement("button"); chk.className = "btn"; chk.type = "button"; chk.id = "askcheck"; chk.textContent = "✅ Check my bet";
+  brow.insertBefore(chk, $("askgo"));
+  const runCheck = () => {
+    const text = $("asktext").value.trim();
+    if (!text){ toast("Add a screenshot or type your bets first"); return; }
+    $("askout").innerHTML = checkTicket(text);
+    $("askstatus").textContent = "Done. Want a deeper answer? Tap Ask in Claude or Ask in ChatGPT.";
+    $("askout").scrollIntoView({behavior:"smooth", block:"start"});
+  };
+  chk.addEventListener("click", runCheck);
+  $("askfile").addEventListener("change", async e => {
+    const files = [...e.target.files]; e.target.value = "";
+    if (!files.length) return;
+    $("askstatus").textContent = "Reading your screenshot… (the first time takes about 20 seconds)";
+    try {
+      let txt = "";
+      for (const f of files) txt += "\n" + await readShot(f);
+      const clean = cleanShot(txt);
+      if (!clean){ $("askstatus").textContent = "Primo couldn't read any bets in that picture. Try a clearer screenshot, or type the bets in the box."; return; }
+      $("asktext").value = clean;
+      $("askfiles").textContent = "Primo read this from your screenshot. Fix anything it got wrong, then tap Check my bet again.";
+      runCheck();
+    } catch (er) { $("askstatus").textContent = "Couldn't read the screenshot (check your internet). You can type the bets in the box instead."; }
+  });
   const gpt = document.createElement("button"); gpt.className = "btn ghost sm"; gpt.type = "button"; gpt.id = "askgpt"; gpt.textContent = "Ask in ChatGPT";
   brow.appendChild(gpt);
-  $("askstatus").innerHTML = "Type your picks (or tap Use My combo), then tap a button. Primo adds its latest prices and research for those games, copies everything, and opens the chat. If the box in the chat is empty, just tap Paste and send. Want to check a screenshot of a ticket? Add the picture in the chat before sending.";
+  $("askstatus").innerHTML = "Tap <b>📷 Add screenshot</b> to upload a picture of your ticket (any sportsbook or Kalshi), or type your bets, then tap <b>✅ Check my bet</b>. Primo grades every leg right here. For a longer answer, Ask in Claude or ChatGPT copies everything and opens the chat (add the screenshot there too).";
   $("askcombo").addEventListener("click", () => {
     const legs = slipLegs();
     if (!legs.length){ toast("My combo is empty"); return; }

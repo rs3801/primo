@@ -124,7 +124,7 @@ def main():
             for c in cs:   # MLB probable pitchers from ESPN
                 for p in c.get("probables") or []:
                     nm = (p.get("athlete") or {}).get("displayName")
-                    if nm: g["notes"].append("%s starting pitcher: %s" % (c.get("team", {}).get("displayName", ""), nm))
+                    if nm: g["notes"].append("%s starting %s: %s" % (c.get("team", {}).get("displayName", ""), "goalie" if sport == "Hockey" else "pitcher", nm))
             ser = (comp.get("series") or {}).get("summary")
             if ser: g["notes"].insert(0, ser)
             try: start = datetime.datetime.fromisoformat(g["start"].replace("Z", "+00:00"))
