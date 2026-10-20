@@ -102,7 +102,8 @@ def real_starts(codes):
         for ms in j.get("milestones") or []:
             st = ms.get("start_date") or ""
             status = str((ms.get("details") or {}).get("status") or "").lower()
-            begun = 1 if status in ("live", "in_progress", "inprogress", "started", "playing", "interrupted", "suspended", "ended", "closed", "finished", "complete", "completed", "final", "halftime") else 0
+            # 1 = under way or over, -1 = confirmed not started yet (tennis often runs late), 0 = unknown
+            begun = -1 if status in ("sch", "scheduled", "not_started", "created", "pre", "upcoming", "delayed", "postponed") else 0 if not status else 1
             for ev in (ms.get("related_event_tickers") or []) + (ms.get("primary_event_tickers") or []):
                 parts = ev.split("-")
                 if len(parts) > 1 and parts[1] in codes and st:
@@ -110,7 +111,7 @@ def real_starts(codes):
         cursor = j.get("cursor") or ""
         if not cursor or not j.get("milestones"): break
         time.sleep(0.3)
-    print("real start times:", len(out), "of", len(codes), "games,", sum(v[1] for v in out.values()), "under way,", page, "pages")
+    print("real start times:", len(out), "of", len(codes), "games,", sum(1 for v in out.values() if v[1] == 1), "under way,", page, "pages")
     return out
 
 import unicodedata

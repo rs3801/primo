@@ -536,7 +536,9 @@ for (const [sport, code, , rows, ends] of D.G){
   if (R.starts && R.starts[code]){ const s = new Date(R.starts[code]); if (!isNaN(s)) g.start = s; }
   // Kalshi's live-score feed: the real start time, and whether the match is already under way (best source, beats everything above)
   const ks = (D.starts || {})[code];
-  if (ks){ const s = new Date(ks[0] + (ks[0].length <= 16 ? ":00Z" : "")); if (!isNaN(s)){ g.start = s; g.realStart = true; } if (ks[1]) g.live = true; }
+  if (ks){ const s = new Date(ks[0] + (ks[0].length <= 16 ? ":00Z" : "")); if (!isNaN(s)){ g.start = s; g.realStart = true; } if (ks[1] === 1 || ks[1] === true) g.live = true;
+    // Kalshi says it hasn't started yet even though the planned time passed (tennis matches wait for the one before): still open to bet
+    if (ks[1] === -1 && g.start && g.start.getTime() < Date.now() && Date.now() - g.start.getTime() < 6*3600000 && D.asofTs !== 0) g.start = new Date(Math.max(Date.now(), new Date(g.start).getTime()) + 15*60000), g.runningLate = true; }
 }
 // Kalshi tickers like 26OCT132350BANAUS carry the scheduled start in US Eastern time (23:50 ET); trust that over "end time minus 3 hours"
 function codeStartET(code){
