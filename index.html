@@ -1284,6 +1284,14 @@ function parseTicket(text){
   return out;
 }
 function parseLeg(L){
+  { const pm = /(\d{1,2}(?:\.\d)?)\s*%\s*$/.exec(L), vm = /\(([^)]*?\bvs\.?\s[^)]*)\)?/i.exec(L);
+    if (pm || vm){
+      const who = L.slice(0, vm ? vm.index : pm.index).replace(/\s+to win\s*$/i, "").replace(/^[^a-z0-9]+/i, "").trim();
+      const vs = vm ? vm[1].replace(/[.…]+\s*$/, "").trim() : "";
+      const opp = /^vs\.?\s/i.test(vs) ? vs.replace(/^vs\.?\s+/i, "") : vs.split(/\s+vs\.?\s+/i).map(x => x.trim()).find(x => x && ffold(x) !== ffold(who)) || "";
+      if (/[a-z]{3}/i.test(who)) return {raw: L.replace(/\s*\d{1,2}(?:\.\d)?\s*%\s*$/, "").trim(), odds: null, kind: "ml", line: null, prop: false, who, opp, paid: pm ? +pm[1]/100 : null, kalshi: true};
+    }
+  }
   const om = /([+-]\d{3,4})(?!.*[+-]\d{3,4})/.exec(L);
   const odds = om ? +om[1] : null;
   let rest = om ? L.slice(0, om.index) + " " + L.slice(om.index + om[0].length) : L, kind = null, line = null, prop = false, m;
@@ -1314,6 +1322,44 @@ function findTicketGame(txt){
   }
   return best;
 }
+function kalshiFind(leg){
+  const w = ffold(leg.who).trim(); if (w.length < 4) return null;
+  const o = leg.opp ? ffold(leg.opp).split(/[^a-z0-9]+/).filter(x => x.length > 2) : [];
+  const now = Date.now(); let best = null;
+  for (const g of games){
+    if (g.start && now - g.start > 5*3600000) continue;
+    for (const m of g.markets){
+      if (m.type !== "winner" || isNaN(m.p) || /:|wins by|reg time|tie|draw/i.test(m.label)) continue;
+      const L = ffold(m.label); if (!(L === w || L.includes(w) || (w.includes(L) && L.length > 5))) continue;
+      const T = ffold(g.title); const oh = o.length ? o.filter(x => T.includes(x)).length : 0;
+      const sc = (L === w ? 100 : 50) + oh*30 + Math.log10(1 + m.vol) - (g.start ? Math.max(0, g.start - now)/86400000 : 0);
+      if (!best || sc > best.sc) best = {m, sc};
+    }
+  }
+  return best && best.m;
+}
+function gradeKalshi(leg, m, r){
+  const g = m.g; r.g = g; r.f = g.facts || null;
+  r.title = `${g.title} · ${g.sport}, ${g.leagueName}`;
+  r.when = g.start;
+  r.desc = `${m.label} to win${g.sport === "Tennis" ? " the match" : g.sport === "Soccer" ? " in 90 minutes (a draw loses)" : " the game"}`;
+  r.chance = m.p;
+  if (g.start && g.start < Date.now()) r.warn.push("🔴 This one has already started, so it's locked in.");
+  if (leg.paid != null){
+    r.implied = leg.paid; r.edge = m.p - leg.paid;
+    r.price = Math.abs(r.edge) < .03 ? `Kalshi has it at ${TK.pct(m.p)} right now (your ticket shows ${TK.pct(leg.paid)}): about the same.`
+            : r.edge > 0 ? `📈 Kalshi now has it at ${TK.pct(m.p)}, up from ${TK.pct(leg.paid)} on your ticket. Moving your way.`
+            : `📉 Kalshi now has it at ${TK.pct(m.p)}, down from ${TK.pct(leg.paid)} on your ticket. The money is moving against it.`;
+  }
+  if (m.move && Math.abs(m.move) >= 3) r.how.push(`Price moved ${m.move > 0 ? "up" : "down"} ${Math.abs(m.move)} points in the last day.`);
+  const rs = g.research;
+  if (rs && rs.lean) r.notes.push(ffold(rs.lean) === ffold(m.label) || ffold(rs.lean).includes(ffold(m.label)) ? `✓ Primo's research also leans ${rs.lean}.` : `✗ Primo's research leans ${rs.lean}.`);
+  const l = likedBy(m); if (l) r.notes.push(`✓ Primo likes this bet: ${l.why || l.text || ""}`);
+  if (!rs) r.notes.push(`Primo hasn't written research on this ${g.sport === "Tennis" ? "match" : "game"} — this grade is Kalshi's price only.`);
+  for (const [team, rows] of g.injuries || []){ const out = rows.filter(p => /out|doubtful/i.test(p.status)).slice(0, 4); if (out.length) r.notes.push(`${team} missing: ${out.map(p => `${p.player} (${p.pos || "?"}, ${p.status.toLowerCase()}${p.injury ? " – " + p.injury.toLowerCase() : ""})`).join("; ")}.`); }
+  r.tag = r.chance >= .65 ? "Likely" : r.chance >= .52 ? "Leans yes" : r.chance >= .45 ? "Coin flip" : "Long shot";
+  return r;
+}
 function kalshiGame(f){ return games.find(g => g.facts === f) || null; }
 function kalshiWinner(g, t){
   if (!g) return null;
@@ -1322,7 +1368,10 @@ function kalshiWinner(g, t){
 }
 function gradeLeg(leg){
   const r = {leg, chance: null, how: [], notes: [], warn: []};
+  const km0 = kalshiFind(leg);
+  if (km0 && (leg.kalshi || !findTicketGame(leg.who))) return gradeKalshi(leg, km0, r);
   let hit = findTicketGame(leg.who) || findTicketGame(leg.raw);
+  if (!hit && leg.kalshi){ r.chance = leg.paid; r.warn.push(leg.paid != null ? "Primo doesn't have this match in its list anymore (it has probably already started), so it uses the price on your ticket as the chance." : "Primo doesn't have this match in its list anymore (it has probably already started) and couldn't read a % for it. Type the % at the end of the line to include it."); if (leg.paid != null) r.tag = leg.paid >= .65 ? "Likely" : leg.paid >= .52 ? "Leans yes" : leg.paid >= .45 ? "Coin flip" : "Long shot"; return r; }
   if (!hit && leg.prop){ const tm = PTEAM.get(ffold(leg.who.replace(/\s+(over|under)\b.*$/i, "").trim())); if (tm) hit = findTicketGame(tm); }
   if (!hit){ r.warn.push("Primo couldn't find this game in its list (it only knows games in the next week). Check the spelling."); return r; }
   const f = hit.f, t = hit.t, opp = f.teams.find(x => x !== t) || {}, g = kalshiGame(f), od = f.odds || {};
@@ -1406,14 +1455,16 @@ function checkTicket(text){
   const T = parseTicket(text);
   if (!T.legs.length) return `<div class="empty">Primo couldn't find any bets in that. Put one bet per line with its odds, like <b>49ers -7 -110</b> or <b>Rays ML -149</b>.</div>`;
   const rs = T.legs.map(gradeLeg);
-  const all = rs.reduce((a, r) => a * (r.chance ?? .5), 1);
-  const multOdds = rs.every(r => r.leg.odds != null) ? rs.reduce((a, r) => a * TK.dec(r.leg.odds), 1) : null;
+  const all = rs.reduce((a, r) => a * (r.chance ?? 1), 1);
+  const unpriced = rs.filter(r => r.chance == null).length;
+  const multOdds = rs.every(r => r.leg.odds != null) ? rs.reduce((a, r) => a * TK.dec(r.leg.odds), 1)
+                 : rs.every(r => r.leg.paid != null || r.leg.kalshi && r.chance != null) ? 1/rs.reduce((a, r) => a * (r.leg.paid ?? r.chance), 1) : null;
   const risk = T.risk || 100;
   const mult = T.risk && T.win ? (T.win + T.risk)/T.risk : multOdds;
   const fairMult = 1/all;
   const legHTML = rs.map((r, i) => `<article class="game" style="--c:var(--s-other);padding:12px 14px;margin-bottom:10px">
       <div class="gtitle">${i + 1}. ${esc(r.leg.raw)}</div>
-      ${r.title ? `<div class="gsub"><b>${esc(r.title)}</b>${r.f && r.f.start ? ` · ${esc(new Date(r.f.start).toLocaleString([], {weekday:"short", hour:"numeric", minute:"2-digit"}))}` : ""}</div>` : ""}
+      ${r.title ? `<div class="gsub"><b>${esc(r.title)}</b>${(r.when || (r.f && r.f.start)) ? ` · ${esc(new Date(r.when || r.f.start).toLocaleString([], {weekday:"short", hour:"numeric", minute:"2-digit"}))}` : ""}</div>` : ""}
       ${r.desc ? `<p style="margin:6px 0">${esc(r.desc)}</p>` : ""}
       ${r.chance != null ? `<p style="margin:6px 0;font-size:17px"><b>Chance it hits: ${TK.pct(r.chance)}</b> <span class="lvl">${r.tag}</span></p>` : ""}
       ${r.price ? `<p style="margin:6px 0">${r.price}</p>` : ""}
@@ -1428,9 +1479,11 @@ function checkTicket(text){
     const without = all / weak.chance, m2 = mult && weak.leg.odds != null ? mult / TK.dec(weak.leg.odds) : null;
     tips.push(`<b>Riskiest leg: ${esc(weak.leg.raw)}</b> (${TK.pct(weak.chance)}). Take it out and your chance goes from ${TK.pct(all)} to ${TK.pct(without)}${m2 ? `, but a ${TK.usd(risk)} bet would win about ${TK.usd(risk*(m2 - 1))} instead of ${TK.usd(risk*(mult - 1))}` : ""}.`);
   }
-  const bad = rs.filter(r => r.edge != null && r.edge < -.03 && r !== weak);
+  const bad = rs.filter(r => r.edge != null && r.edge < -.03 && r !== weak && !r.leg.kalshi);
+  const fell = rs.filter(r => r.leg.kalshi && r.edge != null && r.edge < -.03);
+  if (fell.length) tips.push(`<b>Price dropped since your ticket:</b> ${fell.map(r => `${esc(r.leg.who)} (${TK.pct(r.leg.paid)} → ${TK.pct(r.chance)})`).join(", ")}. The market likes ${fell.length > 1 ? "these" : "this one"} less now.`);
   for (const r of bad) tips.push(`<b>Overpriced: ${esc(r.leg.raw)}</b>. This sportsbook charges more than it should for this one. Kalshi or another book may have it cheaper.`);
-  if (rs.every(r => r.edge == null || r.edge >= -.03) && rs.length) tips.push("No leg is badly overpriced. The prices are about normal for a sportsbook.");
+  if (rs.some(r => !r.leg.kalshi) && rs.every(r => r.leg.kalshi || r.edge == null || r.edge >= -.03)) tips.push("No leg is badly overpriced. The prices are about normal for a sportsbook.");
   const used = new Set(rs.map(r => r.g).filter(Boolean));
   const adds = [];
   for (const g of games){
@@ -1442,7 +1495,8 @@ function checkTicket(text){
   const exp = mult ? all*mult - 1 : null;
   return `<article class="game" style="--c:var(--s-other);padding:14px 16px;margin-bottom:12px">
       <div class="gtitle">Primo's check: ${rs.length}-leg ${rs.length > 1 ? "parlay" : "bet"}</div>
-      <p style="margin:8px 0;font-size:18px"><b>Chance all ${rs.length} hit: about ${TK.pct(all)}</b> (roughly 1 in ${Math.max(1, Math.round(1/all))})</p>
+      <p style="margin:8px 0;font-size:18px"><b>Chance all ${rs.length} hit: about ${TK.pct(all)}</b> (roughly 1 in ${Math.max(1, Math.round(1/all))})${unpriced ? ` — not counting ${unpriced} bet${unpriced > 1 ? "s" : ""} Primo couldn't price` : ""}</p>
+      ${rs.length >= 6 ? `<p style="margin:6px 0">⚠️ ${rs.length} legs: even when every leg is likely, they all have to hit. One upset loses the whole combo.</p>` : ""}
       ${mult ? `<p style="margin:6px 0">${T.risk ? `Your ${TK.usd(risk)} bet` : "A $100 bet"} pays ${TK.usd(risk*(mult - 1))} profit (${(mult - 1).toFixed(1)} to 1). A fair payout for this chance would be about ${(fairMult - 1).toFixed(1)} to 1. ${exp >= .02 ? "✅ That's a good deal." : exp >= -.12 ? "👍 That's about normal for a sportsbook parlay (the house keeps a small cut)." : "⚠️ The sportsbook is keeping a big cut on this one."}</p>` : ""}
       <p class="whyh">What Primo would do</p><ul style="margin:4px 0 0;padding-left:18px">${tips.map(x => `<li>${x}</li>`).join("")}${rs.filter(r => r.safer).map(r => `<li><b>Safer swap:</b> ${esc(r.safer)}</li>`).join("")}</ul>
       ${addHTML ? `<p class="whyh">Good legs to add (Primo's research likes these)</p><ul style="margin:4px 0 0;padding-left:18px">${addHTML}</ul><p class="muted" style="margin:6px 0 0">Adding a leg pays more but lowers your chance of hitting.</p>` : ""}
