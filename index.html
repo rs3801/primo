@@ -969,12 +969,56 @@ function playerInjury(m){
   const who = (/^([^:]+):/.exec(m.label) || [])[1]; if (!who) return null;
   return INJ.get(ffold(who.trim())) || null;
 }
+
+/* ---------- stats: recent form, records and head-to-head (ESPN, free; tennis = ATP/WTA main tour only) ---------- */
+const TEN = FX.tennis || {};
+function tennisPair(g){
+  if (g.sport !== "Tennis") return null;
+  const names = [];
+  for (const m of g.markets) if (m.type === "winner" && !/:|over|under|wins by|set|game/i.test(m.label) && /\s/.test(m.label.trim()) && !names.includes(m.label)) names.push(m.label);
+  return names.length === 2 ? names : null;
+}
+const fmtD = d => { const x = new Date(d + "T12:00:00"); return isNaN(x) ? d : x.toLocaleDateString([], {month:"short", day:"numeric", year: x.getFullYear() === new Date().getFullYear() ? undefined : "numeric"}); };
+function statsData(g){
+  const out = {lines: [], h2h: null, h2hGames: [], none: null};
+  const f = g.facts;
+  if (f && (f.form || f.records || f.h2h)){
+    for (const t of f.teams){
+      const fm = (f.form || {})[t.name] || [], rc = (f.records || {})[t.name] || {};
+      if (rc.all && /^0-0(-0)?$/.test(rc.all)) rc.all = null;
+      if (!fm.length && !rc.all) continue;
+      const z = x => x && !/^0-0(-0)?$/.test(x) ? x : null;
+      const wl = fm.map(x => x.split(" ")[0]).join(" ");
+      const wins = fm.filter(x => /^W/.test(x)).length;
+      const side = t.home ? (z(rc.home) ? `at home ${rc.home}` : "") : (z(rc.road) ? `on the road ${rc.road}` : "");
+      const parts = [z(rc.all) ? `Record ${rc.all}${g.sport === "Soccer" ? " (won-drew-lost)" : g.sport === "Hockey" && rc.all.split("-").length === 3 ? " (won-lost-overtime losses)" : ""}${side ? ` (${side})` : ""}` : "", fm.length ? `last ${fm.length} games: ${wl} (${wins} win${wins === 1 ? "" : "s"})` : ""].filter(Boolean);
+      out.lines.push({who: t.name, head: parts.join(" · "), rows: fm.map(x => x.replace(/^W /, "Won ").replace(/^L /, "Lost ").replace(/^D /, "Draw ").replace(/^T /, "Tie "))});
+    }
+    if (f.h2h){ out.h2hGames = f.h2h.games || []; out.h2h = out.h2hGames.length ? (f.h2h.summary || f.h2h.title) : "They haven't played each other yet this season."; }
+  }
+  const pr = tennisPair(g);
+  if (pr){
+    for (const n of pr){ const p = (TEN.players || {})[n]; if (p) out.lines.push({who: n, head: `last ${p.rec.split("-").reduce((a,b)=>+a + +b, 0)} matches on the ATP/WTA tour: won ${p.rec.split("-")[0]}, lost ${p.rec.split("-")[1]}`, rows: p.last.map(x => `${x[1] === "W" ? "Beat" : "Lost to"} ${x[2]} ${x[1] === "W" ? x[3] : x[3].replace(/(\d+)-(\d+)/g, "$2-$1")} · ${x[4]} · ${fmtD(x[0])}`)}); }
+    const h = (TEN.h2h || {})[pr.join("|")] || (TEN.h2h || {})[pr.slice().reverse().join("|")];
+    if (h){ const [a, b] = (TEN.h2h || {})[pr.join("|")] ? pr : pr.slice().reverse(); out.h2h = h.a === h.b ? `${a} and ${b} have split their ${h.a + h.b} meetings ${h.a}-${h.b}` : `${h.a > h.b ? a : b} leads their meetings ${Math.max(h.a, h.b)}-${Math.min(h.a, h.b)}`; out.h2hGames = h.games.map(x => `${fmtD(x[0])}: ${x[1]} won ${x[2]} · ${x[3]}`); }
+    else if (out.lines.length === 2) out.h2h = "No meetings between them on the ATP/WTA tour in the last year.";
+    if (!out.lines.length) out.none = "No free stats for this match: Primo's tennis stats cover only the ATP and WTA main tours, and this looks like a lower-level event (ITF or Challenger).";
+  }
+  if (!out.lines.length && !out.h2h && !out.none) out.none = f ? "Recent form and past meetings appear about 2 days before the game." : `No free stats source for ${g.leagueName || "this league"} yet, so Primo goes by Kalshi's price only.`;
+  return out;
+}
+function statsHTML(g){
+  const d = statsData(g);
+  if (d.none && !d.lines.length) return `<p class="whyh">Stats</p><ul><li>${esc(d.none)}</li></ul>`;
+  return `<p class="whyh">Recent form${d.h2h ? " and head-to-head" : ""}</p><ul>${d.lines.map(l => `<li><b>${esc(l.who)}:</b> ${esc(l.head)}${l.rows.length ? `<br><span class="muted" style="font-size:.92em">${l.rows.map(esc).join("<br>")}</span>` : ""}</li>`).join("")}${d.h2h ? `<li><b>Head-to-head:</b> ${esc(d.h2h)}${d.h2hGames.length ? `<br><span class="muted" style="font-size:.92em">${d.h2hGames.map(esc).join("<br>")}</span>` : ""}</li>` : ""}</ul><p class="src">From ESPN results · updates every hour</p>`;
+}
+function statsText(g){ const d = statsData(g); return d.lines.map(l => `${l.who}: ${l.head}${l.rows.length ? " — " + l.rows.join("; ") : ""}`).concat(d.h2h ? [`Head-to-head: ${d.h2h}${d.h2hGames.length ? " — " + d.h2hGames.join("; ") : ""}`] : []).concat(d.none ? [d.none] : []); }
 function whyHTML(g){
   const r = g.research;
-  if (!r) return factsHTML(g) ? `<details class="why"><summary><span class="whytag">Official facts</span> injuries and starters</summary>${factsHTML(g)}</details>` : "";
+  if (!r){ const st = statsData(g); return factsHTML(g) || st.lines.length || st.h2h ? `<details class="why"><summary><span class="whytag">Stats & facts</span> recent form, head-to-head, injuries</summary>${statsHTML(g)}${factsHTML(g)}</details>` : ""; }
   const lean = r.lean ? `Leans <b>${esc(niceName(g.sport, r.lean))}</b> to win` : "No side";
   const players = r.players ? `<p class="whyh">Players to know</p><ul>${Object.entries(r.players).map(([n,x]) => `<li><b>${esc(n)}:</b> ${pHTML(x)}</li>`).join("")}</ul>` : "";
-  return `<details class="why" open><summary><span class="whytag">Primo's read</span> ${lean} <span class="lvl">${esc(r.level)}</span></summary>${takeHTML(r, g.sport)}<p class="whyh">Notes</p><ul>${r.notes.map(n=>`<li>${esc(n)}</li>`).join("")}</ul>${players}${factsHTML(g)}<p class="src">Sources: ${srcLinks(r)} · Research as of ${esc(R.asof)}</p></details>`;
+  return `<details class="why" open><summary><span class="whytag">Primo's read</span> ${lean} <span class="lvl">${esc(r.level)}</span></summary>${takeHTML(r, g.sport)}<p class="whyh">Notes</p><ul>${r.notes.map(n=>`<li>${esc(n)}</li>`).join("")}</ul>${players}${statsHTML(g)}${factsHTML(g)}<p class="src">Sources: ${srcLinks(r)} · Research as of ${esc(R.asof)}</p></details>`;
 }
 function leanClash(m){
   const r = m.g.research;
@@ -1064,10 +1108,10 @@ function legWhy(m, tier, legs){
     tag = r.lean ? (agrees ? `research agrees` : `research leans ${esc(niceName(m.g.sport, r.lean))}`) : `research: ${esc(r.level || "no side")}`;
     const leanLine = r.lean ? (agrees ? `Primo's research also leans <b>${esc(niceName(m.g.sport, r.lean))}</b> to win.` : `Primo's research leans <b>${esc(niceName(m.g.sport, r.lean))}</b> to win this game.`) : `Primo's research doesn't favor either side (${esc(r.level || "toss-up")}).`;
     const pn = playerNote(m);
-    res = `${pn ? `<p class="whyh">About ${esc(pn[0])}</p><ul><li>${pHTML(pn[1])}</li></ul>` : ""}${takeHTML(r, m.g.sport)}<p class="whyh">What Primo's research found</p><ul><li>${leanLine}</li>${r.notes.map(n=>`<li>${esc(n)}</li>`).join("")}</ul><p class="src">Sources: ${srcLinks(r)} · Research as of ${esc(R.asof)}</p>${factsHTML(m.g)}`;
+    res = `${pn ? `<p class="whyh">About ${esc(pn[0])}</p><ul><li>${pHTML(pn[1])}</li></ul>` : ""}${takeHTML(r, m.g.sport)}<p class="whyh">What Primo's research found</p><ul><li>${leanLine}</li>${r.notes.map(n=>`<li>${esc(n)}</li>`).join("")}</ul><p class="src">Sources: ${srcLinks(r)} · Research as of ${esc(R.asof)}</p>${statsHTML(m.g)}${factsHTML(m.g)}`;
   } else {
     tag = "no research yet";
-    res = `<p class="whyh">Research</p><ul><li>Primo has no written research for this game yet, so this pick is based on Kalshi's odds${factsHTML(m.g) ? " and the official facts below" : " only"}.</li></ul>${factsHTML(m.g)}`;
+    res = `<p class="whyh">Research</p><ul><li>Primo has no written research for this game yet, so this pick is based on Kalshi's odds${factsHTML(m.g) ? " and the official facts below" : ""}${statsData(m.g).lines.length ? " plus the stats below" : ""}.</li></ul>${statsHTML(m.g)}${factsHTML(m.g)}`;
   }
   const clash = leanClash(m) ? `<div class="legnote clash">Careful: Primo's research leans ${esc(niceName(m.g.sport, r.lean))} in this game.</div>` : "";
   const liked = likedBy(m);
@@ -1173,7 +1217,7 @@ function gameFacts(g){
   const keep = g.markets.filter(m => !isNaN(m.p) && m.ask > 0 && m.ask < 1)
     .sort((a,b) => (a.type === "winner" ? 0 : 1) - (b.type === "winner" ? 0 : 1) || b.vol - a.vol).slice(0, 45)
     .map(m => ({bet: m.pick, kalshi_wording: m.label, kalshi_market: m.stitle, chance_pct: Math.round(m.p*100), yes_price_cents: Math.round(m.ask*100), traded: m.vol, ...(comboOK(m) ? {} : {single_bet_only: true})}));
-  const o = {game: g.title, league: g.leagueName, sport: g.sport, starts: fmtWhen(g), already_started: started(g), bets_on_kalshi: keep};
+  const o = {game: g.title, league: g.leagueName, sport: g.sport, starts: fmtWhen(g), already_started: started(g), stats_recent_form_head_to_head: statsText(g), bets_on_kalshi: keep};
   if (r){
     o.primo_research = {lean: r.lean ? nm(r.lean) : "none (toss-up)", level: r.level, notes: r.notes};
     if (r.take) o.primo_research.take = {summary: r.take.summary, factors: (r.take.factors||[]).map(f => f.t + ": " + f.x), likes: (r.take.likes||[]).map(l => l.text + " (" + (l.why||"") + ")"), risks: r.take.risks};
@@ -1358,6 +1402,7 @@ function gradeKalshi(leg, m, r){
   const rs = g.research;
   if (rs && rs.lean) r.notes.push(ffold(rs.lean) === ffold(m.label) || ffold(rs.lean).includes(ffold(m.label)) ? `✓ Primo's research also leans ${rs.lean}.` : `✗ Primo's research leans ${rs.lean}.`);
   const l = likedBy(m); if (l) r.notes.push(`✓ Primo likes this bet: ${l.why || l.text || ""}`);
+  for (const x of statsText(g)) r.notes.push(x);
   if (!rs) r.notes.push(`Primo hasn't written research on this ${g.sport === "Tennis" ? "match" : "game"} — this grade is Kalshi's price only.`);
   for (const [team, rows] of g.injuries || []){ const out = rows.filter(p => /out|doubtful/i.test(p.status)).slice(0, 4); if (out.length) r.notes.push(`${team} missing: ${out.map(p => `${p.player} (${p.pos || "?"}, ${p.status.toLowerCase()}${p.injury ? " – " + p.injury.toLowerCase() : ""})`).join("; ")}.`); }
   r.tag = r.chance >= .65 ? "Likely" : r.chance >= .52 ? "Leans yes" : r.chance >= .45 ? "Coin flip" : "Long shot";
