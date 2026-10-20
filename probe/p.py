@@ -1,43 +1,25 @@
-import urllib.request, json
-UA={"User-Agent":"Mozilla/5.0 Chrome/124","Accept":"application/json"}
+import urllib.request, json, traceback, datetime
+UA={"User-Agent":"Mozilla/5.0","Accept":"application/json"}
+K="https://api.elections.kalshi.com/trade-api/v2"
 def get(u):
-    try: return json.loads(urllib.request.urlopen(urllib.request.Request(u,headers=UA),timeout=20).read())
-    except Exception as e: return {"ERR":str(e)[:150]}
+    try: return json.loads(urllib.request.urlopen(urllib.request.Request(u,headers=UA),timeout=30).read())
+    except Exception as e: return {"ERR":str(e)[:200]}
 out=[]
-import traceback
-def safe(f):
-    try: f()
-    except Exception: out.append("CRASH "+traceback.format_exc()[-600:])
-E="https://site.api.espn.com/apis/site/v2/sports/"
-def team():
- for path,q in [("football/nfl","?week=8&seasontype=2"),("basketball/nba","?dates=20261021"),("hockey/nhl","?dates=20261021"),("baseball/mlb","?dates=20261020"),("soccer/eng.1","?dates=20261024"),("football/college-football","?groups=80&week=9")]:
-     sb=get(E+path+"/scoreboard"+q); evs=sb.get("events",[])
-     if not evs: out.append("%s no events %s"%(path,str(sb)[:100])); continue
-     ev=evs[0]; d=get(E+path+"/summary?event="+ev["id"])
-     out.append("##### %s %s | keys %s"%(path,ev["name"],list(d.keys())))
-     for k in ["lastFiveGames","headToHeadGames","seasonseries","againstTheSpread","standings"]:
-         if d.get(k) is not None: out.append("  %s: %s"%(k,json.dumps(d[k])[:700]))
-     comp=ev["competitions"][0]
-     out.append("  records: %s"%json.dumps([c.get("records") for c in comp["competitors"]])[:300])
-safe(team)
-def tennis():
- for lg in ["atp","wta"]:
-     sb=get(E+"tennis/%s/scoreboard?dates=20261012"%lg)
-     out.append("##### tennis %s keys %s events %d"%(lg,list(sb.keys()),len(sb.get("events",[]))))
-     for ev in sb.get("events",[])[:1]:
-         out.append("  ev keys %s name %s"%(list(ev.keys()),ev.get("name")))
-         gs=ev.get("groupings") or []
-         out.append("  groupings %d"%len(gs))
-         if gs:
-             c=gs[0]["competitions"][0]; out.append("  comp sample %s"%json.dumps(c)[:1200])
-         cs=ev.get("competitions") or []
-         if cs: out.append("  comp sample2 %s"%json.dumps(cs[0])[:1200])
-safe(tennis)
-def sack():
- for r in ["tennis_atp","tennis_wta"]:
-    d=get("https://api.github.com/repos/JeffSackmann/%s/commits?per_page=1"%r)
-    out.append("%s last commit %s"%(r,json.dumps(d)[:250] if isinstance(d,dict) else d[0]["commit"]["committer"]["date"]))
-    d=get("https://api.github.com/repos/JeffSackmann/%s/contents"%r)
-    out.append("  files: %s"%[x["name"] for x in d if isinstance(x,dict) and ("2025" in x["name"] or "2026" in x["name"] or "2024" in x["name"])] if isinstance(d,list) else d)
-safe(sack)
+try:
+    s=open("data/prices.js").read(); D=json.loads(s[s.index("{"):s.rindex("}")+1])
+    codes=[r[1] for r in D["G"] if r[0]=="Tennis"][:6]
+    out.append("tennis codes %s"%codes)
+    ser=[x for x in D["SER"] if "TENNIS" in x[0].upper() or "ATP" in x[0] or "WTA" in x[0] or "ITF" in x[0]][:10]; out.append("series %s"%ser)
+    for code in codes[:3]:
+        for st in set(x[0] for x in ser):
+            ev=get(K+"/events/%s-%s?with_nested_markets=true"%(st,code))
+            if "event" in ev:
+                e=ev["event"]; out.append("EVENT %s keys %s"%(e.get("event_ticker"),list(e.keys())))
+                m=(e.get("markets") or ev.get("markets") or [{}])[0]
+                out.append(" market fields: "+json.dumps({k:m.get(k) for k in m if any(w in k for w in ["time","date","status","occurrence","expir","result","close","open","can_close"])}))
+                out.append(" event extra: "+json.dumps({k:e.get(k) for k in e if k not in("markets",)})[:600])
+                ms=get(K+"/milestones?limit=5&related_event_ticker=%s"%e.get("event_ticker")); out.append(" milestones: "+json.dumps(ms)[:1200])
+                break
+    ms=get(K+"/milestones?limit=3&category=Sports"); out.append("milestones generic: "+json.dumps(ms)[:1500])
+except Exception: out.append(traceback.format_exc())
 open("probe.txt","w").write("\n".join(map(str,out)))
