@@ -40,4 +40,4 @@ def sack():
     d=get("https://api.github.com/repos/JeffSackmann/%s/contents"%r)
     out.append("  files: %s"%[x["name"] for x in d if isinstance(x,dict) and ("2025" in x["name"] or "2026" in x["name"] or "2024" in x["name"])] if isinstance(d,list) else d)
 safe(sack)
-open("probe.txt","w").write("\n".join(out))
+open("probe.txt","w").write("\n".join(map(str,out)))
