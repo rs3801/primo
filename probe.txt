@@ -1,0 +1,25 @@
+=== https://site.api.espn.com/apis/site/v2/sports/tennis/atp/scoreboard
+HTTP 200
+{"leagues":[{"id":"851","uid":"s:850~l:851","name":"ATP","abbreviation":"ATP","midsizeName":"ATP","slug":"atp","season":{"year":2026,"startDate":"2026-01-01T08:00Z","endDate":"2027-01-01T07:59Z","displayName":"2026","type":{"id":"2","type":2,"name":"Regular Season","abbreviation":"reg"}},"logos":[{"
+=== https://api.sofascore.com/api/v1/sport/tennis/scheduled-events/2026-10-20
+HTTP 403
+HTTP Error 403: Forbidden
+=== https://www.sofascore.com/api/v1/sport/tennis/scheduled-events/2026-10-20
+HTTP 403
+HTTP Error 403: Forbidden
+=== https://www.thesportsdb.com/api/v1/json/3/searchplayers.php?p=Andrea%20De%20Marchi
+HTTP 403
+HTTP Error 403: Forbidden
+=== https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard
+HTTP 200
+{"leagues":[{"id":"28","uid":"s:20~l:28","name":"National Football League","abbreviation":"NFL","slug":"nfl","season":{"year":2026,"startDate":"2026-08-06T07:00Z","endDate":"2027-02-16T07:59Z","displayName":"2026","type":{"id":"2","type":2,"name":"Regular Season","abbreviation":"reg"}},"logos":[{"hr
+=== https://api.sofascore.com/api/v1/sport/table-tennis/scheduled-events/2026-10-20
+HTTP 403
+HTTP Error 403: Forbidden
+=== https://api.sofascore.com/api/v1/sport/esports/scheduled-events/2026-10-20
+HTTP 403
+HTTP Error 403: Forbidden
+ERR Expecting value: line 1 column 1 (char 0)
+NFL summary keys ['boxscore', 'format', 'gameInfo', 'drives', 'leaders', 'injuries', 'broadcasts', 'pickcenter', 'odds', 'againstTheSpread', 'scoringPlays', 'news', 'winprobability', 'header', 'article', 'videos', 'wallclockAvailable', 'meta', 'standings']
+lastFive null
+h2h null
