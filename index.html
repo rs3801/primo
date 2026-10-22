@@ -265,9 +265,10 @@ header.top .hint{color:#FFB52E;border-color:rgba(255,181,46,.6);background:rgba(
       </div>
       <div class="fgroup"><h3>When</h3><div class="chips scroll" id="f-when"></div></div>
       <div class="fgroup"><h3>Sports <span class="opt">tap several to mix</span></h3><div class="chips scroll" id="f-sport"></div></div>
+      <div class="fgroup" id="leaguegroup" hidden><h3>Leagues <span class="opt">mix, or tap one or more</span></h3><div class="chips scroll" id="f-league"></div></div>
       <div class="fgroup"><h3>Bet types <span class="opt">tap several</span></h3><div class="chips scroll" id="f-type"></div></div>
       <div class="fgroup"><h3>Primo research</h3><div class="chips" id="f-research"></div></div>
-      <div class="fgroup"><h3>League</h3><div class="chips scroll" id="f-gender"></div></div>
+      <div class="fgroup"><h3>Men / women</h3><div class="chips scroll" id="f-gender"></div></div>
       <p class="legend">The % is the chance Kalshi's market gives it (middle of the buy and sell price). A Yes contract pays $1 if it hits, before Kalshi's fee. These are market odds, not guarantees.</p>
     </div></details></aside>
 
@@ -336,7 +337,7 @@ const TIERS = {
   high:   {name:"High risk", lo:.30, hi:.60, sort:"score", blurb:"Close games and underdogs for a big payout, picking the ones with an edge first (cheaper than the sportsbooks, liked by Primo, or money moving in). Expect most of these to miss."}
 };
 
-const state = { tab:"build", when:"week", sports:new Set(), types:new Set(), gender:"all", researched:"all", q:"", shown:30, legs:6 };
+const state = { tab:"build", when:"week", sports:new Set(), leagues:new Set(), types:new Set(), gender:"all", researched:"all", q:"", shown:30, legs:6 };
 state.stake = 10;   // bet amount used for payouts; starts at $10 every time Primo opens
 let slip = store.get("primo-slip", []);   // [{key}]
 let built = null;                         // {safe:{legs,pool,used}, ...}
@@ -626,6 +627,7 @@ const typeOK = m => !state.types.size || state.types.has(m.type);
 function gameOK(g){
   return whenMatch(g) &&
     (!state.sports.size || state.sports.has(g.sport)) &&
+    leagueOK(g) &&
     (state.gender === "all" || (state.gender === "women") === g.women) &&
     (state.researched === "all" || !!g.research);
 }
@@ -649,6 +651,39 @@ function buildFilters(){
   const nr = games.filter(g => g.research && whenMatch(g)).length;
   $("f-research").innerHTML = chip("researched","all","All games",state.researched === "all") + chip("researched","only","Researched only",state.researched === "only", nr);
   $("f-gender").innerHTML = ["all","men","women"].map((v,i)=>chip("gender", v, ["Men & women","Men's","Women's"][i], state.gender === v)).join("");
+  buildLeagues();
+}
+
+/* ---------- league picker: shows the leagues of the sports you picked; "Mix" = all of them ---------- */
+const LEAGUE_GROUPS = [   // one-tap groups
+  ["grp:euro5", "Top Europe (Premier, La Liga, Serie A, Bundesliga, Ligue 1)", "Soccer", /^(Premier League \(England|La Liga \(Spain|Serie A \(Italy|Bundesliga \(Germany|Ligue 1 \(France)/],
+  ["grp:uefa", "Champions & Europa League", "Soccer", /^(UEFA )?(Champions League|Europa League|Conference League)/i],
+  ["grp:americas", "Americas (MLS, Liga MX, Brazil, Argentina)", "Soccer", /^(MLS|Liga MX|Brasileirão Série A|Liga Profesional \(Argentina)/],
+];
+const LEAGUE_FIRST = [/^NFL/, /^College football/, /^NBA/, /^WNBA/, /^NHL/, /^MLB/, /^Premier League \(England/, /^(UEFA )?Champions League/, /^La Liga \(Spain/, /^Serie A \(Italy/, /^Bundesliga \(Germany/, /^Ligue 1 \(France/, /^(UEFA )?Europa League/, /^MLS/, /^Liga MX/, /^Brasileirão Série A/, /^Liga Profesional \(Argentina/, /^ATP Tour/, /^WTA Tour/, /^ATP Challenger/, /^UFC/];
+const lgRank = n => { const i = LEAGUE_FIRST.findIndex(r => r.test(n)); return i < 0 ? 99 : i; };
+function leagueOK(g){
+  if (!state.leagues.size) return true;
+  for (const v of state.leagues){
+    if (v.startsWith("grp:")){ const G = LEAGUE_GROUPS.find(x => x[0] === v); if (G && g.sport === G[2] && G[3].test(g.leagueName)) return true; }
+    else if (g.leagueName === v) return true;
+  }
+  return false;
+}
+function buildLeagues(){
+  const box = $("leaguegroup");
+  if (!state.sports.size){ box.hidden = true; state.leagues.clear(); return; }
+  const counts = new Map();
+  for (const g of games) if (whenMatch(g) && state.sports.has(g.sport) && !started(g)) counts.set(g.leagueName, (counts.get(g.leagueName) || 0) + 1);
+  for (const v of [...state.leagues]) if (!v.startsWith("grp:") && !counts.has(v)) state.leagues.delete(v);
+  for (const v of [...state.leagues]) if (v.startsWith("grp:")){ const G = LEAGUE_GROUPS.find(x => x[0] === v); if (!G || !state.sports.has(G[2])) state.leagues.delete(v); }
+  const names = [...counts.keys()].sort((a, b) => lgRank(a) - lgRank(b) || counts.get(b) - counts.get(a) || a.localeCompare(b));
+  if (names.length < 2 && !state.leagues.size){ box.hidden = true; return; }
+  box.hidden = false;
+  const groups = LEAGUE_GROUPS.filter(G => state.sports.has(G[2])).map(G => [G, games.filter(g => whenMatch(g) && g.sport === G[2] && !started(g) && G[3].test(g.leagueName)).length]).filter(([, n]) => n);
+  $("f-league").innerHTML = chip("league", "all", `Mix all ${names.length} leagues`, !state.leagues.size) +
+    groups.map(([G, n]) => chip("league", G[0], G[1], state.leagues.has(G[0]), n)).join("") +
+    names.map(n => chip("league", n, n, state.leagues.has(n), counts.get(n))).join("");
 }
 function toggleSet(set, v){ if (v === "all") set.clear(); else if (set.has(v)) set.delete(v); else set.add(v); }
 
@@ -678,6 +713,7 @@ document.addEventListener("click", e => {
   const g = c.dataset.g, v = c.dataset.v;
   if (g === "sport") toggleSet(state.sports, v);
   else if (g === "type") toggleSet(state.types, v);
+  else if (g === "league") toggleSet(state.leagues, v);
   else if (g === "legs"){ state.legs = +v; $("legs").value = v; }
   else if (g === "stake"){ setStake(+v); return; }
   else state[g] = v;
@@ -1130,7 +1166,7 @@ function totalsHTML(legs){
 }
 function filterSummary(){
   const w = {today:"Today",tomorrow:"Tomorrow",weekend:"This weekend",week:"Next 7 days",next:"Next week",all:"All upcoming"}[state.when];
-  const s = state.sports.size ? [...state.sports].join(" + ") : "All sports";
+  const s = (state.sports.size ? [...state.sports].join(" + ") : "All sports") + (state.leagues.size ? " (" + [...state.leagues].map(v => v.startsWith("grp:") ? (LEAGUE_GROUPS.find(x => x[0] === v) || [, v])[1].replace(/ \(.*\)$/, "") : v).join(", ") + ")" : "");
   const t = state.types.size ? TYPES.filter(([v])=>state.types.has(v)).map(([,l])=>l).join(", ") : "All bet types";
   const g = {all:"Men & women",men:"Men's",women:"Women's"}[state.gender];
   return `${w} · ${s} · ${t} · ${g}`;
