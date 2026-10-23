@@ -1104,7 +1104,7 @@ function gameCall(m){
     else if (r && /preseason/i.test(r.level || "")) why = "Preseason game: starters may barely play, so this is close to a coin flip.";
     else why = (fav ? "This is the favorite." : "This is the underdog: it pays more but is less likely to win.") + " " + (!r ? "This pick comes from the odds only." : "Primo's research calls this game close.");
   } else if (!lean){
-    why = "Instead of guessing who wins a close game, Primo picked a bet that can hit no matter which team wins.";
+    why = sides[0] && sides[0].p >= .7 ? `${esc(nm(sides[0].label))} is a big favorite, so betting them to win pays very little; this bet can hit no matter which team wins and pays more.` : "Instead of guessing who wins a close game, Primo picked a bet that can hit no matter which team wins.";
   } else {
     const side = sides.find(x => nm(x.label) === lean) || sides[0];
     const a = pay(m), b = pay(side);
@@ -1793,7 +1793,7 @@ function buildTake(r){
 function takeHTMLx(k){
   if (!k) return "";
   const li = (a, ic) => a.map(x => `<li>${ic} ${esc(x)}</li>`).join("");
-  return `<div style="margin:8px 0;padding:10px 12px;border-radius:12px;background:var(--chip, rgba(127,127,127,.08))"><b>Primo's take: ${k.badge}</b><p style="margin:4px 0 6px">${esc(k.say)}</p>${(k.ctx || []).length ? `<p class="muted" style="margin:0 0 6px;font-size:.92em">${k.ctx.map(esc).join("<br>")}</p>` : ""}${k.pros.length || k.cons.length ? `<ul style="margin:0;padding-left:18px">${li(k.pros, "👍")}${li(k.cons, "👎")}</ul>` : ""}${k.flip ? `<p style="margin:6px 0 0"><b>Flip it?</b> ${esc(k.flip)}</p>` : ""}</div>`;
+  return `<div style="margin:8px 0;padding:10px 12px;border-radius:12px;background:var(--chip, rgba(127,127,127,.08))"><b>Primo's take: ${k.badge}</b><p style="margin:4px 0 6px">${esc(k.say)}</p>${(k.ctx || []).length ? `<p class="muted" style="margin:0 0 6px;font-size:.92em">${k.ctx.map(esc).join("<br>")}</p>` : ""}${(() => { const pr = k.pros.filter(x => !k.say.includes(x.replace(/\.$/, ""))), co = k.cons.filter(x => !k.say.includes(x.replace(/\.$/, ""))); return pr.length || co.length ? `<ul style="margin:0;padding-left:18px">${li(pr, "👍")}${li(co, "👎")}</ul>` : ""; })()}${k.flip ? `<p style="margin:6px 0 0"><b>Flip it?</b> ${esc(k.flip)}</p>` : ""}</div>`;
 }
 
 function verdictHTML(rs, T, all){
