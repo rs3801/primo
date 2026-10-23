@@ -204,11 +204,15 @@ def standings(games):
     """Where each team sits in its league table (ESPN standings, refreshed every 6 hours)."""
     cache = load_json("data/standings.json", {})
     now = time.time(); out = {}
-    paths = sorted({(g["league"], g["path"]) for g in games if g["league"] not in ("College football", "College basketball")})
-    for league, path in paths:
+    paths = sorted({(g["league"], g["path"]) for g in games})
+    urls = []
+    for league, path in paths:   # college: one table per conference (top division 80 + FCS 81 for football, Division I = 50 for basketball)
+        groups = [80, 81] if league == "College football" else [50] if league == "College basketball" else [None]
+        urls += [(league, path + ("" if gr is None else "?group=%d" % gr)) for gr in groups]
+    for league, path in urls:
         c = cache.get(path)
         if not c or now - c.get("t", 0) > 6 * 3600:
-            d = get("https://site.api.espn.com/apis/v2/sports/" + path + "/standings")
+            d = get("https://site.api.espn.com/apis/v2/sports/" + path.replace("?", "/standings?", 1) if "?" in path else "https://site.api.espn.com/apis/v2/sports/" + path + "/standings")
             if not d: continue
             table = {}
             def walk(node):
