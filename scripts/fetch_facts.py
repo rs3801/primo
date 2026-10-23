@@ -197,10 +197,54 @@ def tennis_stats():
     print("tennis:", len(matches), "matches in archive,", len(players), "Kalshi players with results,", len(h2h), "head-to-heads")
     return {"players": players, "h2h": h2h, "covers": "ATP and WTA main tour"}
 
+def ordinal(n):
+    return "%d%s" % (n, "th" if 10 <= n % 100 <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th"))
+
+def standings(games):
+    """Where each team sits in its league table (ESPN standings, refreshed every 6 hours)."""
+    cache = load_json("data/standings.json", {})
+    now = time.time(); out = {}
+    paths = sorted({(g["league"], g["path"]) for g in games if g["league"] not in ("College football", "College basketball")})
+    for league, path in paths:
+        c = cache.get(path)
+        if not c or now - c.get("t", 0) > 6 * 3600:
+            d = get("https://site.api.espn.com/apis/v2/sports/" + path + "/standings")
+            if not d: continue
+            table = {}
+            def walk(node):
+                st = node.get("standings") or {}
+                ents = st.get("entries") or []
+                if ents:
+                    def stat(e, *names):
+                        for x in e.get("stats") or []:
+                            if x.get("name") in names or x.get("type") in names:
+                                try: return float(x.get("value"))
+                                except (TypeError, ValueError): pass
+                        return None
+                    if all(stat(e, "rank") is not None for e in ents): key = lambda e: stat(e, "rank")
+                    elif all(stat(e, "playoffSeed") is not None for e in ents): key = lambda e: stat(e, "playoffSeed")
+                    else: key = lambda e: -(stat(e, "points") if stat(e, "points") is not None else (stat(e, "winPercent", "winpercent") or 0))
+                    grp = node.get("name") or node.get("abbreviation") or league
+                    for i, e in enumerate(sorted(ents, key=key)):
+                        nm = (e.get("team") or {}).get("displayName", "")
+                        if nm and nm not in table: table[nm] = [i + 1, len(ents), grp]
+                for ch in node.get("children") or []: walk(ch)
+            walk(d)
+            c = cache[path] = {"t": now, "table": table}
+        for nm, v in c["table"].items(): out.setdefault(league, {})[nm] = v
+    save_json("data/standings.json", cache)
+    for g in games:
+        tb = out.get(g["league"], {})
+        for t in g["teams"]:
+            v = tb.get(t["name"])
+            if v: t["place"] = "%s of %d in the %s" % (ordinal(v[0]), v[1], v[2])
+    print("standings:", sum(1 for g in games for t in g["teams"] if t.get("place")), "teams placed,", sum(1 for g in games for t in g["teams"] if t.get("rank")), "ranked college teams")
+
 def team(c):
     t = c.get("team", {})
     return {"id": t.get("id", ""), "name": t.get("displayName", ""), "short": t.get("shortDisplayName", ""), "loc": t.get("location", ""),
-            "nick": t.get("name", ""), "abbr": t.get("abbreviation", ""), "home": c.get("homeAway") == "home"}
+            "nick": t.get("name", ""), "abbr": t.get("abbreviation", ""), "home": c.get("homeAway") == "home",
+            **({"rank": (c.get("curatedRank") or {}).get("current")} if 0 < ((c.get("curatedRank") or {}).get("current") or 99) < 99 else {})}   # college top-25 ranking
 
 def lineups(path, eid):
     j = get(ESPN + path + "/summary?event=" + str(eid), tries=1) or {}
@@ -295,6 +339,8 @@ def main():
                                  "injury": (d.get("type") or "").replace("Undisclosed", "undisclosed injury"), "date": (e.get("date") or "")[:10], "sport": sport})
                 if rows: inj[t.get("displayName", "")] = rows
     players = rosters(games)
+    try: standings(games)
+    except Exception as e: print("standings failed:", e)
     try: team_form(games)
     except Exception as e: print("team form failed:", e)
     try: tennis = tennis_stats()
