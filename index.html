@@ -629,7 +629,7 @@ function gameOK(g){
     (!state.sports.size || state.sports.has(g.sport)) &&
     leagueOK(g) &&
     (state.gender === "all" || (state.gender === "women") === g.women) &&
-    (state.researched === "all" || !!g.research);
+    (state.researched === "all" || (state.researched === "upset" ? !!upsetFor(g) : !!g.research));
 }
 function filtered(){
   const q = state.q.trim().toLowerCase();
@@ -649,7 +649,8 @@ function buildFilters(){
     sports.map(s => chip("sport", s, s, state.sports.has(s), counts[s], SPORT_COLOR[s]||"--s-other")).join("");
   $("f-type").innerHTML = chip("type","all","All types",!state.types.size) + TYPES.map(([v,l]) => chip("type", v, l, state.types.has(v))).join("");
   const nr = games.filter(g => g.research && whenMatch(g)).length;
-  $("f-research").innerHTML = chip("researched","all","All games",state.researched === "all") + chip("researched","only","Researched only",state.researched === "only", nr);
+  const nu = games.filter(g => whenMatch(g) && !started(g) && upsetFor(g)).length;
+  $("f-research").innerHTML = chip("researched","all","All games",state.researched === "all") + chip("researched","only","Researched only",state.researched === "only", nr) + chip("researched","upset","🚨 Upset alerts",state.researched === "upset", nu);
   $("f-gender").innerHTML = ["all","men","women"].map((v,i)=>chip("gender", v, ["Men & women","Men's","Women's"][i], state.gender === v)).join("");
   buildLeagues();
 }
@@ -1061,6 +1062,63 @@ function statsHTML(g){
   return `<p class="whyh">Recent form${d.h2h ? " and head-to-head" : ""}</p><ul>${d.lines.map(l => `<li><b>${esc(l.who)}:</b> ${esc(l.head)}${l.rows.length ? `<br><span class="muted" style="font-size:.92em">${l.rows.map(esc).join("<br>")}</span>` : ""}</li>`).join("")}${d.h2h ? `<li><b>Head-to-head:</b> ${esc(d.h2h)}${d.h2hGames.length ? `<br><span class="muted" style="font-size:.92em">${d.h2hGames.map(esc).join("<br>")}</span>` : ""}</li>` : ""}</ul><p class="src">From ESPN results · updates every hour</p>`;
 }
 function statsText(g){ const d = statsData(g); return d.lines.map(l => `${l.who}: ${l.head}${l.rows.length ? " — " + l.rows.join("; ") : ""}`).concat(d.h2h ? [`Head-to-head: ${d.h2h}${d.h2hGames.length ? " — " + d.h2hGames.join("; ") : ""}`] : []).concat(d.none ? [d.none] : []); }
+
+/* ---------- 🚨 upset alerts: the favorite has several things working against it ---------- */
+function upsetFor(g){
+  if (g._upset !== undefined) return g._upset;
+  g._upset = null;
+  try {
+    const pc = x => Math.round(x*100) + "%";
+    const winMk = lab => g.markets.filter(m => m.type === "winner" && !isNaN(m.p) && !/:|wins by|reg time|tie|draw/i.test(m.label) && lab(m.label)).sort((a, b) => b.vol - a.vol)[0];
+    const f = g.facts, R = [];
+    let favN, dogN, favP, mf, md;
+    if (f && f.teams.length === 2){
+      const [a, b] = f.teams, od = f.odds || {};
+      const ka = winMk(l => teamIn(a, l)), kb = winMk(l => teamIn(b, l));
+      const pa = od.home != null ? (a.home ? od.home : od.away)/100 : ka ? ka.p : null, pb = od.home != null ? (b.home ? od.home : od.away)/100 : kb ? kb.p : null;
+      if (pa == null || pb == null) return null;
+      const [F, D] = pa >= pb ? [a, b] : [b, a]; favP = Math.max(pa, pb); mf = pa >= pb ? ka : kb; md = pa >= pb ? kb : ka;
+      if (favP < .55 || favP > .82) return null;
+      favN = F.short || F.name; dogN = D.short || D.name;
+      const rc = x => (f.records || {})[x.name] || {}, fm = x => (f.form || {})[x.name] || [];
+      const ra = wl(rc(D).all), rb = wl(rc(F).all);
+      if (ra && rb && ra.g >= 3 && rb.g >= 3 && ra.pct - rb.pct >= .15) R.push(`${dogN} have the better record (${rc(D).all} vs ${rc(F).all})`);
+      const wd = fm(D).filter(x => /^W/.test(x)).length, wf = fm(F).filter(x => /^W/.test(x)).length;
+      if (fm(D).length >= 3 && fm(F).length >= 3 && wd - wf >= 2) R.push(`${dogN} are hotter: won ${wd} of their last ${fm(D).length}, ${favN} won ${wf} of ${fm(F).length}`);
+      if (rankEdge(D, F) > 0) R.push(`${dogN} rank higher (${rankTxt(D, F)} vs ${rankTxt(F, D) || "unranked"})`);
+      const dh = D.home ? wl(rc(D).home) : null, fr = !F.home ? wl(rc(F).road) : null;
+      if (dh && dh.g >= 2 && dh.pct >= .67) R.push(`${dogN} are at home, where they're ${rc(D).home}`);
+      else if (fr && fr.g >= 2 && fr.pct <= .34) R.push(`${favN} are on the road, where they're ${rc(F).road}`);
+      if (f.h2h && (f.h2h.games || []).length >= 2 && D.abbr && new RegExp("\\b" + D.abbr + "\\b").test(f.h2h.summary || "")) R.push(`Head-to-head: ${f.h2h.summary.replace(D.abbr, dogN)}`);
+      const outs = x => ((FX.injuries || {})[x.name] || []).filter(q => /out|doubtful/i.test(q.status) && !/coach/i.test(q.injury || ""));
+      const qb = outs(F).find(q => q.pos === "QB");
+      if (g.sport === "Football" && qb) R.push(`${favN} are missing quarterback ${qb.player}`);
+      else if (outs(F).length - outs(D).length >= 3) R.push(`${favN} have ${outs(F).length} players out (${outs(F).slice(0, 2).map(q => q.player).join(", ")}…), ${dogN} have ${outs(D).length}`);
+      const rs = g.research; if (rs && rs.lean && teamIn(D, rs.lean)) R.push(`Primo's research picks ${dogN}`);
+      const bookD = od.home != null ? (D.home ? od.home : od.away)/100 : null;
+      if (bookD != null && md && bookD - md.p >= .04) R.push(`${dogN} are cheaper on Kalshi (${pc(md.p)}) than at the sportsbooks (${pc(bookD)})`);
+    } else if (g.sport === "Tennis"){
+      const pr = tennisPair(g); if (!pr) return null;
+      const ma = winMk(l => l === pr[0]), mb = winMk(l => l === pr[1]); if (!ma || !mb) return null;
+      const [Fm, Dm] = ma.p >= mb.p ? [ma, mb] : [mb, ma]; favP = Fm.p; mf = Fm; md = Dm; favN = Fm.label; dogN = Dm.label;
+      if (favP < .55 || favP > .82) return null;
+      const P = TEN.players || {}, pf = P[favN], pd = P[dogN], rate = x => { const n = x.rec.split("-").map(Number); return n[0]/Math.max(1, n[0] + n[1]); };
+      if (pf && pd && pf.last.length >= 4 && pd.last.length >= 4 && rate(pd) - rate(pf) >= .2) R.push(`${dogN} is in better form (${pd.rec} vs ${pf.rec} in recent tour matches)`);
+      const h = (TEN.h2h || {})[pr.join("|")], dw = h ? (pr[0] === dogN ? h.a : h.b) : 0, fw2 = h ? (pr[0] === dogN ? h.b : h.a) : 0;
+      if (dw > fw2) R.push(`${dogN} leads their meetings ${dw}-${fw2}`);
+      const rs = g.research; if (rs && rs.lean && ffold(rs.lean) === ffold(dogN)) R.push(`Primo's research picks ${dogN}`);
+    } else return null;
+    if (md && (md.move || 0) >= 4) R.push(`Money is moving toward ${dogN} (up ${md.move} points in a day)`);
+    else if (mf && (mf.move || 0) <= -4) R.push(`Money is moving away from ${favN} (down ${-mf.move} points in a day)`);
+    if (R.length >= 3) g._upset = {fav: favN, dog: dogN, favP, dogP: 1 - favP, reasons: R};
+  } catch (e) { g._upset = null; }
+  return g._upset;
+}
+function upsetHTML(g, mode){   // mode: "game" (card), "fav" (you're betting the favorite), "dog" (you're betting the underdog)
+  const u = upsetFor(g); if (!u) return "";
+  const head = mode === "fav" ? `🚨 Upset alert: you're betting ${esc(u.fav)}, but Primo sees a real chance ${esc(u.dog)} wins` : mode === "dog" ? `🚨 Upset pick: Primo sees reasons ${esc(u.dog)} can beat ${esc(u.fav)}` : `🚨 Upset alert: ${esc(u.dog)} over ${esc(u.fav)}?`;
+  return `<div class="legnote clash" style="margin:8px 0"><b>${head}</b> ${esc(u.fav)} are favored (${Math.round(u.favP*100)}%), but:<ul style="margin:4px 0 0;padding-left:18px">${u.reasons.map(r => `<li>${esc(r)}</li>`).join("")}</ul><span style="font-size:.9em;opacity:.8">An upset alert means the underdog has a better shot than its price shows, not that it will win.</span></div>`;
+}
 function whyHTML(g){
   const r = g.research;
   if (!r){ const st = statsData(g); return factsHTML(g) || st.lines.length || st.h2h ? `<details class="why"><summary><span class="whytag">Stats & facts</span> recent form, head-to-head, injuries</summary>${statsHTML(g)}${factsHTML(g)}</details>` : ""; }
@@ -1079,7 +1137,7 @@ function gameHTML(g){
   for (const m of g.markets) if (typeOK(m)) (byType[m.type] ||= []).push(m);
   const shown = TYPES.filter(([v]) => byType[v]);
   const secs = shown.map(([v,l],i) => secHTML(v, l, byType[v], i === 0)).join("");
-  return `<article class="game" style="--c:var(${color})"><div class="ghead"><div class="meta"><div class="gtitle">${esc(g.title)}</div><div class="gsub">${g.start?`<span class="when">${esc(fmtTime(g.start))}</span>`:""}<span><b>${esc(g.leagueName)}</b></span><span>${g.markets.length} markets</span></div>${started(g)?`<div class="startednote">Already started. These prices are from before it began, so check Kalshi for live odds.</div>`:""}</div><span class="pill">${esc(g.sport)}</span>${g.women?'<span class="pill w">Women</span>':""}</div>${whyHTML(g)}${secs}</article>`;
+  return `<article class="game" style="--c:var(${color})"><div class="ghead"><div class="meta"><div class="gtitle">${esc(g.title)}</div><div class="gsub">${g.start?`<span class="when">${esc(fmtTime(g.start))}</span>`:""}<span><b>${esc(g.leagueName)}</b></span><span>${g.markets.length} markets</span></div>${started(g)?`<div class="startednote">Already started. These prices are from before it began, so check Kalshi for live odds.</div>`:""}${upsetHTML(g, "game")}</div><span class="pill">${esc(g.sport)}</span>${g.women?'<span class="pill w">Women</span>':""}</div>${whyHTML(g)}${secs}</article>`;
 }
 
 // "The game" box: who the market and Primo's research think wins, and why this pick instead of just picking the winner
@@ -1113,7 +1171,8 @@ function gameCall(m){
       : `Primo also leans ${esc(lean)} to win (${Math.round(side.p*100)}%${b ? `, ${money(state.stake)} pays about ${money(b)}` : ""}); this bet pays more${a ? ` (about ${money(a)})` : ""} and fits this risk level.`;
   }
   const op = opinionFor(m);
-  return `<div class="gamecall"><div><b>The game:</b> ${odds}</div><div>${call}</div><div class="why2">${why}</div>${op ? takeHTMLx(op) : ""}</div>`;
+  const up = (() => { const u = upsetFor(m.g); if (!u) return ""; if (m.type !== "winner") return upsetHTML(m.g, "game"); const me = m.g.facts ? m.g.facts.teams.find(x => teamIn(x, m.label)) : null; const nmMe = me ? (me.short || me.name) : m.label; return upsetHTML(m.g, nmMe === u.fav ? "fav" : nmMe === u.dog ? "dog" : "game"); })();
+  return `${up}<div class="gamecall"><div><b>The game:</b> ${odds}</div><div>${call}</div><div class="why2">${why}</div>${op ? takeHTMLx(op) : ""}</div>`;
 }
 
 // Over/under picks: what the sportsbooks expect, how many points these teams' recent games had, and the price
@@ -1624,6 +1683,7 @@ function gradeKalshi(leg, m, r){
   for (const [team, rows] of g.injuries || []){ const out = rows.filter(p => /out|doubtful/i.test(p.status)).slice(0, 4); if (out.length) r.notes.push(`${team} missing: ${out.map(p => `${p.player} (${p.pos || "?"}, ${p.status.toLowerCase()}${p.injury ? " – " + p.injury.toLowerCase() : ""})`).join("; ")}.`); }
   r.tag = r.chance >= .65 ? "Likely" : r.chance >= .52 ? "Leans yes" : r.chance >= .45 ? "Coin flip" : "Long shot";
   r.take = buildTakeK(r, m, g); r.kname = m.label;
+  { const u = upsetFor(g); if (u && m.label === u.fav) r.warn.push(`🚨 Upset alert: Primo sees a real chance ${u.dog} wins: ${u.reasons.join("; ")}.`); else if (u && m.label === u.dog) r.notes.unshift(`🚨 Upset pick: ${u.reasons.join("; ")}.`); }
   return r;
 }
 function kalshiGame(f){ return games.find(g => g.facts === f) || null; }
@@ -1714,6 +1774,9 @@ function gradeLeg(leg){
   }
   if (rs && rs.take && rs.take.likes && rs.take.likes.length) r.notes.push(`Primo's research likes in this game: ${rs.take.likes.slice(0, 3).map(l => l.text || (l.match || [])[0]).filter(Boolean).join("; ")}.`);
   for (const x of f.notes || []) if (/starting|series|leads|tied/i.test(x)) r.notes.push(x + ".");
+  { const u = g && leg.kind === "ml" && !leg.prop ? upsetFor(g) : null, me = t.short || t.name;
+    if (u && me === u.fav) r.warn.push(`🚨 Upset alert: ${u.fav} are favored, but Primo sees a real chance ${u.dog} wins: ${u.reasons.join("; ")}.`);
+    else if (u && me === u.dog) r.notes.unshift(`🚨 Upset pick: Primo sees reasons ${u.dog} can win: ${u.reasons.join("; ")}.`); }
   const big = (tm) => ((FX.injuries || {})[tm.name] || []).filter(p => /out|doubtful/i.test(p.status));
   for (const tm of [t, opp]){
     const rows = big(tm); if (!rows.length) continue;
