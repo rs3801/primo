@@ -15,6 +15,7 @@ LEAGUES = [  # (Kalshi sport name, league label, ESPN path, has injury report)
     ("Football", "College football", "football/college-football", False),
     ("Basketball", "NBA", "basketball/nba", True),
     ("Basketball", "WNBA", "basketball/wnba", True),
+    ("Basketball", "College basketball", "basketball/mens-college-basketball", False),
     ("Hockey", "NHL", "hockey/nhl", True),
     ("Baseball", "MLB", "baseball/mlb", False),
 ] + [("Soccer", name, "soccer/" + code, False) for code, name in [
@@ -218,7 +219,7 @@ def rosters(games):
     now = time.time(); fetched = 0; out = {}
     soon = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=3)
     for g in games:
-        if g["league"] == "College football": continue
+        if g["league"] in ("College football", "College basketball"): continue
         try:
             if datetime.datetime.fromisoformat(g["start"].replace("Z", "+00:00")) > soon: continue
         except ValueError: continue
@@ -244,13 +245,14 @@ def main():
     for sport, league, path, has_inj in LEAGUES:
         days = [None] if league == "NFL" else [today + datetime.timedelta(days=i) for i in range(3)]
         urls = [ESPN + path + "/scoreboard" + ("" if d is None else "?dates=" + d.strftime("%Y%m%d")) for d in days]
+        if league == "College basketball": urls = [u + "&groups=50&limit=400" for u in urls]   # all Division I games, not just the featured ones
         if league == "NFL":
             sb = get(urls[0]) or {}
             wk = (sb.get("week") or {}).get("number"); st = (sb.get("season") or {}).get("type") or 2
             evs = list(sb.get("events", []))
             if wk: evs += (get(ESPN + path + "/scoreboard?week=%d&seasontype=%s" % (wk + 1, st)) or {}).get("events", [])
         elif league == "College football":   # every FBS game this week, not just the featured ones
-            evs = (get(ESPN + path + "/scoreboard?groups=80&limit=300") or {}).get("events", [])
+            evs = [e for grp in (80, 81) for e in ((get(ESPN + path + "/scoreboard?groups=%d&limit=300" % grp) or {}).get("events", []))]   # 80 = FBS (big schools), 81 = FCS (Ivy League, etc.)
         else:
             evs = [e for u in urls for e in ((get(u) or {}).get("events", []))]
         for ev in evs:

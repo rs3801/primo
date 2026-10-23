@@ -1105,7 +1105,23 @@ function gameCall(m){
       ? `Primo also leans ${esc(lean)} to win (${Math.round(side.p*100)}%), but this bet is more likely to hit (${Math.round(m.p*100)}%).`
       : `Primo also leans ${esc(lean)} to win (${Math.round(side.p*100)}%${b ? `, ${money(state.stake)} pays about ${money(b)}` : ""}); this bet pays more${a ? ` (about ${money(a)})` : ""} and fits this risk level.`;
   }
-  return `<div class="gamecall"><div><b>The game:</b> ${odds}</div><div>${call}</div><div class="why2">${why}</div></div>`;
+  const op = opinionFor(m);
+  return `<div class="gamecall"><div><b>The game:</b> ${odds}</div><div>${call}</div><div class="why2">${why}</div>${op ? takeHTMLx(op) : ""}</div>`;
+}
+// Primo's own opinion on a winner pick (same reasoning as Check my bet): record, last 5, home/road, head-to-head, injuries, research, value
+function opinionFor(m){
+  try {
+    if (m.type !== "winner" || /^tie$|draw/i.test(m.label) || isNaN(m.p)) return null;
+    const g = m.g, f = g.facts;
+    if (f){
+      const t = f.teams.find(x => teamIn(x, m.label)); if (!t) return null;
+      const opp = f.teams.find(x => x !== t), od = f.odds || {};
+      const book = od.home != null ? (t.home ? od.home : od.away)/100 : null;
+      const r = {f, t, opp, g, km: m, kal: m.p, book, chance: book != null ? (book + m.p)/2 : m.p};
+      return buildTake(r);
+    }
+    return buildTakeK({chance: m.p}, m, g);
+  } catch (e) { return null; }
 }
 function legHTML(m, i, tier, legs){
   const color = SPORT_COLOR[m.g.sport] || "--s-other";
