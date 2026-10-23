@@ -1729,10 +1729,10 @@ function gradeLeg(leg){
 /* Primo's own opinion on one leg: who is better and why, then keep / okay / risky / drop */
 
 /* ---------- rankings: college top 25 ("No. 5") and league-table places ("2nd in the AFC") ---------- */
-const GRP_SHORT = [[/^National Football Conference$/i, "NFC"], [/^American Football Conference$/i, "AFC"], [/^\d{4}(-\d{2,4})?\s+/, ""], [/^English /, ""]];
-function placeTxt(t){ if (!t || !t.place) return ""; let [, pos, n, grp] = /^(\S+) of (\d+) in the (.+)$/.exec(t.place) || []; if (!grp) return t.place; for (const [r, w] of GRP_SHORT) grp = grp.replace(r, w); return `${pos} of ${n} in the ${grp}`; }
-function rankTxt(t, other){ if (!t) return ""; if (t.rank) return `No. ${t.rank} in the AP Top 25`; if (other && other.rank) return "not ranked"; return placeTxt(t); }
-function placeNum(t){ const m = /^(\d+)\S* of (\d+)/.exec(t && t.place || ""); return m ? [+m[1], +m[2]] : null; }
+const GRP_SHORT = [[/^National Football Conference$/i, "NFC"], [/^American Football Conference$/i, "AFC"], [/^\d{4}(-\d{2,4})?\s+/, ""], [/^English /, ""], [/ Conference$/, ""]];
+function placeTxt(t){ if (!t || !t.place || +((/ of (\d+)/.exec(t.place) || [])[1] || 0) < 4) return ""; let [, pos, n, grp] = /^(\S+) of (\d+) in the (.+)$/.exec(t.place) || []; if (!grp) return t.place; for (const [r, w] of GRP_SHORT) grp = grp.replace(r, w); return `${pos} of ${n} in the ${grp}`; }
+function rankTxt(t, other){ if (!t) return ""; const pl = placeTxt(t); const top = t.rank ? `No. ${t.rank} in the AP Top 25` : other && other.rank ? "not ranked in the Top 25" : ""; return [top, pl].filter(Boolean).join(", "); }
+function placeNum(t){ const m = /^(\d+)\S* of (\d+)/.exec(t && t.place || ""); return m && +m[2] >= 4 ? [+m[1], +m[2]] : null; }
 function rankEdge(t, o){   // > 0 = t clearly ranked higher, < 0 = clearly lower, 0 = close or unknown
   if (t.rank || o.rank){ if (t.rank && !o.rank) return 1; if (o.rank && !t.rank) return -1; return o.rank - t.rank >= 8 ? 1 : t.rank - o.rank >= 8 ? -1 : 0; }
   const a = placeNum(t), b = placeNum(o); if (!a || !b) return 0;
