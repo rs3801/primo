@@ -50,7 +50,10 @@ def main():
             try: vol = round(float(m.get("volume_fp") or 0))
             except ValueError: vol = 0
             win = bool(WIN.search(st))
-            if not win and (vol < 5 or b < 1): continue
+            when = (m.get("occurrence_datetime") or m.get("expected_expiration_time") or "")[:16]
+            try: soon = (datetime.datetime.fromisoformat(when + ":00+00:00").timestamp() - now) < 40 * 3600
+            except ValueError: soon = False
+            if not win and (b < 1 or vol < (1 if soon else 5)): continue   # games in the next day or so: keep thinly traded lines too
             label = m.get("yes_sub_title") if win else re.sub(r"\?$", "", m.get("title") or m.get("yes_sub_title") or "")
             R[m["ticker"]] = [ev, (label or "")[:90], round(pr), a, vol, (m.get("occurrence_datetime") or m.get("expected_expiration_time") or "")[:16]]
             kept += 1
@@ -66,7 +69,11 @@ def main():
     for ev, rows0 in by_ev.items():
         st, code = ev.split("-")[0], ev.split("-")[1]
         win = bool(WIN.search(st))
-        rows = rows0 if win else sorted(rows0, key=lambda r: -r[4])[:8]
+        # every line Kalshi offers for games in the next day or so (so slips match exactly); the 8 busiest per bet type for later games
+        soon = False
+        try: soon = any(r[5] and datetime.datetime.fromisoformat(r[5] + ":00+00:00").timestamp() - time.time() < 40 * 3600 for r in rows0)
+        except ValueError: pass
+        rows = rows0 if win else sorted(rows0, key=lambda r: -r[4])[:40 if soon else 8]
         sport = S[st][1]; key = sport + "|" + code
         if st not in SI: SI[st] = len(SER); SER.append([st, S[st][0]])
         g = games.setdefault(key, {"e": [sport, code, int(code[5:7]), [], ""], "w": False})
