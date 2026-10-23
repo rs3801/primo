@@ -1563,7 +1563,7 @@ function parseTicket(text){
     if (/\d+\s*market combo/i.test(L)) continue;
     if ((m = /win\s*:?\s*\$\s*([\d,]+(?:\.\d+)?)/i.exec(L)) || (m = /(?:pays|payout|to win)\s*:?\s*\$\s*([\d,]+(?:\.\d+)?)/i.exec(L))) out.win = +m[1].replace(/,/g, "");
     if (/parlay/i.test(L) && (m = L.match(/\$\s*[\d,]+(?:\.\d+)?/g)) && m.length >= 2){ out.risk = out.risk || +m[0].replace(/[$,\s]/g, ""); out.win = out.win || +m[1].replace(/[$,\s]/g, ""); }
-    if (NOTLEG.test(L) || /^\s*(?:bet|stake)\b/i.test(L)) continue;
+    if ((NOTLEG.test(L) && !/\d\s*%\s*[xX×✕]?\s*$/.test(L)) || /^\s*(?:bet|stake)\b/i.test(L)) continue;
     const leg = parseLeg(L);
     if (!leg) continue;
     const key = ffold(leg.who).replace(/[^a-z0-9]/g, "") + "|" + leg.kind + "|" + leg.line;   // the same bet on two overlapping screenshots counts once
@@ -1661,6 +1661,36 @@ function buildTakeK(r, m, g){   // Kalshi-only games (tennis, smaller leagues): 
   const why = (v[0] === "keep" || v[0] === "okay") ? pros.slice(0, 2) : cons.slice(0, 2);
   return {v: v[0], badge: v[1], say: `${v[2]}. ${lead}${why.length ? " " + why.join(" ") : ""}${noInfo ? " Primo has no stats or research on this one, so this is the odds only." : ""}`, pros, cons, flip: p < .4 && v[0] === "drop" ? `The other side (${other}, about ${TK.pct(1 - p)}) is the safer pick.` : null, other};
 }
+
+// Kalshi player bets ("Brice Turang: 1+ hits + runs + RBIs"): the exact line, or at least the game and that player's other lines
+function kalshiProp(leg){
+  const mm = /^(.+?):\s*(.+)$/.exec(leg.who); if (!mm) return null;
+  const who = ffold(mm[1]).trim(), stat = ffold(mm[2]).replace(/^\d+\+?\s*/, "").trim(), full = ffold(leg.who).replace(/\s+/g, " ").trim();
+  const now = Date.now(); let best = null;
+  for (const g of games){
+    if (g.start && now - g.start > 5*3600000) continue;
+    const mine = g.markets.filter(m => !isNaN(m.p) && ffold(m.label).startsWith(who + ":"));
+    if (!mine.length) continue;
+    const exact = mine.find(m => ffold(m.label).replace(/\s+/g, " ").trim() === full);
+    const sc = (exact ? 100 : 0) + mine.length - (g.start ? Math.max(0, g.start - now)/86400000 : 0);
+    if (!best || sc > best.sc) best = {g, m: exact || null, sc, near: mine.filter(m => m !== exact && ffold(m.label).includes(stat)).concat(mine.filter(m => m !== exact && !ffold(m.label).includes(stat))).slice(0, 4)};
+  }
+  return best;
+}
+function gradeProp(leg, r, hit){
+  const g = hit.g, m = hit.m || {g, label: leg.who, p: leg.paid != null ? leg.paid : NaN, type: "prop", move: 0, vol: 0, series: "", pick: leg.who};
+  r.g = g; r.f = g.facts || null; r.when = g.start; r.kname = leg.who;
+  r.title = `${g.title} · ${g.sport}, ${g.leagueName}`;
+  const pl = leg.who.split(":")[0].trim(), tm = PTEAM.get(ffold(pl));
+  r.desc = `Player bet: ${leg.who}${tm ? ` (${pl} plays for the ${tm})` : ""}`;
+  r.chance = hit.m ? hit.m.p : leg.paid;
+  if (started(g)) r.warn.push("🔴 This game has already started, so this leg is locked in.");
+  if (hit.m && leg.paid != null){ r.implied = leg.paid; r.edge = hit.m.p - leg.paid; r.price = Math.abs(r.edge) < .03 ? `Kalshi has it at ${TK.pct(hit.m.p)} right now (your slip shows ${TK.pct(leg.paid)}).` : r.edge > 0 ? `📈 Kalshi now ${TK.pct(hit.m.p)}, up from ${TK.pct(leg.paid)} on your slip.` : `📉 Kalshi now ${TK.pct(hit.m.p)}, down from ${TK.pct(leg.paid)} on your slip.`; }
+  if (!hit.m) r.notes.push(`Primo doesn't track this exact line, so it uses the ${leg.paid != null ? TK.pct(leg.paid) + " on your slip" : "odds"} as the chance.`);
+  if (hit.near.length) r.notes.push(`Other Kalshi lines for ${pl}: ${hit.near.map(x => `${x.label.split(":").slice(1).join(":").trim()} ${TK.pct(x.p)}`).join(", ")}.`);
+  if (r.chance != null && !isNaN(r.chance)){ r.take = withContext(buildOtherTake(Object.assign({}, m, {p: r.chance})), g); r.tag = r.chance >= .65 ? "Likely" : r.chance >= .52 ? "Leans yes" : r.chance >= .45 ? "Coin flip" : "Long shot"; }
+  return r;
+}
 function gradeKalshi(leg, m, r){
   const g = m.g; r.g = g; r.f = g.facts || null;
   r.title = `${g.title} · ${g.sport}, ${g.leagueName}`;
@@ -1694,6 +1724,7 @@ function kalshiWinner(g, t){
 }
 function gradeLeg(leg){
   const r = {leg, chance: null, how: [], notes: [], warn: []};
+  if (leg.kalshi && /:/.test(leg.who)){ const ph = kalshiProp(leg); if (ph) return gradeProp(leg, r, ph); }
   const both = leg.opp ? findTicketGame(leg.who, leg.opp) : null;
   const km0 = both && both.both ? null : kalshiFind(leg);
   if (km0 && (leg.kalshi || !findTicketGame(leg.who))) return gradeKalshi(leg, km0, r);
