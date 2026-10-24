@@ -1,16 +1,19 @@
-import urllib.request, json, datetime
-def get(u):
-    try: return json.loads(urllib.request.urlopen(urllib.request.Request(u,headers={"User-Agent":"Mozilla/5.0","Accept":"application/json"}),timeout=60).read())
-    except Exception as e: return {"ERR":str(e)}
+import urllib.request, json
 out=[]
-d=get("https://site.api.espn.com/apis/site/v2/sports/football/college-football/injuries")
-teams=d.get("injuries",[]); out.append("teams %d"%len(teams))
-recent=0; cut=(datetime.datetime.utcnow()-datetime.timedelta(days=30)).isoformat()
-for t in teams:
-    rows=t.get("injuries",[]); r=[x for x in rows if (x.get("date") or "")>=cut]
-    recent+=len(r)
-    if t.get("displayName") in ("Texas Longhorns","Ole Miss Rebels","Oklahoma Sooners","Mississippi State Bulldogs"):
-        out.append("## %s total %d recent %d"%(t["displayName"],len(rows),len(r)))
-        for x in rows[:15]: out.append("  %s %s %s | %s | %s"%(x.get("date"),x.get("status"),(x.get("athlete") or {}).get("displayName"),(x.get("athlete") or {}).get("position",{}).get("abbreviation") if isinstance((x.get("athlete") or {}).get("position"),dict) else "", (x.get("shortComment") or "")[:160]))
-out.append("recent entries in 30 days across all teams: %d"%recent)
-open("probe.txt","w").write("\n".join(out))
+def head(u):
+    try:
+        r=urllib.request.urlopen(urllib.request.Request(u,headers={"User-Agent":"Mozilla/5.0","Origin":"https://rs3801.github.io","Accept":"application/json"}),timeout=30)
+        h=dict(r.headers); b=r.read()[:600].decode("utf-8","replace")
+        return r.status, {k:v for k,v in h.items() if "access-control" in k.lower()}, b
+    except Exception as e: return 0, str(e)[:200], ""
+for u in ["https://api.elections.kalshi.com/trade-api/v2/markets?limit=2&status=open",
+          "https://api.elections.kalshi.com/trade-api/v2/milestones?limit=1&category=Sports",
+          "https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?groups=80",
+          "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=401909834"]:
+    s,h,b=head(u); out.append("=== %s\n%s %s\n%s"%(u,s,h,b[:300]))
+# live data endpoints on Kalshi
+d=json.loads(urllib.request.urlopen(urllib.request.Request("https://api.elections.kalshi.com/trade-api/v2/milestones?limit=5&category=Sports&minimum_start_date=2026-10-24T00:00:00Z",headers={"User-Agent":"Mozilla/5.0"}),timeout=30).read())
+for m in d.get("milestones",[])[:2]:
+    for path in ["/live_data/%s/milestone/%s"%(m.get("type"),m.get("id")), "/live_data/milestone/%s"%m.get("id")]:
+        s,h,b=head("https://api.elections.kalshi.com/trade-api/v2"+path); out.append("LIVE %s -> %s %s %s"%(path,s,h,b[:500]))
+open("probe.txt","w").write("\n".join(map(str,out)))
