@@ -1334,7 +1334,7 @@ function buildOtherTake(m){
     if (wins && od.line){ const bl = /^(\S+)\s+([+-]?\d+(?:\.\d)?)$/.exec(od.line); if (bl){ const fav = f.teams.find(x => ffold(x.abbr) === ffold(bl[1])); if (fav){ const exp = (fav === t ? 1 : -1) * -(+bl[2]); if (exp - +wins[1] >= 2) pros.push(`Sportsbooks expect ${t.short || t.name} to win by about ${exp}, more than the ${wins[1]} needed.`); else if (+wins[1] - exp >= 2) cons.push(`Sportsbooks expect ${t.short || t.name} to win by only about ${Math.max(0, exp)}, less than the ${wins[1]} needed.`); } } }
   }
   // a team's own points ("Mississippi St. over 16.5 points scored")
-  const tt = /over\s+([\d.]+)\s+(points|runs|goals)/i.exec(m.label);
+  const tt = /wins by/i.test(m.label) ? null : /over\s+([\d.]+)\s+(points|runs|goals)/i.exec(m.label);
   if (t && f && tt && !pl){
     const X = +tt[1], sc = ((f.form || {})[t.name] || []).map(x => /^([WLDT])\s+(\d+)-(\d+)/.exec(x)).filter(Boolean).map(r => r[1] === "W" ? Math.max(+r[2], +r[3]) : r[1] === "L" ? Math.min(+r[2], +r[3]) : +r[2]);
     if (sc.length >= 3){ const avg = sc.reduce((a, b) => a + b, 0)/sc.length, n = sc.filter(v => v > X).length, txt = `${t.short || t.name} scored ${sc.join(", ")} ${unit} in their last ${sc.length} games (over ${X} in ${n} of ${sc.length}).`; if (n/sc.length >= .7) pros.push(txt); else if (n/sc.length <= .4) cons.push(txt); }
@@ -1870,7 +1870,7 @@ function kalshiInGame(leg){
   let best = null;
   for (const g of games){
     if (g.start && now - g.start > 5*3600000) continue;
-    const T = stFold(g.title + " " + g.markets.filter(m => m.type === "winner").map(m => m.label).join(" "));
+    const T = stFold(g.title + " " + g.markets.slice(0, 120).map(m => m.label).join(" "));   // some Kalshi games carry no team names in the title
     const ok = x => { const w = stFold(x).split(" ").filter(y => y.length > 2); return w.length && w.some(y => T.includes(y)); };
     if (!ok(a) || !ok(b)) continue;
     for (const m of g.markets){
@@ -1884,6 +1884,7 @@ function kalshiInGame(leg){
 }
 function gradeKalshi(leg, m, r){
   const g = m.g; r.g = g; r.f = g.facts || null; r.km = m;
+  if (g.facts && m.type !== "winner"){ const t = g.facts.teams.find(x => teamIn(x, m.label.split(/ wins by| over| under|:/i)[0])); if (t){ r.side = t; r.sideOpp = g.facts.teams.find(x => x !== t); } }
   r.title = `${g.title} · ${g.sport}, ${g.leagueName}`;
   r.when = g.start;
   r.desc = m.type === "winner" ? `${m.label} to win${g.sport === "Tennis" ? " the match" : g.sport === "Soccer" ? " in 90 minutes (a draw loses)" : " the game"}` : explain(m);
@@ -2112,8 +2113,9 @@ const SWAP_OK = m => m.type !== "winner" || !/tie|draw/i.test(m.label);
 function sameGameOptions(r){
   const g = r.g; if (!g || started(g) || r.chance == null) return [];
   // stay on your side: drop bets that need the other team / player to do well
-  const other = r.opp && r.opp.name ? (lab => teamIn(r.opp, lab)) : r.take && r.take.other ? (lab => ffold(lab).includes(ffold(r.take.other))) : (() => false);
-  const mine = r.t ? (lab => teamIn(r.t, lab)) : r.kname ? (lab => ffold(lab).includes(ffold(r.kname.split(":")[0]))) : (() => false);
+  const oppT = (r.opp && r.opp.name) ? r.opp : r.sideOpp;
+  const other = oppT ? (lab => teamIn(oppT, lab)) : r.take && r.take.other ? (lab => ffold(lab).includes(ffold(r.take.other))) : (() => false);
+  const mine = (r.t || r.side) ? (lab => teamIn(r.t || r.side, lab)) : r.kname ? (lab => ffold(lab).includes(ffold(r.kname.split(":")[0]))) : (() => false);
   const inCombo = r.inCombo;
   return g.markets.filter(m => m !== r.km && !isNaN(m.p) && kMult(m) && SWAP_OK(m) && (!inCombo || comboOK(m)) && (!/:/.test(m.label.replace(/^(full game|reg time|1st half|2nd half|first half):/i, "")) || (r.kname && /:/.test(r.kname) && ffold(m.label).startsWith(ffold(r.kname.split(":")[0]) + ":"))) && m.p >= .12 && m.p <= .95 && !(other(m.label) && !mine(m.label)))
     .map(m => ({m, p: m.p, mult: kMult(m)}));
