@@ -1,0 +1,31 @@
+name: Live prices
+on:
+  schedule:
+    - cron: "*/5 * * * *"   # every 5 minutes (GitHub sometimes runs it a little later)
+  workflow_dispatch: {}
+  push:
+    paths: ["scripts/fetch_live.py", ".github/workflows/live.yml"]
+permissions:
+  contents: write
+concurrency:
+  group: live
+  cancel-in-progress: true
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/fetch_live.py
+      - name: Publish live.json to the live branch (does not rebuild the website)
+        run: |
+          git config user.name "primo-bot"
+          git config user.email "primo-bot@users.noreply.github.com"
+          cp live.json /tmp/live.json
+          git checkout --orphan livetmp
+          git rm -rf --cached . > /dev/null
+          rm -rf ./*
+          cp /tmp/live.json live.json
+          git add live.json
+          git commit -qm "Live prices"
+          git push -f origin livetmp:live
