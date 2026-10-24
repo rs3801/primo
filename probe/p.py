@@ -1,19 +1,21 @@
 import urllib.request, json
+def get(u):
+    try: return json.loads(urllib.request.urlopen(urllib.request.Request(u,headers={"User-Agent":"Mozilla/5.0"}),timeout=30).read())
+    except Exception as e: return {"ERR":str(e)}
 out=[]
-def head(u):
-    try:
-        r=urllib.request.urlopen(urllib.request.Request(u,headers={"User-Agent":"Mozilla/5.0","Origin":"https://rs3801.github.io","Accept":"application/json"}),timeout=30)
-        h=dict(r.headers); b=r.read()[:600].decode("utf-8","replace")
-        return r.status, {k:v for k,v in h.items() if "access-control" in k.lower()}, b
-    except Exception as e: return 0, str(e)[:200], ""
-for u in ["https://api.elections.kalshi.com/trade-api/v2/markets?limit=2&status=open",
-          "https://api.elections.kalshi.com/trade-api/v2/milestones?limit=1&category=Sports",
-          "https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?groups=80",
-          "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=401909834"]:
-    s,h,b=head(u); out.append("=== %s\n%s %s\n%s"%(u,s,h,b[:300]))
-# live data endpoints on Kalshi
-d=json.loads(urllib.request.urlopen(urllib.request.Request("https://api.elections.kalshi.com/trade-api/v2/milestones?limit=5&category=Sports&minimum_start_date=2026-10-24T00:00:00Z",headers={"User-Agent":"Mozilla/5.0"}),timeout=30).read())
-for m in d.get("milestones",[])[:2]:
-    for path in ["/live_data/%s/milestone/%s"%(m.get("type"),m.get("id")), "/live_data/milestone/%s"%m.get("id")]:
-        s,h,b=head("https://api.elections.kalshi.com/trade-api/v2"+path); out.append("LIVE %s -> %s %s %s"%(path,s,h,b[:500]))
-open("probe.txt","w").write("\n".join(map(str,out)))
+for path,q in [("football/college-football","?groups=80"),("basketball/nba",""),("hockey/nhl",""),("soccer/eng.1",""),("football/nfl","")]:
+    sb=get("https://site.api.espn.com/apis/site/v2/sports/"+path+"/scoreboard"+q)
+    live=[e for e in sb.get("events",[]) if ((e.get("status") or {}).get("type") or {}).get("state")=="in"]
+    out.append("##### %s live %d"%(path,len(live)))
+    if not live: continue
+    e=live[0]; c=e["competitions"][0]
+    out.append("scoreboard situation: "+json.dumps(c.get("situation"))[:700])
+    out.append("scoreboard competitor stats: "+json.dumps([ (x.get("team",{}).get("abbreviation"), [ (s.get("name"),s.get("displayValue")) for s in (x.get("statistics") or [])][:12]) for x in c.get("competitors",[])])[:700])
+    d=get("https://site.api.espn.com/apis/site/v2/sports/"+path+"/summary?event="+e["id"])
+    out.append("summary keys "+str(list(d.keys())))
+    wp=d.get("winprobability") or []; out.append("wp len %d last %s first %s"%(len(wp), json.dumps(wp[-1:])[:200], json.dumps(wp[:1])[:200]))
+    out.append("situation: "+json.dumps(d.get("situation"))[:600])
+    bx=(d.get("boxscore") or {}).get("teams") or []
+    out.append("box: "+json.dumps([ (t.get("team",{}).get("abbreviation"), [(s.get("name"),s.get("displayValue")) for s in t.get("statistics",[])][:25]) for t in bx])[:1500])
+    out.append("header status: "+json.dumps(((d.get("header") or {}).get("competitions") or [{}])[0].get("status"))[:300])
+open("probe.txt","w").write("\n".join(out))
