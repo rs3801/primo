@@ -967,6 +967,12 @@ function likedBy(m){
 /* ---------- free hourly facts (official NFL injury report, kickoff times, MLB probable pitchers) ---------- */
 const FX = window.PRIMO_FACTS || {games:[], injuries:{}};
 const ffold = x => (x||"").normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase();
+// injuries the research collected (college availability reports, news) join ESPN's official lists
+for (const [team, rows] of Object.entries((R && R.injuries) || {})){
+  const have = (FX.injuries = FX.injuries || {})[team] || [];
+  const names = new Set(have.map(x => ffold(x.player)));
+  FX.injuries[team] = have.concat(rows.filter(x => !names.has(ffold(x.player))).map(x => Object.assign({fromResearch: true}, x)));
+}
 const INJ = new Map();   // folded player name -> {team, ...}
 for (const [team, rows] of Object.entries(FX.injuries || {})) for (const r of rows) INJ.set(ffold(r.player), Object.assign({team}, r));
 for (const f of FX.games || []) if (f.sport === "Hockey") f.notes = (f.notes || []).map(n => n.replace("starting pitcher", "starting goalie"));
@@ -1093,6 +1099,7 @@ function upsetFor(g){
       const outs = x => ((FX.injuries || {})[x.name] || []).filter(q => /out|doubtful/i.test(q.status) && !/coach/i.test(q.injury || ""));
       const qb = outs(F).find(q => q.pos === "QB");
       if (g.sport === "Football" && qb) R.push(`${favN} are missing quarterback ${qb.player}`);
+      else if (outs(F).find(q => q.note && q.fromResearch)) { const q = outs(F).find(q => q.note && q.fromResearch); R.push(`${favN} are without ${q.player}: ${q.note}`); }
       else if (outs(F).length - outs(D).length >= 3) R.push(`${favN} have ${outs(F).length} players out (${outs(F).slice(0, 2).map(q => q.player).join(", ")}…), ${dogN} have ${outs(D).length}`);
       const rs = g.research; if (rs && rs.lean && teamIn(D, rs.lean)) R.push(`Primo's research picks ${dogN}`);
       const bookD = od.home != null ? (D.home ? od.home : od.away)/100 : null;
@@ -1211,6 +1218,23 @@ function buildTotalTake(m){
 }
 
 // The game in numbers, shown with every opinion: each side's record, home/road, last 5, head-to-head, key injuries
+
+// Injuries for both teams: who is out, doubtful or questionable, and why it matters
+function injuryLines(f, g){
+  const out = [], official = ["NFL", "NBA", "WNBA", "NHL", "MLB"].includes(f.league);
+  let any = false;
+  for (const t of f.teams){
+    const rows = ((FX.injuries || {})[t.name] || []).filter(q => /out|doubtful|questionable/i.test(q.status));
+    if (!rows.length) continue; any = true;
+    const grp = st => rows.filter(q => new RegExp(st, "i").test(q.status));
+    const nm = q => `${q.player}${q.pos ? " (" + q.pos + ")" : ""}`;
+    const parts = [["Out", grp("out")], ["Doubtful", grp("doubtful")], ["Questionable", grp("questionable")]].filter(([, a]) => a.length).map(([k, a]) => `${k}: ${a.slice(0, 6).map(nm).join(", ")}${a.length > 6 ? ` +${a.length - 6} more` : ""}`);
+    out.push(`🩹 ${t.short || t.name} injuries — ${parts.join(" · ")}`);
+    for (const q of rows.filter(q => q.note && /out|doubtful/i.test(q.status) && (q.fromResearch || /QB|RB|WR|TE|DE|LB|C|G|F|SP|P/.test(q.pos || ""))).slice(0, 2)) out.push(`   ${q.player} (${q.status.toLowerCase()}): ${q.note}`);
+  }
+  if (!any) out.push(official ? "🩹 Injuries: nobody listed out, doubtful or questionable on the official report." : `🩹 Injuries: none loaded yet for this game. ${/College/i.test(f.league) ? "Colleges don't send injury lists to ESPN; Primo's morning research adds the official conference availability report for big games." : "This league has no official injury feed."}`);
+  return out;
+}
 function contextLines(g){
   const out = [], f = g.facts;
   if (f){
@@ -1222,11 +1246,10 @@ function contextLines(g){
       if (z(rc.all)) bits.push(`${rc.all}${g.sport === "Soccer" ? " (W-D-L)" : ""}`);
       if (t.home && z(rc.home)) bits.push(`${rc.home} at home`); else if (!t.home && z(rc.road)) bits.push(`${rc.road} on the road`);
       if (fm.length) bits.push(`last ${fm.length}: ${fm.map(x => x[0]).join(" ")}`);
-      const outs = ((FX.injuries || {})[t.name] || []).filter(q => /out|doubtful/i.test(q.status));
-      if (outs.length) bits.push(`${outs.length} out (${outs.slice(0, 2).map(q => q.player + (q.pos ? ", " + q.pos : "")).join("; ")}${outs.length > 2 ? "…" : ""})`);
       if (bits.length) out.push(`${t.short || t.name}: ${bits.join(" · ")}`);
     }
     if (f.h2h && (f.h2h.games || []).length) out.push(`Head-to-head: ${f.h2h.summary || f.h2h.title}`);
+    out.push(...injuryLines(f, g));
     if (f.odds && f.odds.line) out.push(`Sportsbooks: ${f.odds.line}${f.odds.total != null ? `, total ${f.odds.total}` : ""}`);
   } else {
     const pr = tennisPair(g), P = (TEN.players || {});
@@ -1872,8 +1895,12 @@ function buildTake(r){
   const outs = x => ((FX.injuries || {})[x.name] || []).filter(q => /out|doubtful/i.test(q.status));
   const qb = x => outs(x).find(q => q.pos === "QB" && !/coach/i.test(q.injury || ""));
   if (f.sport === "Football"){ const a = qb(t), b = qb(o); if (a) cons.push(`${T} are missing quarterback ${a.player} (${(a.injury || "").toLowerCase()}).`); if (b) pros.push(`${O} are missing quarterback ${b.player}.`); }
+  const key = x => outs(x).filter(q => q.note && (q.fromResearch || /QB|RB|WR|DE|LB|SP/.test(q.pos || ""))).slice(0, 2);
+  for (const q of key(t)) cons.push(`${T} are without ${q.player}${q.pos ? " (" + q.pos + ")" : ""}: ${q.note}`);
+  for (const q of key(o)) pros.push(`${O} are without ${q.player}${q.pos ? " (" + q.pos + ")" : ""}: ${q.note}`);
   const na = outs(t).length, nb = outs(o).length;
-  if (na - nb >= 3) cons.push(`${T} have more players out (${na}) than ${O} (${nb}).`); else if (nb - na >= 3) pros.push(`${O} have more players out (${nb}) than ${T} (${na}).`);
+  if (key(t).length || key(o).length) {}   // named key injuries say more than a head count
+  else if (na - nb >= 3) cons.push(`${T} have more players out (${na}) than ${O} (${nb}).`); else if (nb - na >= 3) pros.push(`${O} have more players out (${nb}) than ${T} (${na}).`);
   // 7. Primo's research and the money
   const rs = g && g.research;
   if (rs && rs.lean){ const L = f.teams.find(x => teamIn(x, rs.lean)); if (L === t) pros.push(`Primo's research picks ${T}.`); else if (L === o) cons.push(`Primo's research picks ${O}.`); }
@@ -1913,7 +1940,7 @@ function verdictHTML(rs, T, all){
   const seen = new Map(), clash = [];
   for (const r of rs){ if (!r.f || !r.t || r.leg.kind !== "ml") continue; const k = r.f.start + r.f.teams.map(x => x.name).join(); if (seen.has(k) && seen.get(k).t !== r.t) clash.push([seen.get(k), r]); else seen.set(k, r); }
   const clashHTML = clash.map(([a, b]) => `<p class="warn" style="margin:6px 0">⚠️ You have both ${esc(a.t.short || a.t.name)} AND ${esc(b.t.short || b.t.name)} to win the same game. Only one can win, so this combo can't hit. Remove one.</p>`).join("");
-  return `${clashHTML}<p class="whyh">Primo's opinion, leg by leg</p><ul style="margin:4px 0 0;padding-left:18px">${rows}</ul>${mine}${flips.length ? `<p style="margin:6px 0 0">Underdogs Primo would flip to the other team: ${flips.map(r => esc(r.opp ? `${r.opp.short || r.opp.name} over ${r.t.short || r.t.name}` : `${r.take.other} over ${r.kname}`)).join(", ")}.</p>` : ""}<p class="muted" style="margin:6px 0 0">Primo's opinion weighs the odds, season record, last 5 games, home/road, head-to-head, injuries, its research and price moves. Open each leg below for the details.</p>`;
+  return `${clashHTML}<p class="whyh">Primo's opinion, leg by leg</p><ul style="margin:4px 0 0;padding-left:18px">${rows}</ul>${mine}${flips.length ? `<p style="margin:6px 0 0">Underdogs Primo would flip to the other team: ${flips.map(r => esc(r.opp ? `${r.opp.short || r.opp.name} over ${r.t.short || r.t.name}` : `${r.take.other} over ${r.kname}`)).join(", ")}.</p>` : ""}`;
 }
 function checkTicket(text){
   const T = parseTicket(text);

@@ -17,7 +17,7 @@ LEAGUES = [  # (Kalshi sport name, league label, ESPN path, has injury report)
     ("Basketball", "WNBA", "basketball/wnba", True),
     ("Basketball", "College basketball", "basketball/mens-college-basketball", False),
     ("Hockey", "NHL", "hockey/nhl", True),
-    ("Baseball", "MLB", "baseball/mlb", False),
+    ("Baseball", "MLB", "baseball/mlb", True),
 ] + [("Soccer", name, "soccer/" + code, False) for code, name in [
     ("eng.1", "Premier League"), ("esp.1", "La Liga"), ("ita.1", "Serie A"), ("ger.1", "Bundesliga"), ("fra.1", "Ligue 1"),
     ("uefa.champions", "Champions League"), ("uefa.europa", "Europa League"), ("usa.1", "MLS"), ("mex.1", "Liga MX"),
@@ -337,10 +337,12 @@ def main():
                 for e in t.get("injuries", []):
                     stt = e.get("status", "")
                     if stt == "Day-To-Day": stt = "Questionable"
+                    if "IL" in stt or stt in ("Injured Reserve", "Suspension"): stt = "Out"
                     if stt not in ("Out", "Doubtful", "Questionable"): continue
                     a = e.get("athlete", {}); d = e.get("details") or {}
                     rows.append({"player": a.get("displayName", ""), "pos": (a.get("position") or {}).get("abbreviation", ""), "status": stt,
-                                 "injury": (d.get("type") or "").replace("Undisclosed", "undisclosed injury"), "date": (e.get("date") or "")[:10], "sport": sport})
+                                 "injury": (d.get("type") or "").replace("Undisclosed", "undisclosed injury"), "date": (e.get("date") or "")[:10], "sport": sport,
+                                 "note": (e.get("shortComment") or "")[:220]})
                 if rows: inj[t.get("displayName", "")] = rows
     players = rosters(games)
     try: standings(games)
