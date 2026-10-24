@@ -2085,7 +2085,7 @@ function buildTake(r){
 function takeHTMLx(k){
   if (!k) return "";
   const li = (a, ic) => a.map(x => `<li>${ic} ${esc(x)}</li>`).join("");
-  return `<div style="margin:8px 0;padding:10px 12px;border-radius:12px;background:var(--chip, rgba(127,127,127,.08))"><b>Primo's take: ${k.badge}</b><p style="margin:4px 0 6px">${esc(k.say)}</p>${(k.ctx || []).length ? `<p class="muted" style="margin:0 0 6px;font-size:.92em">${k.ctx.map(esc).join("<br>")}</p>` : ""}${(() => { const pr = k.pros.filter(x => !k.say.includes(x.replace(/\.$/, ""))), co = k.cons.filter(x => !k.say.includes(x.replace(/\.$/, ""))); return pr.length || co.length ? `<ul style="margin:0;padding-left:18px">${li(pr, "👍")}${li(co, "👎")}</ul>` : ""; })()}${k.flip ? `<p style="margin:6px 0 0"><b>Flip it?</b> ${esc(k.flip)}</p>` : ""}</div>`;
+  return `<div style="margin:8px 0;padding:10px 12px;border-radius:12px;background:var(--chip, rgba(127,127,127,.08))"><b>Primo's take: ${k.badge}</b><p style="margin:4px 0 6px">${esc(k.say)}</p>${(k.ctx || []).length ? `<p class="muted" style="margin:0 0 6px;font-size:.92em">${k.ctx.map(esc).join("<br>")}</p>` : ""}${(() => { const pr = k.pros.filter(x => !k.say.includes(x.replace(/\.$/, ""))), co = k.cons.filter(x => !k.say.includes(x.replace(/\.$/, ""))); return pr.length || co.length ? `<ul style="margin:0;padding-left:18px">${li(pr, "👍")}${li(co, "👎")}</ul>` : ""; })()}${k.flip ? `<p style="margin:6px 0 0"><b>Flip it?</b> ${esc(k.flip)}${k.flipM ? openBtns(k.flipM) : ""}</p>` : ""}</div>`;
 }
 
 function verdictHTML(rs, T, all){
@@ -2098,13 +2098,14 @@ function verdictHTML(rs, T, all){
   let mine = "";
   if (cut.length && keep.length >= 2){
     const ch = keep.reduce((a, r) => a * (r.chance ?? 1), 1);
-    mine = `<p style="margin:8px 0 0"><b>Primo's version:</b> keep the ${keep.length} ✅/👍 legs and drop the ${cut.length} 🤔/❌ ones (tap their X on Kalshi). Chance all hit goes from ${TK.pct(all)} to <b>${TK.pct(ch)}</b> (about 1 in ${Math.max(1, Math.round(1/ch))}). It pays less; Kalshi shows the new payout as soon as you remove them.</p>`;
+    mine = `<p style="margin:8px 0 0">${useBtn(keep.map(legMarket), "Use Primo's version")}</p><p style="margin:4px 0 0"><b>Primo's version:</b> keep the ${keep.length} ✅/👍 legs and drop the ${cut.length} 🤔/❌ ones (tap their X on Kalshi). Chance all hit goes from ${TK.pct(all)} to <b>${TK.pct(ch)}</b> (about 1 in ${Math.max(1, Math.round(1/ch))}). It pays less; Kalshi shows the new payout as soon as you remove them.</p>`;
   }
   const flips = rs.filter(r => r.take && r.take.flip);
+  const flipVersion = flips.length ? useBtn(rs.map(r => r.take && r.take.flip ? flipMarket(r) : legMarket(r)), `Use my ticket with the ${flips.length} flip${flips.length > 1 ? "s" : ""}`) : "";
   const seen = new Map(), clash = [];
   for (const r of rs){ if (!r.f || !r.t || r.leg.kind !== "ml") continue; const k = r.f.start + r.f.teams.map(x => x.name).join(); if (seen.has(k) && seen.get(k).t !== r.t) clash.push([seen.get(k), r]); else seen.set(k, r); }
   const clashHTML = clash.map(([a, b]) => `<p class="warn" style="margin:6px 0">⚠️ You have both ${esc(a.t.short || a.t.name)} AND ${esc(b.t.short || b.t.name)} to win the same game. Only one can win, so this combo can't hit. Remove one.</p>`).join("");
-  return `${clashHTML}<p class="whyh">Primo's opinion, leg by leg</p><ul style="margin:4px 0 0;padding-left:18px">${rows}</ul>${mine}${flips.length ? `<p style="margin:6px 0 0">Underdogs Primo would flip to the other team: ${flips.map(r => esc(r.opp ? `${r.opp.short || r.opp.name} over ${r.t.short || r.t.name}` : `${r.take.other} over ${r.kname}`)).join(", ")}.</p>` : ""}`;
+  return `${clashHTML}<p class="whyh">Primo's opinion, leg by leg</p><ul style="margin:4px 0 0;padding-left:18px">${rows}</ul>${mine}${flips.length ? `<p style="margin:6px 0 0">Underdogs Primo would flip to the other team: ${flips.map(r => esc(r.opp ? `${r.opp.short || r.opp.name} over ${r.t.short || r.t.name}` : `${r.take.other} over ${r.kname}`)).join(", ")}.${flipVersion}</p>` : ""}`;
 }
 
 /* ---------- 💡 swap ideas: safer, same risk for more money, or a bigger payout ---------- */
@@ -2152,7 +2153,7 @@ function swapIdeas(r){
 function swapHTML(r, stake){
   const s = r.swaps; if (!s) return "";
   const win = mlt => TK.usd(stake * (mlt - 1));
-  const line = (icon, title, o, extra) => `<li>${icon} <b>${title}:</b> ${esc(o.m.pick)}${o.m.g !== r.g ? ` <span class="muted">(${esc(o.m.g.title)}, ${esc(o.m.g.leagueName)}, ${esc(fmtWhen(o.m.g))})</span>` : ""} — <b>${TK.pct(o.p)}</b> chance, $${stake} wins about <b>${win(o.mult)}</b>${extra ? ` · ${esc(extra)}` : ""}</li>`;
+  const line = (icon, title, o, extra) => `<li>${icon} <b>${title}:</b> ${esc(o.m.pick)}${o.m.g !== r.g ? ` <span class="muted">(${esc(o.m.g.title)}, ${esc(o.m.g.leagueName)}, ${esc(fmtWhen(o.m.g))})</span>` : ""} — <b>${TK.pct(o.p)}</b> chance, $${stake} wins about <b>${win(o.mult)}</b>${extra ? ` · ${esc(extra)}` : ""}${openBtns(o.m)}</li>`;
   const L = [];
   if (s.ideas.safer) L.push(line("🛡️", "Safer", s.ideas.safer));
   if (s.ideas.same) L.push(line("💵", "Same risk, more money", s.ideas.same));
@@ -2165,7 +2166,7 @@ function plansHTML(rs, T, stake, mult){
   if (!ok.length || ok.length < rs.length) return "";
   const base = rs.reduce((a, r) => a * legMult(r), 1), k = mult ? mult / base : 1;   // keeps the ticket's own pricing (fees, parlay rules)
   const ch = legs => legs.reduce((a, x) => a * x.p, 1), mu = legs => k * legs.reduce((a, x) => a * x.mult, 1);
-  const mine = rs.map(r => ({r, p: r.chance, mult: legMult(r), pick: null}));
+  const mine = rs.map(r => ({r, p: r.chance, mult: legMult(r), pick: null, m: legMarket(r)}));
   const ticketGames = new Set(rs.map(r => r.g).filter(Boolean));
   // up to 3 swaps, the ones that help most; a replacement game is used only once and never one already on the ticket
   const plan = (pickFn, gain) => {
@@ -2176,7 +2177,7 @@ function plansHTML(rs, T, stake, mult){
     const pick2 = r => { const x = mine.find(y => y.r === r); return chosen.get(x); };
     return planOld(pick2);
   };
-  const planOld = pickFn => { let changed = []; const legs = mine.map(x => { const o = pickFn(x.r); if (o){ changed.push(`${x.r.t ? (x.r.t.short || x.r.t.name) + (x.r.leg.kind === "ml" ? " to win" : "") : x.r.kname || x.r.leg.who || x.r.leg.raw} → ${o.m.pick} (${TK.pct(o.p)})`); return {p: o.p, mult: o.mult}; } return x; }); return changed.length ? {legs, changed} : null; };
+  const planOld = pickFn => { let changed = []; const legs = mine.map(x => { const o = pickFn(x.r); if (o){ changed.push(`${x.r.t ? (x.r.t.short || x.r.t.name) + (x.r.leg.kind === "ml" ? " to win" : "") : x.r.kname || x.r.leg.who || x.r.leg.raw} → ${o.m.pick} (${TK.pct(o.p)})`); return {p: o.p, mult: o.mult, m: o.m}; } return x; }); return changed.length ? {legs, changed} : null; };
   const plans = [
     ["🛡️ Safer version", plan(r => r.swaps && (r.take && r.take.v !== "keep") && (r.swaps.ideas.safer || r.swaps.ideas.replace), (x, o) => o.p - x.p)],
     ["💵 Same risk, more money", plan(r => r.swaps && r.swaps.ideas.same, (x, o) => o.mult / x.mult)],
@@ -2184,9 +2185,33 @@ function plansHTML(rs, T, stake, mult){
   ].filter(([, p]) => p);
   if (!plans.length) return "";
   const yours = {p: ch(mine), mult: mu(mine)};
-  const row = (name, p, m, changes) => `<li><b>${name}:</b> risk <b>$${stake}</b> to win <b>${TK.usd(stake * (m - 1))}</b> · chance <b>${TK.pct(p)}</b> (about 1 in ${Math.max(1, Math.round(1/p))})${changes ? `<br><span class="muted" style="font-size:.92em">Swap: ${changes.map(esc).join("; ")}</span>` : ""}</li>`;
-  return `<p class="whyh">💰 Ways to make more, or risk less</p><ul style="margin:4px 0 0;padding-left:18px">${row("Your ticket", yours.p, yours.mult)}${plans.map(([n, p]) => row(n, ch(p.legs), mu(p.legs), p.changed)).join("")}</ul><p class="muted" style="margin:6px 0 0">If a ticket loses, you lose the $${stake} you risked. The chance is what Kalshi and the sportsbooks expect, not a guarantee.</p>`;
+  const row = (name, p, m, changes, legs) => `<li><b>${name}:</b> risk <b>$${stake}</b> to win <b>${TK.usd(stake * (m - 1))}</b> · chance <b>${TK.pct(p)}</b> (about 1 in ${Math.max(1, Math.round(1/p))})${changes ? `<br><span class="muted" style="font-size:.92em">Swap: ${changes.map(esc).join("; ")}</span>` : ""}${legs ? `<br>${useBtn(legs.map(x => x.m), changes ? "Use this combo" : "Put my ticket in My combo")}` : ""}</li>`;
+  return `<p class="whyh">💰 Ways to make more, or risk less</p><ul style="margin:4px 0 0;padding-left:18px">${row("Your ticket", yours.p, yours.mult, null, mine)}${plans.map(([n, p]) => row(n, ch(p.legs), mu(p.legs), p.changed, p.legs)).join("")}</ul><p class="muted" style="margin:6px 0 0">If a ticket loses, you lose the $${stake} you risked. The chance is what Kalshi and the sportsbooks expect, not a guarantee.</p>`;
 }
+
+/* ---------- one-tap: open a leg on Kalshi, or send a whole suggested combo to My combo ---------- */
+const CK = {};   // suggested combos from Check my bet: id -> market keys
+let ckN = 0;
+function legMarket(r){   // the Kalshi bet behind a checked leg
+  if (r.km && r.km.key) return r.km;
+  if (r.g && r.t && r.leg && r.leg.kind === "ml") return r.g.markets.find(m => m.type === "winner" && teamIn(r.t, m.label)) || null;
+  return null;
+}
+function flipMarket(r){ return r.g && r.opp ? r.g.markets.find(m => m.type === "winner" && r.opp.name && teamIn(r.opp, m.label)) : r.g && r.take && r.take.other ? r.g.markets.find(m => m.type === "winner" && m.label === r.take.other) : null; }
+function openBtns(m){ return m ? ` <a href="${kalshiLink(m)}" target="_blank" rel="noopener">Open ↗</a> <button class="mini" type="button" data-add="${esc(m.key)}">+ Add</button>` : ""; }
+function useBtn(markets, label){
+  const keys = markets.filter(Boolean).map(m => m.key).filter(k => byKey.has(k));
+  if (!keys.length) return "";
+  const id = "ck" + (++ckN); CK[id] = keys;
+  const missing = markets.length - keys.length;
+  return ` <button class="btn sm" type="button" data-usekeys="${id}" style="margin:6px 0 2px">✅ ${esc(label || "Use this combo")}</button>${missing ? ` <span class="muted" style="font-size:.9em">(${missing} leg${missing > 1 ? "s" : ""} not on Kalshi: add by hand)</span>` : ""}`;
+}
+document.addEventListener("click", e => {
+  const u = e.target.closest("[data-usekeys]"); if (!u) return;
+  slip = CK[u.dataset.usekeys].slice(); saveSlip();
+  state.tab = "slip"; render(); window.scrollTo({top: 0});
+  toast("Combo moved to My combo: tap Open this game on each leg");
+});
 function checkTicket(text){
   const T = parseTicket(text);
   if (!T.legs.length) return `<div class="empty">Primo couldn't find any bets in that. Put one bet per line with its odds, like <b>49ers -7 -110</b> or <b>Rays ML -149</b>.</div>`;
@@ -2201,12 +2226,14 @@ function checkTicket(text){
   const fairMult = 1/all;
   const stakeN = T.risk || state.stake || 10;
   const tg = new Set(rs.map(r => r.g).filter(Boolean));
+  for (const r of rs){ if (r.take && r.take.flip) r.take.flipM = flipMarket(r); }
   for (const r of rs){ r.ticketGames = tg; r.inCombo = rs.length > 1 && !!r.leg.kalshi; try { r.swaps = swapIdeas(r); } catch (e) { r.swaps = null; } }
   const legHTML = rs.map((r, i) => `<article class="game" style="--c:var(--s-other);padding:12px 14px;margin-bottom:10px">
       <div class="gtitle">${i + 1}. ${esc(r.leg.raw)}</div>
       ${r.title ? `<div class="gsub"><b>${esc(r.title)}</b>${(r.when || (r.f && r.f.start)) ? ` · ${esc(new Date(r.when || r.f.start).toLocaleString([], {weekday:"short", hour:"numeric", minute:"2-digit"}))}` : ""}</div>` : ""}
       ${r.desc ? `<p style="margin:6px 0">${esc(r.desc)}</p>` : ""}
       ${r.chance != null ? `<p style="margin:6px 0;font-size:17px"><b>Chance it hits: ${TK.pct(r.chance)}</b> <span class="lvl">${r.tag}</span></p>` : ""}
+      ${(m => m ? `<p style="margin:6px 0"><a href="${kalshiLink(m)}" target="_blank" rel="noopener">Open on Kalshi ↗</a> <button class="mini" type="button" data-add="${esc(m.key)}">+ Add to My combo</button></p>` : "")(legMarket(r))}
       ${takeHTMLx(r.take)}
       ${swapHTML(r, stakeN)}
       ${r.price ? `<p style="margin:6px 0">${r.price}</p>` : ""}
