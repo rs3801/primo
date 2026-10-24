@@ -1,7 +1,7 @@
 name: Live prices
 on:
   schedule:
-    - cron: "*/5 * * * *"   # every 5 minutes (GitHub sometimes runs it a little later)
+    - cron: "*/5 * * * *"   # GitHub actually starts this about every 25-30 minutes; each run keeps going ~27 minutes
   workflow_dispatch: {}
   push:
     paths: ["scripts/fetch_live.py", ".github/workflows/live.yml"]
@@ -9,23 +9,31 @@ permissions:
   contents: write
 concurrency:
   group: live
-  cancel-in-progress: true
+  cancel-in-progress: false
 jobs:
   live:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 32
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
-      - run: python3 scripts/fetch_live.py
-      - name: Publish live.json to the live branch (does not rebuild the website)
+      - name: Refresh live prices every 3 minutes while games are on (published to the live branch, no website rebuild)
         run: |
-          git config user.name "primo-bot"
-          git config user.email "primo-bot@users.noreply.github.com"
-          cp live.json /tmp/live.json
-          git checkout --orphan livetmp
-          git rm -rf --cached . > /dev/null
-          rm -rf ./*
-          cp /tmp/live.json live.json
-          git add live.json
-          git commit -qm "Live prices"
-          git push -f origin livetmp:live
+          publish() {
+            rm -rf /tmp/lv && mkdir /tmp/lv && cp live.json /tmp/lv/ && cd /tmp/lv
+            git init -q && git checkout -q -b live && git add live.json
+            git -c user.name=primo-bot -c user.email=primo-bot@users.noreply.github.com commit -qm "Live prices"
+            git push -qf "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" live
+            cd "$GITHUB_WORKSPACE"
+          }
+          end=$(( $(date +%s) + 27*60 ))
+          while true; do
+            git pull -q origin main || true          # newest hourly prices (which games exist)
+            python3 scripts/fetch_live.py | tee /tmp/out.txt
+            publish
+            n=$(grep -o '^[0-9]*' /tmp/out.txt | head -1)
+            [ "${n:-0}" = "0" ] && break             # nothing being played: stop until the next run
+            [ $(( $(date +%s) + 200 )) -gt $end ] && break
+            sleep 170
+          done
