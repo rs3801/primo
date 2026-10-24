@@ -387,6 +387,7 @@ function periodOf(text){
 }
 // what has to happen for this bet to pay, in one plain sentence
 function explain(m){
+  if (m.noOf) return `${niceName(m.g.sport, m.opp)} has to win, or lose by ${Math.floor(m.line)} ${m.unit} or fewer. On Kalshi, buy "No" on "${m.noOf.label}".`;
   const sp = m.g.sport, L = m.label.replace(/\?$/, "").replace(/^Reg Time:\s*/i, ""), T = m.stitle, both = T + " " + L;
   const name = s => niceName(sp, s.trim());
   const per = periodOf(both);
@@ -607,6 +608,22 @@ function leagueOf(g){
   return LEAGUE_NAMES[root] || (SER_TITLE[root] || g.league || "").replace(/\s+(Game|Match|Tennis Match|game winner)\s*$/i, "").trim();
 }
 for (const g of games) g.leagueName = leagueOf(g);
+// Kalshi lists spreads only from the favorite's side ("Florida St wins by over 9.5"). The underdog side ("Miami +9.5") is
+// buying No on that market: add it so Primo can pick and show underdog spreads too.
+for (const g of games){
+  const wins = g.markets.filter(m => m.type === "winner" && !/tie|draw|:/i.test(m.label)).map(m => m.label);
+  if (wins.length !== 2) continue;
+  for (const m of g.markets.slice()){
+    const mm = /^(.+?) wins by over ([\d.]+) (points|runs|goals)$/i.exec(m.label);
+    if (!mm || /(1H|2H|1Q|2Q|3Q|4Q|F3|F5|1P|2P|3P)/.test(m.series) || isNaN(m.p) || isNaN(m.ask)) continue;
+    const fl = x => x.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    const opp = wins.find(w => fl(w) !== fl(mm[1]) && !fl(mm[1]).includes(fl(w))); if (!opp) continue;
+    const bid = 2*m.p - m.ask; if (!(bid > .02)) continue;
+    const N = +mm[2], x = Object.assign({}, m, {label: `${opp} +${N}`, type: "spread", p: 1 - m.p, ask: Math.min(.99, 1 - bid), noOf: m, opp, line: N, unit: mm[3]});
+    x.key = m.key + "|NO"; x.move = -(m.move || 0); x.pick = `${niceName(g.sport, opp)} +${N}`;
+    g.markets.push(x); byKey.set(x.key, x);
+  }
+}
 games.sort((a,b)=> a.date - b.date || (a.start && b.start ? a.start - b.start : 0) || b.vol - a.vol);
 const started = g => !!g.live || !!g.done || (!!g.start && Date.now() >= g.start.getTime());
 // a game is over when Kalshi's live feed says so, or when it started longer ago than that sport's games ever last
@@ -812,7 +829,13 @@ function pickLegs(pool, n){
     const q = queues[i++ % queues.length];
     const same = x => usedGames.has(x.g) || usedNames.has(x.g.title + "|" + x.g.date.getTime());
     while (q.length && same(q[0])) q.shift();
-    const m = q.shift(); if (!m) continue;
+    let m = q.shift(); if (!m) continue;
+    // mix it up: no more than about half the legs can be totals/halves when a winner or spread from the same game fits
+    if (!isSide(m)){
+      const nonSide = legs.filter(x => !isSide(x)).length;
+      const alt = q.find(x => x.g === m.g && isSide(x) && (nonSide >= Math.ceil(n/2) || Math.abs(x.p - m.p) <= .08));
+      if (alt){ q.splice(q.indexOf(alt), 1); m = alt; }
+    }
     usedGames.add(m.g); usedNames.add(m.g.title + "|" + m.g.date.getTime()); legs.push(m);
   }
   // pass 2: not enough games, so add more legs from the same games (a same-game combo),
