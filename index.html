@@ -539,7 +539,7 @@ for (const [sport, code, , rows, ends] of D.G){
   if (R.starts && R.starts[code]){ const s = new Date(R.starts[code]); if (!isNaN(s)) g.start = s; }
   // Kalshi's live-score feed: the real start time, and whether the match is already under way (best source, beats everything above)
   const ks = (D.starts || {})[code];
-  if (ks){ const s = new Date(ks[0] + (ks[0].length <= 16 ? ":00Z" : "")); if (!isNaN(s)){ g.start = s; g.realStart = true; } if (ks[1] === 1 || ks[1] === true) g.live = true;
+  if (ks){ const s = new Date(ks[0] + (ks[0].length <= 16 ? ":00Z" : "")); if (!isNaN(s)){ g.start = s; g.realStart = true; } if (ks[1] === 1 || ks[1] === true) g.live = true; if (ks[1] === 2) g.done = true;
     // Kalshi says it hasn't started yet even though the planned time passed (tennis matches wait for the one before): still open to bet
     if (ks[1] === -1 && g.start && g.start.getTime() < Date.now() && Date.now() - g.start.getTime() < 6*3600000 && D.asofTs !== 0) g.start = new Date(Math.max(Date.now(), new Date(g.start).getTime()) + 15*60000), g.runningLate = true; }
 }
@@ -608,7 +608,10 @@ function leagueOf(g){
 }
 for (const g of games) g.leagueName = leagueOf(g);
 games.sort((a,b)=> a.date - b.date || (a.start && b.start ? a.start - b.start : 0) || b.vol - a.vol);
-const started = g => !!g.live || (!!g.start && Date.now() >= g.start.getTime());
+const started = g => !!g.live || !!g.done || (!!g.start && Date.now() >= g.start.getTime());
+// a game is over when Kalshi's live feed says so, or when it started longer ago than that sport's games ever last
+const MAX_HOURS = {Soccer: 2.75, Basketball: 3.25, Football: 4.5, Baseball: 5, Hockey: 3.5, Tennis: 6, Cricket: 9, Esports: 5, "Table Tennis": 1.5, Darts: 3, MMA: 6, Boxing: 6, Volleyball: 3, Rugby: 2.5};
+const over = g => !!g.done || (!!g.start && !g.live && Date.now() - g.start.getTime() > (MAX_HOURS[g.sport] || 5) * 3600000);
 const fmtTime = d => d.toLocaleTimeString([], {hour:"numeric", minute:"2-digit"});
 
 /* ---------- filters ---------- */
@@ -627,7 +630,7 @@ function whenMatch(g){
 }
 const typeOK = m => !state.types.size || state.types.has(m.type);
 function gameOK(g){
-  return whenMatch(g) &&
+  return !over(g) && whenMatch(g) &&
     (!state.sports.size || state.sports.has(g.sport)) &&
     leagueOK(g) &&
     (state.gender === "all" || (state.gender === "women") === g.women) &&
@@ -645,7 +648,7 @@ function buildFilters(){
   const W = [["today","Today"],["tomorrow","Tomorrow"],["weekend","This weekend"],["week","Next 7 days"],["next","Next week"],["all","All upcoming"]];
   $("f-when").innerHTML = W.map(([v,l]) => chip("when", v, l, state.when === v)).join("");
   const counts = {};
-  for (const g of games) if (whenMatch(g)) counts[g.sport] = (counts[g.sport]||0) + 1;
+  for (const g of games) if (!over(g) && whenMatch(g)) counts[g.sport] = (counts[g.sport]||0) + 1;
   const sports = Object.keys(counts).sort((a,b)=>counts[b]-counts[a]);
   $("f-sport").innerHTML = chip("sport","all","All sports",!state.sports.size) +
     sports.map(s => chip("sport", s, s, state.sports.has(s), counts[s], SPORT_COLOR[s]||"--s-other")).join("");
@@ -1146,7 +1149,7 @@ function gameHTML(g){
   for (const m of g.markets) if (typeOK(m)) (byType[m.type] ||= []).push(m);
   const shown = TYPES.filter(([v]) => byType[v]);
   const secs = shown.map(([v,l],i) => secHTML(v, l, byType[v], i === 0)).join("");
-  return `<article class="game" style="--c:var(${color})"><div class="ghead"><div class="meta"><div class="gtitle">${esc(g.title)}</div><div class="gsub">${g.start?`<span class="when">${esc(fmtTime(g.start))}</span>`:""}<span><b>${esc(g.leagueName)}</b></span><span>${g.markets.length} markets</span></div>${started(g)?`<div class="startednote">Already started. These prices are from before it began, so check Kalshi for live odds.</div>`:""}${upsetHTML(g, "game")}</div><span class="pill">${esc(g.sport)}</span>${g.women?'<span class="pill w">Women</span>':""}</div>${whyHTML(g)}${secs}</article>`;
+  return `<article class="game" style="--c:var(${color})"><div class="ghead"><div class="meta"><div class="gtitle">${esc(g.title)}</div><div class="gsub">${g.start?`<span class="when">${esc(fmtTime(g.start))}</span>`:""}<span><b>${esc(g.leagueName)}</b></span><span>${g.markets.length} markets</span></div>${started(g)?`<div class="startednote">🔴 Being played now. These prices are from before it began; open the 🔴 Live tab for live prices and Primo's live call.</div>`:""}${upsetHTML(g, "game")}</div><span class="pill">${esc(g.sport)}</span>${g.women?'<span class="pill w">Women</span>':""}</div>${whyHTML(g)}${secs}</article>`;
 }
 
 // "The game" box: who the market and Primo's research think wins, and why this pick instead of just picking the winner
@@ -1478,7 +1481,7 @@ function liveGames(){
     const code = g.codes.find(c => L && L.games && L.games[c]);
     const isLive = code || (g.facts && g.facts.espn && g.start && Date.now() > g.start && Date.now() - g.start < 4*3600000);
     if (!isLive) continue;
-    const es = LV.espn[g.code]; if (es && es.done) continue;
+    const es = LV.espn[g.code]; if ((es && es.done) || g.done) continue;
     out.push({g, rows: code ? L.games[code] : null});
   }
   return out;

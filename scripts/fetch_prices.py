@@ -110,7 +110,7 @@ def real_starts(codes):
             st = ms.get("start_date") or ""
             status = str((ms.get("details") or {}).get("status") or "").lower()
             # 1 = under way or over, -1 = confirmed not started yet (tennis often runs late), 0 = unknown
-            begun = -1 if status in ("sch", "scheduled", "not_started", "created", "pre", "upcoming", "delayed", "postponed") else 0 if not status else 1
+            begun = -1 if status in ("sch", "scheduled", "not_started", "created", "pre", "upcoming", "delayed", "postponed") else 0 if not status else 2 if status in ("completed", "closed", "final", "ended", "finished", "complete", "cancelled", "canceled", "abandoned") else 1   # 2 = game over
             for ev in (ms.get("related_event_tickers") or []) + (ms.get("primary_event_tickers") or []):
                 parts = ev.split("-")
                 if len(parts) > 1 and parts[1] in codes and st:
