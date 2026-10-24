@@ -1,16 +1,19 @@
-=== https://api.elections.kalshi.com/trade-api/v2/markets?limit=2&status=open
-0 HTTP Error 403: Forbidden
-
-=== https://api.elections.kalshi.com/trade-api/v2/milestones?limit=1&category=Sports
-0 HTTP Error 403: Forbidden
-
-=== https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?groups=80
-200 {'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET,PUT,POST,DELETE,OPTIONS,HEAD', 'Access-Control-Expose-Headers': 'content-length,location'}
-{"leagues":[{"id":"23","uid":"s:20~l:23","name":"NCAA - Football","abbreviation":"NCAAF","midsizeName":"NCAA Football","slug":"college-football","season":{"year":2026,"startDate":"2026-02-01T08:00Z","endDate":"2027-01-28T07:59Z","displayName":"2026","type":{"id":"2","type":2,"name":"Regular Season",
-=== https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=401909834
-200 {'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET,PUT,POST,DELETE,OPTIONS,HEAD', 'Access-Control-Expose-Headers': 'content-length,location'}
-{"boxscore":{"teams":[{"team":{"id":"1","uid":"s:40~l:46~t:1","slug":"atlanta-hawks","location":"Atlanta","name":"Hawks","abbreviation":"ATL","displayName":"Atlanta Hawks","shortDisplayName":"Hawks","color":"c8102e","alternateColor":"fdb927","logo":"https://a.espncdn.com/i/teamlogos/nba/500/atl.png"
-LIVE /live_data/volleyball_match/milestone/253dffe6-b2ed-53bf-bf7f-da51c88cc347 -> 0 HTTP Error 403: Forbidden 
-LIVE /live_data/milestone/253dffe6-b2ed-53bf-bf7f-da51c88cc347 -> 0 HTTP Error 403: Forbidden 
-LIVE /live_data/table_tennis_match/milestone/2bd4a31c-5242-5155-b053-40d7c2bbb111 -> 0 HTTP Error 403: Forbidden 
-LIVE /live_data/milestone/2bd4a31c-5242-5155-b053-40d7c2bbb111 -> 0 HTTP Error 403: Forbidden 
+##### football/college-football live 15
+scoreboard situation: {"lastPlay": {"id": "401858495393", "type": {"id": "2", "text": "End Period", "abbreviation": "EP"}, "text": "End of 2nd quarter.", "scoreValue": 0, "team": {"id": "2483"}, "probability": {"tiePercentage": 0.0, "homeWinPercentage": 0.165, "awayWinPercentage": 0.835, "secondsLeft": 1800}, "statYardage": 0, "drive": {"description": "4 plays, 30 yards, 0:37", "start": {"yardLine": 70, "text": "ORE 30"}, "end": {"yardLine": 40, "text": "ILL 40"}, "timeElapsed": {"displayValue": "0:37"}, "result": "END OF HALF"}, "start": {"yardLine": 53, "team": {"id": "2483"}}, "end": {"yardLine": 40, "team": {"id": "2483"}}}, "down": 1, "yardLine": 40, "distance": 10, "downDistanceText": "1st & 10 at ILL 40", 
+scoreboard competitor stats: [["ILL", []], ["ORE", []]]
+summary keys ['boxscore', 'format', 'gameInfo', 'drives', 'leaders', 'broadcasts', 'pickcenter', 'odds', 'againstTheSpread', 'news', 'scoringPlays', 'videos', 'winprobability', 'header', 'wallclockAvailable', 'meta', 'standings']
+wp len 92 last [{"homeWinPercentage": 0.165, "tiePercentage": 0.0, "playId": "401858495393"}] first [{"homeWinPercentage": 0.2208, "tiePercentage": 0.0, "playId": "4018584957"}]
+situation: null
+box: [["ORE", [["firstDowns", "10"], ["thirdDownEff", "4-10"], ["fourthDownEff", "0-0"], ["totalYards", "230"], ["netPassingYards", "96"], ["completionAttempts", "13/20"], ["yardsPerPass", "4.8"], ["rushingYards", "134"], ["rushingAttempts", "21"], ["yardsPerRushAttempt", "6.4"], ["totalPenaltiesYards", "2-10"], ["turnovers", "1"], ["fumblesLost", "1"], ["interceptions", "0"], ["possessionTime", "17:51"]]], ["ILL", [["firstDowns", "5"], ["thirdDownEff", "2-7"], ["fourthDownEff", "0-0"], ["totalYards", "127"], ["netPassingYards", "34"], ["completionAttempts", "6/10"], ["yardsPerPass", "3.4"], ["rushingYards", "93"], ["rushingAttempts", "15"], ["yardsPerRushAttempt", "6.2"], ["totalPenaltiesYards", "3-20"], ["turnovers", "1"], ["fumblesLost", "1"], ["interceptions", "0"], ["possessionTime", "12:09"]]]]
+header status: {"displayClock": "0:00", "period": 2, "type": {"id": "23", "name": "STATUS_HALFTIME", "state": "in", "completed": false, "description": "Halftime", "detail": "Halftime", "shortDetail": "Halftime", "statusPrimary": "Halftime"}, "displayPeriod": "2nd"}
+##### basketball/nba live 0
+##### hockey/nhl live 1
+scoreboard situation: {"lastPlay": {"id": "401892567000006140", "type": {"id": "507", "text": "Missed", "abbreviation": "shot-missed"}, "text": "Evan Rodrigues Wrist Shot High and Wide Left", "scoreValue": 0, "team": {"id": "11"}, "athletesInvolved": [{"id": "3648008", "fullName": "Evan Rodrigues", "displayName": "Evan Rodrigues", "shortName": "E. Rodrigues", "links": [{"rel": ["playercard", "desktop", "athlete"], "href": "https://www.espn.com/nhl/player/_/id/3648008"}], "headshot": "https://a.espncdn.com/i/headshots/nhl/players/full/3648008.png", "jersey": "17", "position": "C", "team": {"id": "11"}}]}}
+scoreboard competitor stats: [["NJ", [["saves", "5"], ["savePct", "1.000"], ["goals", "0"], ["ytdGoals", "62"], ["assists", "0"], ["points", "0"]]], ["LA", [["saves", "11"], ["savePct", "1.000"], ["goals", "0"], ["ytdGoals", "40"], ["assists", "0"], ["points", "0"]]]]
+summary keys ['boxscore', 'format', 'gameInfo', 'leaders', 'seasonseries', 'injuries', 'broadcasts', 'pickcenter', 'odds', 'againstTheSpread', 'news', 'videos', 'plays', 'onIce', 'header', 'wallclockAvailable', 'meta', 'standings']
+wp len 0 last [] first []
+situation: null
+box: [["LA", [["blockedShots", "5"], ["hits", "14"], ["takeaways", "1"], ["shotsTotal", "5"], ["powerPlayGoals", "0"], ["powerPlayOpportunities", "1"], ["powerPlayPct", "0.0"], ["shortHandedGoals", "0"], ["shootoutGoals", "0"], ["faceoffsWon", "7"], ["faceoffPercent", "58.3"], ["giveaways", "7"], ["penalties", "1"], ["penaltyMinutes", "2"]]], ["NJ", [["blockedShots", "4"], ["hits", "12"], ["takeaways", "2"], ["shotsTotal", "11"], ["powerPlayGoals", "0"], ["powerPlayOpportunities", "1"], ["powerPlayPct", "0.0"], ["shortHandedGoals", "0"], ["shootoutGoals", "0"], ["faceoffsWon", "5"], ["faceoffPercent", "41.7"], ["giveaways", "10"], ["penalties", "1"], ["penaltyMinutes", "2"]]]]
+header status: {"displayClock": "9:59", "period": 2, "type": {"id": "2", "name": "STATUS_IN_PROGRESS", "state": "in", "completed": false, "description": "In Progress", "detail": "9:59 - 2nd Period", "shortDetail": "9:59 - 2nd", "statusPrimary": "9:59", "statusSecondary": "2nd"}, "displayPeriod": "2nd"}
+##### soccer/eng.1 live 0
+##### football/nfl live 0
