@@ -254,6 +254,7 @@ header.top .hint{color:#FFB52E;border-color:rgba(255,181,46,.6);background:rgba(
     <button class="tab" role="tab" type="button" data-tab="build" aria-selected="true">Build</button>
     <button class="tab" role="tab" type="button" data-tab="board" aria-selected="false">All games</button>
     <button class="tab" role="tab" type="button" data-tab="slip" aria-selected="false">My combo <span class="badge" id="slipcount">0</span></button>
+    <button class="tab" role="tab" type="button" data-tab="live" aria-selected="false">🔴 Live</button>
     <button class="tab" role="tab" type="button" data-tab="ask" aria-selected="false">📸 Check my bet</button>
   </nav>
 
@@ -294,6 +295,7 @@ header.top .hint{color:#FFB52E;border-color:rgba(255,181,46,.6);background:rgba(
       </section>
 
       <section id="view-slip" hidden><div id="slipview"></div></section>
+      <section id="view-live" hidden><div id="liveview"></div></section>
       <section id="view-ask" hidden><div id="askbox" class="builder">
         <div class="blabel">Check my bet</div>
         <p class="filtsum">Upload a screenshot of any ticket (a sportsbook or Kalshi), or type your bets one per line with their odds. Primo grades every leg: the real chance it hits, whether your price is fair, injuries and its research, then tells you which leg to drop, a safer swap, and good legs to add.</p>
@@ -1447,6 +1449,92 @@ function renderBoard(){
   $("morebtn").hidden = list.length <= state.shown;
   $("morebtn").textContent = `Show more games (${list.length - state.shown} left)`;
 }
+
+/* ---------- 🔴 Live: games under way, live scores (ESPN, every 30 s) and live Kalshi prices (robot, every ~5 min) ---------- */
+const LV = {data: null, loaded: 0, espn: {}, timer: null, sport: "all", busy: false};
+async function loadLive(){
+  try {
+    const r = await fetch("https://raw.githubusercontent.com/rs3801/primo/live/live.json?t=" + Math.floor(Date.now() / 60000), {cache: "no-store"});
+    if (r.ok){ LV.data = await r.json(); LV.loaded = Date.now(); }
+  } catch (e) {}
+}
+async function loadEspn(list){
+  await Promise.all(list.slice(0, 18).map(async g => {
+    const e = g.facts && g.facts.espn; if (!e || !e[0] || !e[1]) return;
+    try {
+      const r = await fetch(`https://site.api.espn.com/apis/site/v2/sports/${e[0]}/summary?event=${e[1]}`, {cache: "no-store"});
+      if (!r.ok) return; const d = await r.json();
+      const c = ((d.header || {}).competitions || [])[0] || {}, st = (c.status || {}).type || {};
+      const wp = (d.winprobability || []).slice(-1)[0];
+      LV.espn[g.code] = {state: st.state, detail: st.shortDetail || st.detail || "", done: !!st.completed,
+        teams: (c.competitors || []).map(x => ({name: (x.team || {}).displayName, short: (x.team || {}).shortDisplayName || (x.team || {}).abbreviation, home: x.homeAway === "home", score: x.score})),
+        home: wp ? wp.homeWinPercentage : null, tie: wp ? (wp.tiePercentage || 0) : 0, t: Date.now()};
+    } catch (er) {}
+  }));
+}
+function liveGames(){
+  const L = LV.data, out = [];
+  for (const g of games){
+    const code = g.codes.find(c => L && L.games && L.games[c]);
+    const isLive = code || (L && g.codes.some(c => L.status && L.status[c] != null)) || (g.live && g.start && Date.now() - g.start < 5*3600000);
+    if (!isLive) continue;
+    const es = LV.espn[g.code]; if (es && es.done) continue;
+    out.push({g, rows: code ? L.games[code] : null});
+  }
+  return out;
+}
+function liveCall(x){
+  const g = x.g, es = LV.espn[g.code], picks = [], notes = [];
+  const rows = (x.rows || []).filter(r => /(GAME|MATCH|FIGHT|BOUT)$/.test(r[0]) && !/tie|draw/i.test(r[1]));
+  const pre = lab => { const m = g.markets.find(m => m.type === "winner" && m.label === lab); return m ? m.p : null; };
+  const sides = rows.map(r => ({lab: r[1], mid: r[2]/100, ask: r[3]/100, pre: pre(r[1])}));
+  if (es && es.home != null && g.facts){
+    for (const sd of sides){
+      const t = g.facts.teams.find(t => teamIn(t, sd.lab)); if (!t) continue;
+      const wp = t.home ? es.home : 1 - es.home - (es.tie || 0);
+      sd.wp = wp;
+      const edge = wp - sd.ask;
+      if (edge >= .05 && sd.ask >= .08 && sd.ask <= .9) picks.push({sd, edge, why: `Kalshi sells it at ${Math.round(sd.ask*100)}¢, but ESPN's live model gives ${t.short || t.name} a ${Math.round(wp*100)}% chance right now.`});
+    }
+  }
+  for (const sd of sides) if (sd.pre != null && Math.abs(sd.mid - sd.pre) >= .2) notes.push(`${sd.lab} was ${Math.round(sd.pre*100)}% before the start, ${Math.round(sd.mid*100)}% now.`);
+  return {sides, picks: picks.sort((a, b) => b.edge - a.edge), notes, es};
+}
+function liveCardHTML(x, c){
+  const g = x.g, es = c.es;
+  const score = es && es.teams.length ? es.teams.slice().sort((a, b) => a.home - b.home).map(t => `${esc(t.short || t.name)} <b>${esc(t.score ?? "")}</b>`).join(" · ") : "";
+  const link = (() => { const m = g.markets.find(m => m.type === "winner"); return m ? kalshiLink(m) : null; })();
+  const sideRows = c.sides.map(sd => `<li><b>${esc(sd.lab)}</b>: Kalshi ${Math.round(sd.mid*100)}% (buy at ${Math.round(sd.ask*100)}¢)${sd.wp != null ? ` · ESPN live chance ${Math.round(sd.wp*100)}%` : ""}${sd.pre != null ? ` · before the start ${Math.round(sd.pre*100)}%` : ""}</li>`).join("");
+  const call = c.picks.length ? c.picks.map(p => `<div class="legnote like" style="margin:6px 0">✅ <b>Bet now: ${esc(p.sd.lab)} to win</b> — ${esc(p.why)} That's about ${Math.round(p.edge*100)} points of value. $10 would win about ${money(10/p.sd.ask - 10)}.</div>`).join("")
+    : es && es.home != null ? `<div class="legnote mean" style="margin:6px 0">⏸️ <b>No edge right now.</b> Kalshi's price is in line with ESPN's live chance. Wait or skip.</div>`
+    : `<div class="legnote mean" style="margin:6px 0">ℹ️ Primo can't see a live win chance for this one${g.facts ? "" : ` (${esc(g.leagueName)} has no free live feed)`}, so it shows Kalshi's live prices only.</div>`;
+  return `<article class="game" style="--c:var(${SPORT_COLOR[g.sport] || "--s-other"});padding:12px 14px;margin-bottom:10px"><div class="gtitle">🔴 ${esc(g.title)}</div><div class="gsub"><b>${esc(g.leagueName)}</b>${es ? ` · ${esc(es.detail)}` : " · in progress"}${score ? ` · ${score}` : ""}</div>${call}${c.sides.length ? `<ul style="margin:6px 0 0;padding-left:18px">${sideRows}</ul>` : `<p class="muted">No live Kalshi price yet; the live robot checks every few minutes.</p>`}${c.notes.length ? `<p class="muted" style="margin:6px 0 0">${c.notes.map(esc).join(" ")}</p>` : ""}${link ? `<p style="margin:6px 0 0"><a href="${link}" target="_blank" rel="noopener">Open on Kalshi ↗</a></p>` : ""}</article>`;
+}
+async function renderLive(force){
+  const el = $("liveview");
+  if (!LV.data || force || Date.now() - LV.loaded > 60000){ if (!LV.data) el.innerHTML = `<div class="empty">Loading live games…</div>`; await loadLive(); }
+  let list = liveGames();
+  const now = Date.now();
+  if (LV.busy !== true){ LV.busy = true; await loadEspn(list.filter(x => !LV.espn[x.g.code] || now - LV.espn[x.g.code].t > 25000).map(x => x.g)); LV.busy = false; }
+  list = liveGames();
+  const calls = list.map(x => [x, liveCall(x)]);
+  const sports = [...new Set(list.map(x => x.g.sport))];
+  const shown = calls.filter(([x]) => LV.sport === "all" || x.g.sport === LV.sport).sort((a, b) => (b[1].picks.length ? b[1].picks[0].edge : -1) - (a[1].picks.length ? a[1].picks[0].edge : -1) || !!b[1].es - !!a[1].es || b[0].g.vol - a[0].g.vol);
+  const best = calls.flatMap(([x, c]) => c.picks.map(p => [x, p])).sort((a, b) => b[1].edge - a[1].edge).slice(0, 5);
+  const age = LV.data ? Math.max(0, Math.round((Date.now()/1000 - LV.data.ts)/60)) : null;
+  if (state.tab !== "live") return;
+  el.innerHTML = `<div class="builder"><div class="blabel">🔴 Live betting</div><p class="filtsum">Games under way right now, every sport. Scores and ESPN's live win chance refresh every 30 seconds; Kalshi's live prices come from Primo's live robot${age != null ? ` (last checked ${age} min ago)` : ""}. Live prices move fast: check the price on Kalshi before you buy, and skip it if Kalshi now charges more than shown here.</p>
+    <div class="chips scroll">${["all", ...sports].map(sp => `<button class="chip" type="button" data-livesport="${esc(sp)}" aria-pressed="${LV.sport === sp}">${sp === "all" ? "All sports" : esc(sp)} <span class="n">${sp === "all" ? list.length : list.filter(x => x.g.sport === sp).length}</span></button>`).join("")}</div>
+    ${best.length ? `<p class="whyh">🔥 Bet now (Primo's best live spots)</p><ul style="margin:4px 0 0;padding-left:18px">${best.map(([x, p]) => `<li><b>${esc(p.sd.lab)} to win</b> (${esc(x.g.title)}, ${esc(x.g.leagueName)}) — Kalshi ${Math.round(p.sd.ask*100)}¢ vs ESPN ${Math.round(p.sd.wp*100)}%</li>`).join("")}</ul>` : `<p class="muted" style="margin:8px 0 0">No live edges right now. Primo flags a game when Kalshi's price is at least 5 points below ESPN's live win chance.</p>`}
+    <button class="btn ghost sm" type="button" id="liverefresh" style="margin-top:8px">↻ Refresh now</button></div>
+    <div style="margin-top:12px">${shown.length ? shown.map(([x, c]) => liveCardHTML(x, c)).join("") : `<div class="empty">No games are being played right now${LV.sport !== "all" ? " in this sport" : ""}. Check back when games start.</div>`}</div>`;
+  clearTimeout(LV.timer);
+  LV.timer = setTimeout(() => { if (state.tab === "live" && !document.hidden) renderLive(); }, 30000);
+}
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-livesport]"); if (b){ LV.sport = b.dataset.livesport; renderLive(); return; }
+  if (e.target.id === "liverefresh"){ LV.espn = {}; renderLive(true); }
+});
 function render(){
   const fs2 = document.getElementById("filtsum2"); if (fs2) fs2.textContent = filterSummary();
   document.querySelectorAll(".tab").forEach(t => t.setAttribute("aria-selected", String(t.dataset.tab === state.tab)));
@@ -1454,12 +1542,14 @@ function render(){
   $("view-board").hidden = state.tab !== "board";
   $("view-slip").hidden = state.tab !== "slip";
   $("view-ask").hidden = state.tab !== "ask";
-  document.querySelector(".rail").hidden = state.tab === "ask";
-  document.querySelector(".layout").classList.toggle("asking", state.tab === "ask");
+  $("view-live").hidden = state.tab !== "live";
+  document.querySelector(".rail").hidden = state.tab === "ask" || state.tab === "live";
+  document.querySelector(".layout").classList.toggle("asking", state.tab === "ask" || state.tab === "live");
   $("searchgroup").hidden = state.tab !== "board";
   if (state.tab === "build") renderBuild();
   else if (state.tab === "board") renderBoard();
   else if (state.tab === "slip") renderSlip();
+  else if (state.tab === "live") renderLive();
   updateSlipCount();
 }
 

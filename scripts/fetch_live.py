@@ -39,7 +39,7 @@ def main():
                 if len(parts) > 1 and parts[1] in codes: status[parts[1]] = [st, start[:16]]
         cursor = j.get("cursor") or ""
         if not cursor or not j.get("milestones"): break
-    NOT = ("sch", "scheduled", "not_started", "created", "pre", "upcoming", "delayed", "postponed")
+    NOT = ("sch", "scheduled", "not_started", "created", "pre", "upcoming", "delayed", "postponed", "completed", "closed", "final", "ended", "finished")
     live = []
     for code, (st, start) in status.items():
         try: t0 = datetime.datetime.fromisoformat(start + ":00+00:00")
@@ -51,7 +51,8 @@ def main():
     ser = {i: x[0] for i, x in enumerate(D["SER"])}
     n = 0
     for code in sorted(live, key=lambda c: -sum(r[4] for r in codes[c][3]))[:120]:
-        series = sorted({ser[r[0]] for r in codes[code][3] if WIN.search(ser[r[0]]) or "TOTAL" in ser[r[0]] or "SPREAD" in ser[r[0]]})
+        series = sorted({ser[r[0]] for r in codes[code][3] if WIN.search(ser[r[0]]) or "TOTAL" in ser[r[0]] or "SPREAD" in ser[r[0]]},
+                        key=lambda x: (0 if WIN.search(x) else 1 if "TOTAL" in x else 2, bool(re.search(r"\d[HQP]|1ST|2ND|HALF", x)), x))
         rows = []
         for st in series[:4]:
             j = get("/markets", {"event_ticker": st + "-" + code, "status": "open", "limit": 100}); n += 1

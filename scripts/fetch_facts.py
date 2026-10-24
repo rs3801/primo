@@ -351,7 +351,7 @@ def main():
     except Exception as e: print("team form failed:", e)
     try: tennis = tennis_stats()
     except Exception as e: print("tennis failed:", e); tennis = {}
-    for g in games: g.pop("path", None); g.pop("eid", None)
+    for g in games: g["espn"] = [g.pop("path", ""), g.pop("eid", "")]   # for live scores in the app
     t = datetime.datetime.now(PT)
     out = {"tennis": tennis, "players": players, "asof": t.strftime("%a, %b ") + str(t.day) + ", " + t.strftime("%I:%M %p").lstrip("0") + " PT", "games": games, "injuries": inj}
     if not games and not inj: raise SystemExit("No facts found; keeping the old file.")
