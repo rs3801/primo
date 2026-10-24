@@ -1722,7 +1722,7 @@ function parseTicket(text){
       if (hd && !/\d\s*%|[+-]\d{3}|\bover\b|\bunder\b|wins by|to win/i.test(L)){ ctx = [hd[1].trim(), hd[2].trim()]; continue; } }
     let m;
     if ((m = /risk\s*:?\s*\$\s*([\d,]+(?:\.\d+)?)/i.exec(L)) || (m = /^\s*(?:bet|stake)\s*:?\s*\$?\s*([\d,]+(?:\.\d+)?)/i.exec(L))) out.risk = +m[1].replace(/,/g, "");
-    if (/\d+\s*market combo/i.test(L)) continue;
+    { const mc = /(\d+)\s*market combo/i.exec(L); if (mc){ out.expected = +mc[1]; continue; } }
     if ((m = /win\s*:?\s*\$\s*([\d,]+(?:\.\d+)?)/i.exec(L)) || (m = /(?:pays|payout|to win)\s*:?\s*\$\s*([\d,]+(?:\.\d+)?)/i.exec(L))) out.win = +m[1].replace(/,/g, "");
     if (/parlay/i.test(L) && (m = L.match(/\$\s*[\d,]+(?:\.\d+)?/g)) && m.length >= 2){ out.risk = out.risk || +m[0].replace(/[$,\s]/g, ""); out.win = out.win || +m[1].replace(/[$,\s]/g, ""); }
     if ((NOTLEG.test(L) && !/\d\s*%\s*[xX×✕]?\s*$/.test(L)) || /^\s*(?:bet|stake)\b/i.test(L)) continue;
@@ -1731,9 +1731,10 @@ function parseTicket(text){
     const leg = parseLeg(L);
     if (!leg) continue;
     if (ctx) leg.ctx = ctx;
-    const key = ffold(leg.who).replace(/[^a-z0-9]/g, "") + "|" + leg.kind + "|" + leg.line;   // the same bet on two overlapping screenshots counts once
+    const namesTeam = !/^(over|under|both teams|tie|draw|\d)/i.test(leg.who);
+    const key = ffold(leg.who).replace(/[^a-z0-9]/g, "") + "|" + leg.kind + "|" + leg.line + (namesTeam || !leg.ctx ? "" : "|" + ffold(leg.ctx.join(" ")));   // the same bet on two overlapping screenshots counts once
     const i = out.legs.findIndex(x => x.key === key); leg.key = key;
-    if (i >= 0){ if (leg.paid == null) leg.paid = out.legs[i].paid; if (leg.odds == null) leg.odds = out.legs[i].odds; out.legs[i] = leg; } else out.legs.push(leg);
+    if (i >= 0){ if (leg.paid == null) leg.paid = out.legs[i].paid; if (leg.odds == null) leg.odds = out.legs[i].odds; if (out.legs[i].ctx) leg.ctx = out.legs[i].ctx; out.legs[i] = leg; } else out.legs.push(leg);
   }
   return out;
 }
@@ -2190,6 +2191,7 @@ function checkTicket(text){
   const T = parseTicket(text);
   if (!T.legs.length) return `<div class="empty">Primo couldn't find any bets in that. Put one bet per line with its odds, like <b>49ers -7 -110</b> or <b>Rays ML -149</b>.</div>`;
   const rs = T.legs.map(gradeLeg);
+  const missingNote = T.expected && T.expected > T.legs.length ? `<p class="warn" style="margin:6px 0">⚠️ Your slip says ${T.expected} legs, but Primo only sees ${T.legs.length}. Add a screenshot of the rest so Primo can check all of them.</p>` : "";
   const all = rs.reduce((a, r) => a * (r.chance ?? 1), 1);
   const unpriced = rs.filter(r => r.chance == null).length;
   const multOdds = rs.every(r => r.leg.odds != null) ? rs.reduce((a, r) => a * TK.dec(r.leg.odds), 1)
@@ -2234,7 +2236,7 @@ function checkTicket(text){
   const addHTML = adds.slice(0, 3).map(([m, l]) => `<li><b>${esc(m.pick)}</b> — ${esc(m.g.title)}, ${esc(m.g.leagueName)}, ${fmtWhen(m.g)}. Kalshi ${TK.pct(m.p)}. ${esc(l.why || l.text || "")}</li>`).join("");
   const exp = mult ? all*mult - 1 : null;
   return `<article class="game" style="--c:var(--s-other);padding:14px 16px;margin-bottom:12px">
-      <div class="gtitle">Primo's check: ${rs.length}-leg ${rs.length > 1 ? "parlay" : "bet"}</div>
+      <div class="gtitle">Primo's check: ${rs.length}-leg ${rs.length > 1 ? "parlay" : "bet"}${T.expected === rs.length ? " ✅ all legs found" : ""}</div>${missingNote}
       ${unpriced === rs.length ? `<p style="margin:8px 0;font-size:17px"><b>Primo couldn't find ${rs.length > 1 ? "these games" : "this game"}</b>, so it can't give a chance yet. Check the names below; you can fix them in the box and tap Check my bet again.</p>` : `<p style="margin:8px 0;font-size:18px"><b>${rs.length === 1 ? "Chance it hits" : `Chance all ${rs.length} hit`}: about ${TK.pct(all)}</b> (roughly 1 in ${Math.max(1, Math.round(1/all))})${unpriced ? ` — not counting ${unpriced} bet${unpriced > 1 ? "s" : ""} Primo couldn't price` : ""}</p>`}
       ${rs.length >= 6 ? `<p style="margin:6px 0">⚠️ ${rs.length} legs: even when every leg is likely, they all have to hit. One upset loses the whole combo.</p>` : ""}
       ${mult && rs.every(r => r.leg.kalshi) ? `<p style="margin:6px 0">${T.kalshiPays ? `Your $${T.risk} pays ${TK.usd(T.win + T.risk)} if all ${rs.length} hit.${all > 0 && !unpriced && (T.risk/all) > 1.5*(T.win + T.risk) ? ` A fair payout for a ${TK.pct(all)} chance would be about ${TK.usd(T.risk/all)}, so Kalshi keeps a big cut on long combos. Fewer legs = a fairer price.` : ""}` : `At the prices on your ticket, a $100 combo pays about ${TK.usd(100*(mult - 1))} profit (before Kalshi's fee).`}${rs.some(r => r.leg.paid != null && r.chance != null && r.g) ? ` Using Kalshi's prices right now, the chance all hit is ${TK.pct(all)}.` : ""}</p>` : ""}
@@ -2259,7 +2261,14 @@ async function readShot(file){
   return (r && r.data && r.data.text) || "";
 }
 function cleanShot(text){
-  const P = parseTicket(text), lines = P.legs.map(l => l.raw.replace(/^[^a-z0-9]+/i, "") + (l.paid != null ? " " + Math.round(l.paid*100) + "%" : ""));
+  const P = parseTicket(text), lines = [];
+  if (P.expected) lines.push(`${P.expected} market combo`);
+  let last = "";
+  for (const l of P.legs){
+    const h = l.ctx ? l.ctx.join(" at ") : "";
+    if (h && h !== last){ lines.push(h); last = h; }
+    lines.push(l.raw.replace(/^[^a-z0-9]+/i, "") + (l.paid != null ? " " + Math.round(l.paid*100) + "%" : ""));
+  }
   if (P.risk) lines.push(`Risk $${P.risk}`);
   if (P.win) lines.push(`To win $${P.win}`);
   return lines.join("\n");
@@ -2295,8 +2304,9 @@ function askOutside(){
       const clean = cleanShot($("asktext").value + "\n" + txt);
       if (!clean){ $("askstatus").textContent = "Primo couldn't read any bets in that picture. Try a clearer screenshot, or type the bets in the box."; return; }
       $("asktext").value = clean;
-      const n = parseTicket(clean).legs.length;
-      $("askfiles").textContent = `Primo read ${files.length > 1 ? files.length + " screenshots" : "your screenshot"}: ${n} bet${n === 1 ? "" : "s"} in the box${before ? ` (${n - before} new, repeats counted once)` : ""}. Got more? Tap Add screenshots again and they'll be added. Fix anything it got wrong, then tap Check my bet. To start over, tap Clear.`;
+      const PT = parseTicket(clean), n = PT.legs.length;
+      const exp = PT.expected ? (n === PT.expected ? ` ✅ All ${n} legs of your ${n}-leg combo found.` : n < PT.expected ? ` ⚠️ Kalshi says ${PT.expected} legs but Primo found ${n}: add a screenshot of the part that's missing.` : "") : "";
+      $("askfiles").textContent = `Primo read ${files.length > 1 ? files.length + " screenshots" : "your screenshot"}: ${n} bet${n === 1 ? "" : "s"} in the box${before ? ` (${n - before} new, repeats counted once)` : ""}. Got more? Tap Add screenshots again and they'll be added. Fix anything it got wrong, then tap Check my bet. To start over, tap Clear.${exp}`;
       runCheck();
     } catch (er) { $("askstatus").textContent = "Couldn't read the screenshot (check your internet). You can type the bets in the box instead."; }
   });
