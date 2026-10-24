@@ -1296,7 +1296,7 @@ function opinionFor(m){
     if (/^tie$|draw/i.test(m.label)) return withContext(buildOtherTake(m), m.g);
     const g = m.g, f = g.facts;
     if (f){
-      const t = f.teams.find(x => teamIn(x, m.label)); if (!t) return null;
+      const t = f.teams.find(x => teamIn(x, m.label)); if (!t) return withContext(buildTakeK({chance: m.p}, m, g), g);
       const opp = f.teams.find(x => x !== t), od = f.odds || {};
       const book = od.home != null ? (t.home ? od.home : od.away)/100 : null;
       const r = {f, t, opp, g, km: m, kal: m.p, book, chance: book != null ? (book + m.p)/2 : m.p};
@@ -1564,6 +1564,8 @@ function parseTicket(text){
     if ((m = /win\s*:?\s*\$\s*([\d,]+(?:\.\d+)?)/i.exec(L)) || (m = /(?:pays|payout|to win)\s*:?\s*\$\s*([\d,]+(?:\.\d+)?)/i.exec(L))) out.win = +m[1].replace(/,/g, "");
     if (/parlay/i.test(L) && (m = L.match(/\$\s*[\d,]+(?:\.\d+)?/g)) && m.length >= 2){ out.risk = out.risk || +m[0].replace(/[$,\s]/g, ""); out.win = out.win || +m[1].replace(/[$,\s]/g, ""); }
     if ((NOTLEG.test(L) && !/\d\s*%\s*[xX×✕]?\s*$/.test(L)) || /^\s*(?:bet|stake)\b/i.test(L)) continue;
+    const rest = L.replace(/selection|money ?line|moneyline|point spread|spread|game|straight|wager|\bml\b|[\d:+\-.()#]/gi, "").trim();
+    if (!/[a-z]{3}/i.test(rest)){ const prev = out.legs[out.legs.length - 1]; if (prev && /money ?line|\bml\b/i.test(L)) prev.kind = "ml"; continue; }
     const leg = parseLeg(L);
     if (!leg) continue;
     const key = ffold(leg.who).replace(/[^a-z0-9]/g, "") + "|" + leg.kind + "|" + leg.line;   // the same bet on two overlapping screenshots counts once
@@ -1602,8 +1604,13 @@ function teamHit(t, T, RAW){
   for (const [k, v] of Object.entries(ALT)) if (new RegExp("(^|[^A-Za-z])" + k + "([^A-Za-z]|$)").test(RAW) && ffold(t.loc || "").startsWith(ffold(v))) best += 1200;
   return best;
 }
+const BOOK_ALIAS = [   // how sportsbooks write some schools
+  [/ mississippi (?!st |state )/g, " mississippi ole miss "], [/ miami \(?fl\)? | miami florida /g, " miami hurricanes "], [/ miami \(?oh\)? | miami ohio /g, " miami redhawks "],
+  [/ connecticut /g, " connecticut uconn "], [/ southern california /g, " usc "], [/ central florida /g, " ucf "], [/ southern methodist /g, " smu "], [/ brigham young /g, " byu "],
+  [/ louisiana state /g, " lsu "], [/ pittsburgh /g, " pittsburgh pitt "], [/ nevada las vegas /g, " unlv "], [/ texas christian /g, " tcu "], [/ florida intl /g, " florida international "]];
+function aliasWords(T){ for (const [r, w] of BOOK_ALIAS) T = T.replace(r, w); return T; }
 function findTicketGame(txt, oppTxt){
-  const T = TK.word(txt), O = oppTxt ? TK.word(oppTxt) : null; let best = null;
+  const T = aliasWords(TK.word(txt)), O = oppTxt ? aliasWords(TK.word(oppTxt)) : null; let best = null;
   const now = Date.now();
   for (const f of FX.games || []){
     if (f.state === "post") continue;
@@ -1875,11 +1882,11 @@ function buildTake(r){
   if (r.km && Math.abs(r.km.move || 0) >= 4) (r.km.move > 0 ? pros : cons).push(`The Kalshi price moved ${r.km.move > 0 ? "up" : "down"} ${Math.abs(r.km.move)} points in the last day (money moving ${r.km.move > 0 ? "toward" : "away from"} ${T}).`);
   if (r.edge != null && r.edge <= -.05) cons.push(`The price dropped since your slip (${TK.pct(r.implied)} → ${TK.pct(r.kal)}).`);
   // verdict
-  let sc = p >= .72 ? 2 : p >= .62 ? 1.2 : p >= .55 ? .5 : p >= .48 ? -.2 : p >= .4 ? -1 : -1.8;
+  let sc = p >= .72 ? 2 : p >= .62 ? 1.2 : p >= .55 ? .5 : p >= .48 ? -.2 : p >= .4 ? -.7 : -1.8;
   sc += Math.min(pros.length, 3)*.45 - Math.min(cons.length, 3)*.55;
   const v = sc >= 1.6 ? ["keep", "✅ Keep", "Solid leg"] : sc >= .6 ? ["okay", "👍 Okay", "Decent, with some risk"] : sc >= -.4 ? ["risky", "🤔 Risky", "Close to a coin flip"] : ["drop", "❌ Drop", "Primo would leave this out"];
   let flip = null;
-  if (p < .45 && v[0] === "drop") flip = `If you want this game in your combo, the other side (${O} to win, about ${TK.pct(1 - p)}) is the safer pick.`;
+  if (p < .45 && v[0] === "drop" && cons.length >= pros.length) flip = `If you want this game in your combo, the other side (${O} to win, about ${TK.pct(1 - p)}) is the safer pick.`;
   const why = (v[0] === "keep" || v[0] === "okay") ? pros.slice(0, 2) : cons.slice(0, 2);
   const say = `${v[2]}. ${lead}${why.length ? " " + why.join(" ") : ""}`;
   return {v: v[0], badge: v[1], say, pros, cons, flip};
@@ -1941,7 +1948,7 @@ function checkTicket(text){
   const fell = rs.filter(r => r.leg.kalshi && r.edge != null && r.edge < -.03);
   if (fell.length) tips.push(`<b>Price dropped since your ticket:</b> ${fell.map(r => `${esc(r.leg.who)} (${TK.pct(r.leg.paid)} → ${TK.pct(r.chance)})`).join(", ")}. The market likes ${fell.length > 1 ? "these" : "this one"} less now.`);
   for (const r of bad) tips.push(`<b>Overpriced: ${esc(r.leg.raw)}</b>. This sportsbook charges more than it should for this one. Kalshi or another book may have it cheaper.`);
-  if (rs.some(r => !r.leg.kalshi) && rs.every(r => r.leg.kalshi || r.edge == null || r.edge >= -.03)) tips.push("No leg is badly overpriced. The prices are about normal for a sportsbook.");
+  if (unpriced < rs.length && rs.some(r => !r.leg.kalshi) && rs.every(r => r.leg.kalshi || r.edge == null || r.edge >= -.03)) tips.push("No leg is badly overpriced. The prices are about normal for a sportsbook.");
   const used = new Set(rs.map(r => r.g).filter(Boolean));
   const adds = [];
   for (const g of games){
@@ -1953,11 +1960,11 @@ function checkTicket(text){
   const exp = mult ? all*mult - 1 : null;
   return `<article class="game" style="--c:var(--s-other);padding:14px 16px;margin-bottom:12px">
       <div class="gtitle">Primo's check: ${rs.length}-leg ${rs.length > 1 ? "parlay" : "bet"}</div>
-      <p style="margin:8px 0;font-size:18px"><b>Chance all ${rs.length} hit: about ${TK.pct(all)}</b> (roughly 1 in ${Math.max(1, Math.round(1/all))})${unpriced ? ` — not counting ${unpriced} bet${unpriced > 1 ? "s" : ""} Primo couldn't price` : ""}</p>
+      ${unpriced === rs.length ? `<p style="margin:8px 0;font-size:17px"><b>Primo couldn't find ${rs.length > 1 ? "these games" : "this game"}</b>, so it can't give a chance yet. Check the names below; you can fix them in the box and tap Check my bet again.</p>` : `<p style="margin:8px 0;font-size:18px"><b>${rs.length === 1 ? "Chance it hits" : `Chance all ${rs.length} hit`}: about ${TK.pct(all)}</b> (roughly 1 in ${Math.max(1, Math.round(1/all))})${unpriced ? ` — not counting ${unpriced} bet${unpriced > 1 ? "s" : ""} Primo couldn't price` : ""}</p>`}
       ${rs.length >= 6 ? `<p style="margin:6px 0">⚠️ ${rs.length} legs: even when every leg is likely, they all have to hit. One upset loses the whole combo.</p>` : ""}
       ${mult && rs.every(r => r.leg.kalshi) ? `<p style="margin:6px 0">${T.kalshiPays ? `Your $${T.risk} pays ${TK.usd(T.win + T.risk)} if all ${rs.length} hit.${all > 0 && !unpriced && (T.risk/all) > 1.5*(T.win + T.risk) ? ` A fair payout for a ${TK.pct(all)} chance would be about ${TK.usd(T.risk/all)}, so Kalshi keeps a big cut on long combos. Fewer legs = a fairer price.` : ""}` : `At the prices on your ticket, a $100 combo pays about ${TK.usd(100*(mult - 1))} profit (before Kalshi's fee).`}${rs.some(r => r.leg.paid != null && r.chance != null && r.g) ? ` Using Kalshi's prices right now, the chance all hit is ${TK.pct(all)}.` : ""}</p>` : ""}
       ${mult && unpriced && !rs.every(r => r.leg.kalshi) ? `<p style="margin:6px 0">Your ${TK.usd(risk)} bet pays ${TK.usd(risk*(mult - 1))} profit. Primo can't judge the price because it couldn't find ${unpriced} of the games (finished or not listed).</p>` : ""}
-      ${mult && !unpriced && !rs.every(r => r.leg.kalshi) ? `<p style="margin:6px 0">${T.risk ? `Your ${TK.usd(risk)} bet` : "A $100 bet"} pays ${TK.usd(risk*(mult - 1))} profit (${(mult - 1).toFixed(1)} to 1). A fair payout for this chance would be about ${(fairMult - 1).toFixed(1)} to 1. ${rs.some(r => r.warn.some(w => w.includes("already started"))) ? "🔴 Some of these games are already being played, so these chances include what has happened so far (not a fair way to judge the price)." : exp >= .02 ? "✅ That's a good deal." : exp >= -.12 ? "👍 That's about normal for a sportsbook parlay (the house keeps a small cut)." : "⚠️ The sportsbook is keeping a big cut on this one."}</p>` : ""}
+      ${mult && !unpriced && !rs.every(r => r.leg.kalshi) ? `<p style="margin:6px 0">${T.risk ? `Your ${TK.usd(risk)} bet` : "A $100 bet"} pays ${TK.usd(risk*(mult - 1))} profit (${(mult - 1).toFixed(1)} to 1). A fair payout for this chance would be about ${(fairMult - 1).toFixed(1)} to 1. ${rs.some(r => r.warn.some(w => w.includes("already started"))) ? "🔴 Some of these games are already being played, so these chances include what has happened so far (not a fair way to judge the price)." : exp >= .02 ? "✅ That's a good deal." : exp >= -.12 ? (rs.length === 1 ? "👍 That's a normal sportsbook price (the house keeps a small cut)." : "👍 That's about normal for a sportsbook parlay (the house keeps a small cut).") : "⚠️ The sportsbook is keeping a big cut on this one."}</p>` : ""}
       ${verdictHTML(rs, T, all)}
       <p class="whyh">What Primo would do</p><ul style="margin:4px 0 0;padding-left:18px">${tips.map(x => `<li>${x}</li>`).join("")}${rs.filter(r => r.safer).map(r => `<li><b>Safer swap:</b> ${esc(r.safer)}</li>`).join("")}</ul>
       ${addHTML ? `<p class="whyh">Good legs to add (Primo's research likes these)</p><ul style="margin:4px 0 0;padding-left:18px">${addHTML}</ul><p class="muted" style="margin:6px 0 0">Adding a leg pays more but lowers your chance of hitting.</p>` : ""}
