@@ -379,6 +379,7 @@ function periodOf(text){
   if (m){
     const num = {"1ST":"1st","2ND":"2nd","3RD":"3rd","4TH":"4th",FIRST:"1st",SECOND:"2nd","1":"1st","2":"2nd","3":"3rd","4":"4th"}[m[1]];
     const what = {HALF:"half",H:"half",QUARTER:"quarter",Q:"quarter",PERIOD:"period",P:"period"}[m[2]];
+    if (what === "half") return num === "1st" ? " in the 1st half only (the score at halftime: in football and basketball that's the 1st and 2nd quarters together)" : " in the 2nd half only (in football and basketball, the 3rd and 4th quarters together; check Kalshi's rules for overtime)";
     return ` in the ${num} ${what} only`;
   }
   const inn = /FIRST (\d) INNINGS/.exec(t); if (inn) return ` in the first ${inn[1]} innings only`;
@@ -2085,7 +2086,7 @@ function buildTake(r){
 function takeHTMLx(k){
   if (!k) return "";
   const li = (a, ic) => a.map(x => `<li>${ic} ${esc(x)}</li>`).join("");
-  return `<div style="margin:8px 0;padding:10px 12px;border-radius:12px;background:var(--chip, rgba(127,127,127,.08))"><b>Primo's take: ${k.badge}</b><p style="margin:4px 0 6px">${esc(k.say)}</p>${(k.ctx || []).length ? `<p class="muted" style="margin:0 0 6px;font-size:.92em">${k.ctx.map(esc).join("<br>")}</p>` : ""}${(() => { const pr = k.pros.filter(x => !k.say.includes(x.replace(/\.$/, ""))), co = k.cons.filter(x => !k.say.includes(x.replace(/\.$/, ""))); return pr.length || co.length ? `<ul style="margin:0;padding-left:18px">${li(pr, "👍")}${li(co, "👎")}</ul>` : ""; })()}${k.flip ? `<p style="margin:6px 0 0"><b>Flip it?</b> ${esc(k.flip)}${k.flipM ? openBtns(k.flipM) : ""}</p>` : ""}</div>`;
+  return `<div style="margin:8px 0;padding:10px 12px;border-radius:12px;background:var(--chip, rgba(127,127,127,.08))"><b>Primo's take: ${k.badge}</b><p style="margin:4px 0 6px">${esc(k.say)}</p>${(k.ctx || []).length ? `<p class="muted" style="margin:0 0 6px;font-size:.92em">${k.ctx.map(esc).join("<br>")}</p>` : ""}${(() => { const pr = k.pros.filter(x => !k.say.includes(x.replace(/\.$/, ""))), co = k.cons.filter(x => !k.say.includes(x.replace(/\.$/, ""))); return pr.length || co.length ? `<ul style="margin:0;padding-left:18px">${li(pr, "👍")}${li(co, "👎")}</ul>` : ""; })()}${k.flip ? `<p style="margin:6px 0 0"><b>Flip it?</b> ${esc(k.flip)}${k.flipM ? swapBtn(k.idx, k.flipM, "Flip") + openBtns(k.flipM) : ""}</p>` : ""}</div>`;
 }
 
 function verdictHTML(rs, T, all){
@@ -2153,7 +2154,7 @@ function swapIdeas(r){
 function swapHTML(r, stake){
   const s = r.swaps; if (!s) return "";
   const win = mlt => TK.usd(stake * (mlt - 1));
-  const line = (icon, title, o, extra) => `<li>${icon} <b>${title}:</b> ${esc(o.m.pick)}${o.m.g !== r.g ? ` <span class="muted">(${esc(o.m.g.title)}, ${esc(o.m.g.leagueName)}, ${esc(fmtWhen(o.m.g))})</span>` : ""} — <b>${TK.pct(o.p)}</b> chance, $${stake} wins about <b>${win(o.mult)}</b>${extra ? ` · ${esc(extra)}` : ""}${openBtns(o.m)}</li>`;
+  const line = (icon, title, o, extra) => `<li>${icon} <b>${title}:</b> ${esc(o.m.pick)}${o.m.g !== r.g ? ` <span class="muted">(${esc(o.m.g.title)}, ${esc(o.m.g.leagueName)}, ${esc(fmtWhen(o.m.g))})</span>` : ""} — <b>${TK.pct(o.p)}</b> chance, $${stake} wins about <b>${win(o.mult)}</b>${extra ? ` · ${esc(extra)}` : ""}${swapBtn(r.idx, o.m)}${openBtns(o.m)}</li>`;
   const L = [];
   if (s.ideas.safer) L.push(line("🛡️", "Safer", s.ideas.safer));
   if (s.ideas.same) L.push(line("💵", "Same risk, more money", s.ideas.same));
@@ -2177,7 +2178,7 @@ function plansHTML(rs, T, stake, mult){
     const pick2 = r => { const x = mine.find(y => y.r === r); return chosen.get(x); };
     return planOld(pick2);
   };
-  const planOld = pickFn => { let changed = []; const legs = mine.map(x => { const o = pickFn(x.r); if (o){ changed.push(`${x.r.t ? (x.r.t.short || x.r.t.name) + (x.r.leg.kind === "ml" ? " to win" : "") : x.r.kname || x.r.leg.who || x.r.leg.raw} → ${o.m.pick} (${TK.pct(o.p)})`); return {p: o.p, mult: o.mult, m: o.m}; } return x; }); return changed.length ? {legs, changed} : null; };
+  const planOld = pickFn => { let changed = []; const legs = mine.map(x => { const o = pickFn(x.r); if (o){ changed.push({t: `${x.r.t ? (x.r.t.short || x.r.t.name) + (x.r.leg.kind === "ml" ? " to win" : "") : x.r.kname || x.r.leg.who || x.r.leg.raw} → ${o.m.pick} (${TK.pct(o.p)})`, i: x.r.idx, m: o.m}); return {p: o.p, mult: o.mult, m: o.m}; } return x; }); return changed.length ? {legs, changed} : null; };
   const plans = [
     ["🛡️ Safer version", plan(r => r.swaps && (r.take && r.take.v !== "keep") && (r.swaps.ideas.safer || r.swaps.ideas.replace), (x, o) => o.p - x.p)],
     ["💵 Same risk, more money", plan(r => r.swaps && r.swaps.ideas.same, (x, o) => o.mult / x.mult)],
@@ -2185,7 +2186,7 @@ function plansHTML(rs, T, stake, mult){
   ].filter(([, p]) => p);
   if (!plans.length) return "";
   const yours = {p: ch(mine), mult: mu(mine)};
-  const row = (name, p, m, changes, legs) => `<li><b>${name}:</b> risk <b>$${stake}</b> to win <b>${TK.usd(stake * (m - 1))}</b> · chance <b>${TK.pct(p)}</b> (about 1 in ${Math.max(1, Math.round(1/p))})${changes ? `<br><span class="muted" style="font-size:.92em">Swap: ${changes.map(esc).join("; ")}</span>` : ""}${legs ? `<br>${useBtn(legs.map(x => x.m), changes ? "Use this combo" : "Put my ticket in My combo")}` : ""}</li>`;
+  const row = (name, p, m, changes, legs) => `<li><b>${name}:</b> risk <b>$${stake}</b> to win <b>${TK.usd(stake * (m - 1))}</b> · chance <b>${TK.pct(p)}</b> (about 1 in ${Math.max(1, Math.round(1/p))})${changes ? `<br><span class="muted" style="font-size:.92em">Swap: ${changes.map(c => esc(c.t) + swapBtn(c.i, c.m)).join("; ")}</span><br><button class="mini" type="button" data-workswapall="${esc(encodeURIComponent(JSON.stringify(changes.filter(c => c.m && c.m.key).map(c => [c.i, c.m.key]))))}">Make all ${changes.length} swaps</button>` : ""}${legs ? `<br>${useBtn(legs.map(x => x.m), changes ? "Use this combo" : "Put my ticket in My combo")}` : ""}</li>`;
   return `<p class="whyh">💰 Ways to make more, or risk less</p><ul style="margin:4px 0 0;padding-left:18px">${row("Your ticket", yours.p, yours.mult, null, mine)}${plans.map(([n, p]) => row(n, ch(p.legs), mu(p.legs), p.changed, p.legs)).join("")}</ul><p class="muted" style="margin:6px 0 0">If a ticket loses, you lose the $${stake} you risked. The chance is what Kalshi and the sportsbooks expect, not a guarantee.</p>`;
 }
 
@@ -2212,6 +2213,32 @@ document.addEventListener("click", e => {
   state.tab = "slip"; render(); window.scrollTo({top: 0});
   toast("Combo moved to My combo: tap Open this game on each leg");
 });
+
+/* ---------- "Your combo" box in Check my bet: tap Swap / Flip / Remove, then send it to My combo ---------- */
+const WORK = {legs: [], stake: 10};
+function workHTML(){
+  const L = WORK.legs.filter(x => x);
+  if (!L.length) return "";
+  const priced = L.filter(x => x.m && !isNaN(x.m.p));
+  const ch = priced.reduce((a, x) => a * x.m.p, 1), cost = priced.reduce((a, x) => a * (x.m.ask > 0 && x.m.ask < 1 ? x.m.ask : x.m.p), 1);
+  const changed = WORK.legs.some((x, i) => x && x.changed);
+  return `<div class="game" style="--c:var(--s-other);padding:12px 14px;margin-bottom:12px;border:2px solid rgba(46,160,67,.5)"><div class="gtitle">🧾 Your combo${changed ? " (with your swaps)" : ""}: ${L.length} leg${L.length > 1 ? "s" : ""}</div>
+    <p style="margin:6px 0">Chance all hit: <b>${TK.pct(ch)}</b> (about 1 in ${Math.max(1, Math.round(1/ch))}) · $${WORK.stake} wins about <b>${TK.usd(WORK.stake * (1/cost - 1))}</b> <span class="muted">(Kalshi prices; Kalshi shows the exact payout)</span></p>
+    <ol style="margin:4px 0 0;padding-left:20px">${WORK.legs.map((x, i) => x ? `<li style="margin:4px 0">${x.changed ? "🔁 " : ""}<b>${esc(x.m ? x.m.pick : x.text)}</b>${x.m ? ` <span class="muted">(${esc(x.m.g.title)}, ${TK.pct(x.m.p)})</span> <a href="${kalshiLink(x.m)}" target="_blank" rel="noopener">Open ↗</a>` : ` <span class="muted">(not found on Kalshi)</span>`} <button class="mini" type="button" data-workdel="${i}">Remove</button></li>` : "").join("")}</ol>
+    <p style="margin:8px 0 0">${L.some(x => x.m) ? `<button class="btn sm" type="button" data-workuse="1">✅ Use this combo</button>` : ""} <button class="btn ghost sm" type="button" data-workreset="1">Undo all swaps</button></p>
+    <p class="muted" style="margin:6px 0 0;font-size:.9em">Tap <b>Swap</b>, <b>Flip</b> or <b>Remove</b> below and this box updates. Then tap Use this combo to open each leg on Kalshi from My combo.</p></div>`;
+}
+function workRender(){ const el = document.getElementById("workbox"); if (el) el.innerHTML = workHTML(); }
+function swapBtn(i, m, label){ return m && m.key && i != null ? ` <button class="mini" type="button" data-workswap="${i}" data-wkey="${esc(encodeURIComponent(m.key))}">${label || "Swap"}</button>` : ""; }
+document.addEventListener("click", e => {
+  const s = e.target.closest("[data-workswap]");
+  if (s){ const i = s.dataset.workswap, m = byKey.get(decodeURIComponent(s.dataset.wkey)); if (m && WORK.legs[+i] !== undefined){ WORK.legs[+i] = {m, changed: true}; workRender(); toast("Swapped. See Your combo at the top"); } return; }
+  const sa = e.target.closest("[data-workswapall]");
+  if (sa){ for (const [i, key] of JSON.parse(decodeURIComponent(sa.dataset.workswapall))){ const m = byKey.get(key); if (m) WORK.legs[+i] = {m, changed: true}; } workRender(); toast("Swaps made. See Your combo at the top"); document.getElementById("workbox").scrollIntoView({behavior: "smooth"}); return; }
+  const d = e.target.closest("[data-workdel]"); if (d){ WORK.legs[+d.dataset.workdel] = null; workRender(); return; }
+  if (e.target.closest("[data-workreset]")){ WORK.legs = WORK.orig.map(x => x && Object.assign({}, x)); workRender(); return; }
+  if (e.target.closest("[data-workuse]")){ slip = WORK.legs.filter(x => x && x.m).map(x => x.m.key); saveSlip(); state.tab = "slip"; render(); window.scrollTo({top: 0}); toast("Your combo is in My combo: tap Open this game on each leg"); }
+});
 function checkTicket(text){
   const T = parseTicket(text);
   if (!T.legs.length) return `<div class="empty">Primo couldn't find any bets in that. Put one bet per line with its odds, like <b>49ers -7 -110</b> or <b>Rays ML -149</b>.</div>`;
@@ -2226,7 +2253,9 @@ function checkTicket(text){
   const fairMult = 1/all;
   const stakeN = T.risk || state.stake || 10;
   const tg = new Set(rs.map(r => r.g).filter(Boolean));
-  for (const r of rs){ if (r.take && r.take.flip) r.take.flipM = flipMarket(r); }
+  rs.forEach((r, i) => r.idx = i);
+  for (const r of rs){ if (r.take && r.take.flip){ r.take.flipM = flipMarket(r); r.take.idx = r.idx; } }
+  WORK.stake = stakeN; WORK.orig = rs.map(r => ({m: legMarket(r), text: r.leg.raw})); WORK.legs = WORK.orig.map(x => Object.assign({}, x));
   for (const r of rs){ r.ticketGames = tg; r.inCombo = rs.length > 1 && !!r.leg.kalshi; try { r.swaps = swapIdeas(r); } catch (e) { r.swaps = null; } }
   const legHTML = rs.map((r, i) => `<article class="game" style="--c:var(--s-other);padding:12px 14px;margin-bottom:10px">
       <div class="gtitle">${i + 1}. ${esc(r.leg.raw)}</div>
@@ -2262,7 +2291,7 @@ function checkTicket(text){
   adds.sort((a, b) => b[0].p - a[0].p);
   const addHTML = adds.slice(0, 3).map(([m, l]) => `<li><b>${esc(m.pick)}</b> — ${esc(m.g.title)}, ${esc(m.g.leagueName)}, ${fmtWhen(m.g)}. Kalshi ${TK.pct(m.p)}. ${esc(l.why || l.text || "")}</li>`).join("");
   const exp = mult ? all*mult - 1 : null;
-  return `<article class="game" style="--c:var(--s-other);padding:14px 16px;margin-bottom:12px">
+  return `<div id="workbox">${workHTML()}</div><article class="game" style="--c:var(--s-other);padding:14px 16px;margin-bottom:12px">
       <div class="gtitle">Primo's check: ${rs.length}-leg ${rs.length > 1 ? "parlay" : "bet"}${T.expected === rs.length ? " ✅ all legs found" : ""}</div>${missingNote}
       ${unpriced === rs.length ? `<p style="margin:8px 0;font-size:17px"><b>Primo couldn't find ${rs.length > 1 ? "these games" : "this game"}</b>, so it can't give a chance yet. Check the names below; you can fix them in the box and tap Check my bet again.</p>` : `<p style="margin:8px 0;font-size:18px"><b>${rs.length === 1 ? "Chance it hits" : `Chance all ${rs.length} hit`}: about ${TK.pct(all)}</b> (roughly 1 in ${Math.max(1, Math.round(1/all))})${unpriced ? ` — not counting ${unpriced} bet${unpriced > 1 ? "s" : ""} Primo couldn't price` : ""}</p>`}
       ${rs.length >= 6 ? `<p style="margin:6px 0">⚠️ ${rs.length} legs: even when every leg is likely, they all have to hit. One upset loses the whole combo.</p>` : ""}
