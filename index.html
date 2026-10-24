@@ -1332,7 +1332,7 @@ function buildOtherTake(m){
     if (o && fw(t) - fw(o) >= 2) pros.push(`${t.short || t.name} are hotter (won ${fw(t)} of their last 5, ${o.short || o.name} won ${fw(o)}).`); else if (o && fw(o) - fw(t) >= 2) cons.push(`${o.short || o.name} are hotter (won ${fw(o)} of their last 5, ${t.short || t.name} won ${fw(t)}).`);
     const od = f.odds || {};
     const wins = /wins by over\s+([\d.]+)/i.exec(m.label);
-    if (wins && od.line){ const bl = /^(\S+)\s+([+-]?\d+(?:\.\d)?)$/.exec(od.line); if (bl){ const fav = f.teams.find(x => ffold(x.abbr) === ffold(bl[1])); if (fav){ const exp = (fav === t ? 1 : -1) * -(+bl[2]); if (exp - +wins[1] >= 2) pros.push(`Sportsbooks expect ${t.short || t.name} to win by about ${exp}, more than the ${wins[1]} needed.`); else if (+wins[1] - exp >= 2) cons.push(`Sportsbooks expect ${t.short || t.name} to win by only about ${Math.max(0, exp)}, less than the ${wins[1]} needed.`); } } }
+    if (wins && od.line){ const bl = /^(\S+)\s+([+-]?\d+(?:\.\d)?)$/.exec(od.line); if (bl){ const fav = f.teams.find(x => ffold(x.abbr) === ffold(bl[1])); if (fav){ const exp = (fav === t ? 1 : -1) * -(+bl[2]); if (exp - +wins[1] >= 2) pros.push(`Sportsbooks expect ${t.short || t.name} to win by about ${exp}, more than the ${wins[1]} needed.`); else if (+wins[1] - exp >= 2) cons.push(exp <= 0 ? `Sportsbooks expect ${t.short || t.name} to ${exp < 0 ? "lose by about " + (-exp) : "play a toss-up"}, so winning by more than ${wins[1]} would take an upset.` : `Sportsbooks expect ${t.short || t.name} to win by only about ${exp}, less than the ${wins[1]} needed.`); } } }
   }
   // a team's own points ("Mississippi St. over 16.5 points scored")
   const tt = /wins by/i.test(m.label) ? null : /over\s+([\d.]+)\s+(points|runs|goals)/i.exec(m.label);
@@ -2136,14 +2136,51 @@ function replacements(){   // solid bets from other games Primo likes (✅ Keep,
   REPL = out.sort((a, b) => b.p * b.mult - a.p * a.mult || b.p - a.p);
   return REPL;
 }
+
+// teammates with a better shot at the same kind of player bet ("1+ touchdowns", "receiving yards"...)
+function teammateIdea(r, cur){
+  const lab = (r.km && r.km.label) || r.kname || ""; const mm = /^([^:]+):\s*(\d+)\+?\s*(.+)$/.exec(lab); if (!mm || !r.g || started(r.g)) return null;
+  const me = mm[1].trim(), n = +mm[2], stat = ffold(mm[3]).trim(), team = PTEAM.get(ffold(me));
+  if (!team) return null;
+  const opts = r.g.markets.filter(m => { const x = /^([^:]+):\s*(\d+)\+?\s*(.+)$/.exec(m.label); if (!x || isNaN(m.p) || !kMult(m)) return false;
+    const who = x[1].trim(); if (ffold(who) === ffold(me) || PTEAM.get(ffold(who)) !== team) return false;
+    if (ffold(x[3]).trim() !== stat || +x[2] !== n) return false;
+    const inj = playerInjury(m); if (inj && /out|doubtful/i.test(inj.status)) return false;
+    if (m.p < cur.p + .05) return false; const op = opOf(m); return !op || op.v !== "drop"; }).sort((a, b) => b.p - a.p);
+  return opts[0] ? {m: opts[0], p: opts[0].p, mult: kMult(opts[0]), mate: true, me} : null;
+}
+// why Primo suggests a swap, in plain words
+function swapWhy(r, o){
+  const m = o.m, g = m.g, f = g.facts, bits = [];
+  const sp = /^(.+?) wins by over ([\d.]+) (points|runs|goals)/i.exec(m.label), tot = /^(?:full game:\s*)?over\s+([\d.]+)\s+(points|runs|goals)/i.exec(m.label);
+  const od = f && f.odds || {};
+  if (m.noOf && od.line){ bits.push(`Sportsbooks' line: ${od.line}. ${niceName(g.sport, m.opp)} covers if they win or lose by ${Math.floor(m.line)} or fewer.`); }
+  else if (sp && od.line){ const bl = /^(\S+)\s+([+-]?\d+(?:\.\d)?)$/.exec(od.line); const fav = bl && f.teams.find(x => ffold(x.abbr) === ffold(bl[1])); const t = f.teams.find(x => teamIn(x, sp[1]));
+    if (fav && t){ const exp = (fav === t ? 1 : -1) * -(+bl[2]), need = +sp[2];
+      const T = t.short || t.name;
+      if (exp <= 0) bits.push(`Sportsbooks expect ${T} to ${exp < 0 ? `lose by about ${-exp}` : "play a toss-up"}, so winning by more than ${need} would be an upset win. That's why it pays more.`);
+      else bits.push(exp > need + 1.5 ? `Sportsbooks expect ${t.short || t.name} to win by about ${exp}, more than the ${need} needed.` : exp >= need - 1.5 ? `Sportsbooks expect ${t.short || t.name} to win by about ${Math.max(0, exp)}, right around the ${need} needed, so it's close.` : `Sportsbooks expect ${t.short || t.name} to win by about ${Math.max(0, exp)}, so winning by more than ${need} needs a bigger win than expected. That's why it pays more.`); } }
+  else if (tot && od.total != null){ const X = +tot[1], d = od.total - X; bits.push(d >= 2 ? `Sportsbooks expect about ${od.total} total ${tot[2]}, above the ${X} needed.` : d <= -2 ? `Sportsbooks expect about ${od.total} total ${tot[2]}, so going over ${X} needs a higher-scoring game than expected. That's why it pays more.` : `Sportsbooks expect about ${od.total} total ${tot[2]}, right around ${X}.`); }
+  if (o.mate){
+    const notes = (g.research && g.research.players) || {}, a = notes[o.me], b = notes[m.label.split(":")[0].trim()];
+    bits.push(`Same team, same bet: Kalshi gives ${m.label.split(":")[0].trim()} a better chance (${TK.pct(m.p)}) than ${o.me} (${TK.pct(r.chance)}).`);
+    if (b && (b.usage || b.note)) bits.push(`${m.label.split(":")[0].trim()}: ${b.usage || b.note}`);
+    if (a && a.usage) bits.push(`${o.me}: ${a.usage}`);
+  }
+  const op = opOf(m);
+  if (op){ const why = (op.v === "keep" || op.v === "okay") ? op.pros : op.cons; bits.push(`Primo rates it ${op.badge}${why.length ? ": " + why.slice(0, 2).join(" ") : "."}`); }
+  if (/1st half|first half/i.test(m.label)) bits.push("1st half = the score at halftime (1st and 2nd quarters in football and basketball); a tie at halftime loses.");
+  return bits.join(" ");
+}
 function swapIdeas(r){
   const cur = {p: r.chance, mult: legMult(r)}; if (cur.p == null || !cur.mult) return null;
-  const opts = sameGameOptions(r), ideas = {};
+  const opts = sameGameOptions(r).filter(o => { const op = opOf(o.m); return !op || op.v !== "drop"; }), ideas = {};   // never suggest a bet Primo itself would drop
   const val = o => o.p * o.mult;   // average return per $1
   const safer = opts.filter(o => o.p >= cur.p + .08 && o.p <= Math.min(.9, cur.p + .32) && o.mult >= 1.12).sort((a, b) => b.mult - a.mult)[0];
   const same = opts.filter(o => Math.abs(o.p - cur.p) <= .06 && o.mult >= cur.mult * 1.06).sort((a, b) => b.mult - a.mult)[0];
   const bigger = opts.filter(o => o.mult >= cur.mult * 1.35 && o.p >= Math.max(.15, cur.p * .55)).sort((a, b) => val(b) - val(a) || b.p - a.p)[0];
   if (safer) ideas.safer = safer; if (same) ideas.same = same; if (bigger) ideas.bigger = bigger;
+  { const mate = teammateIdea(r, cur); if (mate) ideas.mate = mate; }
   if (r.take && (r.take.v === "drop" || r.take.v === "risky")){
     const used = r.g;
     const rep = replacements().find(o => o.m.g !== used && !(r.ticketGames || new Set()).has(o.m.g) && o.p >= cur.p + .1);
@@ -2154,11 +2191,12 @@ function swapIdeas(r){
 function swapHTML(r, stake){
   const s = r.swaps; if (!s) return "";
   const win = mlt => TK.usd(stake * (mlt - 1));
-  const line = (icon, title, o, extra) => `<li>${icon} <b>${title}:</b> ${esc(o.m.pick)}${o.m.g !== r.g ? ` <span class="muted">(${esc(o.m.g.title)}, ${esc(o.m.g.leagueName)}, ${esc(fmtWhen(o.m.g))})</span>` : ""} — <b>${TK.pct(o.p)}</b> chance, $${stake} wins about <b>${win(o.mult)}</b>${extra ? ` · ${esc(extra)}` : ""}${swapBtn(r.idx, o.m)}${openBtns(o.m)}</li>`;
+  const line = (icon, title, o, extra) => `<li>${icon} <b>${title}:</b> ${esc(o.m.pick)}${o.m.g !== r.g ? ` <span class="muted">(${esc(o.m.g.title)}, ${esc(o.m.g.leagueName)}, ${esc(fmtWhen(o.m.g))})</span>` : ""} — <b>${TK.pct(o.p)}</b> chance, $${stake} wins about <b>${win(o.mult)}</b>${extra ? ` · ${esc(extra)}` : ""}${swapBtn(r.idx, o.m)}${openBtns(o.m)}${(w => w ? `<br><span class="muted" style="font-size:.92em">Why: ${esc(w)}</span>` : "")(swapWhy(r, o))}</li>`;
   const L = [];
   if (s.ideas.safer) L.push(line("🛡️", "Safer", s.ideas.safer));
   if (s.ideas.same) L.push(line("💵", "Same risk, more money", s.ideas.same));
   if (s.ideas.bigger) L.push(line("🚀", "Bigger payout (more risk)", s.ideas.bigger));
+  if (s.ideas.mate) L.push(line("👥", "Teammate with a better shot", s.ideas.mate));
   if (s.ideas.replace) L.push(line("🔁", "Replace with a solid leg from another game", s.ideas.replace, s.ideas.replace.why));
   return `<div style="margin:8px 0;padding:10px 12px;border-radius:12px;background:rgba(46,160,67,.08)"><b>💡 Swap ideas</b> <span class="muted">(yours: ${TK.pct(s.cur.p)} chance, $${stake} wins about ${win(s.cur.mult)})</span><ul style="margin:4px 0 0;padding-left:18px">${L.join("")}</ul><span class="muted" style="font-size:.9em">Payouts use Kalshi's prices; a sportsbook's will be a little different.</span></div>`;
 }
