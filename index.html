@@ -333,7 +333,7 @@ const TYPES = [["winner","Winner"],["spread","Spread"],["total","Over / Under"],
 const MONTHS = {JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11};
 const TIERS = {
   primo:  {name:"Primo's picks", lo:.25, hi:.97, sort:"p", liked:true, blurb:"Bets Primo's research likes first, then the bets Primo rates ✅ Keep with the best value: winners, spreads, totals, team totals and player bets from every sport you picked."},
-  best:   {name:"Best value", lo:.60, hi:.90, sort:"score", blurb:"Primo's smartest mix: likely bets (60–90%) that are cheaper on Kalshi than at the sportsbooks, liked by Primo's research, or that the money is moving toward. All legs point the same way, so they tend to win together."},
+  best:   {name:"Best value", lo:.60, hi:.90, sort:"score", blurb:"Primo's smartest mix: likely bets (60–90%) that are cheaper on Kalshi than the sportsbooks' fair price (winners, spreads and totals), rated well by Primo, or that the money is moving toward. Each combo shows its expected return."},
   safe:   {name:"Safe",   lo:.80, hi:.97, sort:"p",   blurb:"Biggest favorites. Smallest payout, best chance."},
   middle: {name:"Middle", lo:.58, hi:.82, sort:"score", blurb:"Solid favorites with a few closer calls, edges first."},
   high:   {name:"High risk", lo:.30, hi:.60, sort:"score", blurb:"Close games and underdogs for a big payout, picking the ones with an edge first (cheaper than the sportsbooks, liked by Primo, or money moving in). Expect most of these to miss."}
@@ -771,7 +771,8 @@ const comboOK = m => !COMBO_FAMILIES.test(m.series) || COMBO_OK.has(m.series);
 // "Best value" score: real edges first (cheaper than sportsbooks, research likes it, money moving in), then the likelier bet
 function smartScore(m){
   let s = 0;
-  if ((m.value || 0) >= 3) s += 3; else if ((m.value || 0) <= -4) s -= 3;
+  const vT = m.valueTh || (m.valueEst ? 5 : 3);   // spread/total estimates need a bigger gap than real sportsbook prices
+  if ((m.value || 0) >= vT) s += 3; else if ((m.value || 0) <= -(vT + 1)) s -= 3;
   if (likedBy(m)) s += 3;
   if (m.move >= 3) s += 1.5; else if (m.move <= -6) s -= 3;
   if (m.vol < 100) s -= 1;
@@ -808,7 +809,7 @@ function candidatesFor(tierKey){
   const key = t.sort === "score" ? (a,b) => smartScore(b) - smartScore(a) || b.p - a.p : t.sort === "p" ? (a,b) => b.p - a.p || b.vol - a.vol : (a,b) => b.vol - a.vol;
   // bets Primo's research likes go first, then bets the money is moving toward; bets the money is leaving drop to the back
   const mv = m => m.move >= 3 ? 1 : m.move <= -6 ? -1 : 0;
-  const vl = m => (m.value || 0) >= 3 ? 1 : (m.value || 0) <= -5 ? -1 : 0;   // cheaper on Kalshi than at the sportsbooks = value
+  const vl = m => (m.value || 0) >= (m.valueTh || 3) ? 1 : (m.value || 0) <= -(m.valueTh || 4) - 1 ? -1 : 0;   // cheaper on Kalshi than at the sportsbooks = value
   if (t.sort === "score") inRange.sort(key);
   else inRange.sort((a,b) => (likedBy(b) ? 1 : 0) - (likedBy(a) ? 1 : 0) || vl(b) - vl(a) || mv(b) - mv(a) || key(a,b));   // bets Primo's research likes go first
   // then Primo's opinion decides: the top of the list gets a full check, ❌ Drop bets leave Safe/Middle/Best value
@@ -1048,6 +1049,28 @@ for (const g of games){
     else { const t = f.teams.find(t => teamIn(t, m.label)); if (t) book = t.home ? f.odds.home : f.odds.away; }
     if (book != null && !isNaN(m.p)){ m.book = book; m.value = Math.round(book - m.p*100); }
   }
+  fairFromBooks(g, f);
+}
+
+// Fair chance for spreads and totals from the sportsbooks' line and total (an estimate): finds bets that are cheaper on Kalshi.
+function fairFromBooks(g, f){
+  const od = f.odds || {}; if (od.total == null && !od.line) return;
+  const ncdf = z => { const t = 1/(1+.2316419*Math.abs(z)), d = .3989423*Math.exp(-z*z/2); const p = d*t*(.3193815+t*(-.3565638+t*(1.781478+t*(-1.821256+t*1.330274)))); return z > 0 ? 1-p : p; };
+  const college = /college/i.test(f.league);
+  const SD = {Football: college ? 16 : 13.5, Basketball: college ? 11 : 12}[g.sport];
+  const TSD = {Football: college ? 16 : 13.5, Basketball: college ? 15 : 18, Baseball: 4.4}[g.sport];
+  const poissonOver = (mean, X) => { let p = 0, term = Math.exp(-mean); for (let k = 0; k <= Math.floor(X); k++){ p += term; term *= mean/(k+1); } return 1 - p; };
+  // expected margin for each team from the sportsbooks' spread (MLB/NHL lines are money lines, so no spread estimate there)
+  const bl = /^(\S+)\s+([+-]?\d+(?:\.\d)?)$/.exec(od.line || ""), fav = bl && Math.abs(+bl[2]) < 60 ? f.teams.find(x => ffold(x.abbr) === ffold(bl[1]) || ffold(x.short || "") === ffold(bl[1])) : null;
+  const set = (m, fair, th) => { if (isNaN(m.p) || !(fair > 0 && fair < 1)) return; m.fair = fair; m.valueEst = true; m.valueTh = th; m.value = Math.round((fair - m.p)*100); };
+  for (const m of g.markets){
+    if (/(1H|2H|1Q|2Q|3Q|4Q|F3|F5|F7|1P|2P|3P)/.test(m.series) || m.noOf) continue;
+    const sp = /^(.+?) wins by over ([\d.]+) (points|runs|goals)$/i.exec(m.label);
+    if (sp && fav && SD){ const t = f.teams.find(x => teamIn(x, sp[1])); if (t){ const mu = (fav === t ? 1 : -1) * -(+bl[2]); set(m, Math.max(.01, 1 - ncdf((+sp[2] - mu)/SD) - .02), 7); } continue; }   // checked against Kalshi: spreads ran ~2 points high, so correct and ask for a bigger gap
+    const tot = /^(?:full game:\s*)?over\s+([\d.]+)\s+(points|runs|goals)/i.exec(m.label);
+    if (tot && od.total != null){ const X = +tot[1]; set(m, (g.sport === "Soccer" || g.sport === "Hockey") ? poissonOver(od.total, X) : TSD ? 1 - ncdf((X - od.total)/TSD) : null, 5); }
+  }
+  for (const m of g.markets) if (m.noOf && m.noOf.fair != null){ m.fair = 1 - m.noOf.fair - .02; m.valueEst = true; m.valueTh = 7; m.value = Math.round((m.fair - m.p)*100); }
 }
 const injTxt = r => `${r.player} (${r.team}${r.pos ? ", " + r.pos : ""}): <b>${r.status}</b>${r.injury ? ` (${esc(r.injury.toLowerCase())})` : ""}`;
 function factsHTML(g){
@@ -1401,6 +1424,7 @@ function legWhy(m, tier, legs){
   const r = m.g.research, p = Math.round(m.p*100), t = tier && TIERS[tier];
   const pts = [];
   pts.push(`Kalshi traders give this a <b>${p}%</b> chance. A Yes costs ${isNaN(m.ask)?"—":Math.round(m.ask*100)+"¢"} and pays $1 if it hits.`);
+  if (m.fair != null && m.book == null) pts.push(m.value >= (m.valueTh || 5) ? `✅ <b>Good value:</b> from the sportsbooks' ${/over/i.test(m.label) ? "total" : "spread"}, the fair chance is about ${Math.round(m.fair*100)}%, but Kalshi prices it at ${Math.round(m.p*100)}%, so it's cheaper here.` : m.value <= -(m.valueTh || 5) - 1 ? `⚠️ <b>Pricey:</b> from the sportsbooks' ${/over/i.test(m.label) ? "total" : "spread"}, the fair chance is about ${Math.round(m.fair*100)}%, but Kalshi prices it at ${Math.round(m.p*100)}%.` : `Fair price: the sportsbooks' ${/over/i.test(m.label) ? "total" : "spread"} puts this at about ${Math.round(m.fair*100)}%, close to Kalshi's ${Math.round(m.p*100)}%.`);
   if (m.book != null) pts.push(m.value >= 3 ? `✅ <b>Good value:</b> the sportsbooks (DraftKings) give this ${m.book}%, but Kalshi prices it at ${Math.round(m.p*100)}%, so it's cheaper here.` : m.value <= -3 ? `Sportsbooks (DraftKings) give this only ${m.book}%, less than Kalshi's ${Math.round(m.p*100)}%, so it's on the expensive side here.` : `Sportsbooks (DraftKings) agree: they give this about ${m.book}%.`);
   if (m.move >= 3) pts.push(`📈 The price went <b>up ${m.move} points</b> in the last day, so money is moving toward this bet.`);
   else if (m.move <= -3) pts.push(`📉 The price went <b>down ${-m.move} points</b> in the last day, so money is moving away from this bet. Be careful.`);
@@ -1429,10 +1453,17 @@ function legWhy(m, tier, legs){
   const likeLine = liked ? `<div class="legnote like">✓ Primo likes this bet: ${esc(liked.why || liked.text)}</div>` : "";
   return `${clash}${likeLine}<details class="legwhy"><summary>Why Primo picked this · ${p}% chance · ${tag}</summary><p class="whyh">The numbers</p><ul>${pts.map(x=>`<li>${x}</li>`).join("")}</ul>${res}</details>`;
 }
+function evHTML(legs, st){   // expected return per bet, using the sportsbooks' fair chances where Primo has them
+  const cost = comboCost(legs); if (!(cost > 0)) return "";
+  const fairOf = m => m.book != null ? m.book/100 : m.fair != null ? m.fair : m.p;
+  const n = legs.filter(m => m.book != null || m.fair != null).length; if (!n) return "";
+  const fp = legs.reduce((a, m) => a * fairOf(m), 1), ev = st * fp / cost - st;
+  return `<p class="stakenote" style="margin:6px 0 0"><b>Expected return:</b> ${ev >= 0 ? "+" : "−"}${money(Math.abs(ev))} per ${money(st)} on average (${n} of ${legs.length} leg${legs.length > 1 ? "s" : ""} checked against the sportsbooks). ${ev >= 0 ? "✅ Priced in your favor." : ev > -st*.15 ? "About a normal house cut." : "⚠️ Expensive for its chance: look for cheaper legs."}</p>`;
+}
 function totalsHTML(legs){
   const p = comboP(legs), cost = comboCost(legs), st = state.stake;
   const back = cost > 0 ? st / cost : NaN;
-  return `<div class="totals"><div><span class="k">${legs.length === 1 ? "Chance it hits" : "All legs hit"}</span><span class="v">${pctTxt(p)}</span><span class="s">about 1 in ${oneIn(p)}</span></div><div><span class="k">${money(st)} pays about</span><span class="v">${payTxt(cost, st)}</span><span class="s">${back > 0 ? `profit about ${money(back - st)} · ` : ""}before Kalshi's fee</span></div></div><p class="stakenote">Based on prices as of ${esc(D.asof)}. Change the bet amount above to see other payouts; check the live price on Kalshi before you place it.</p>`;
+  return `<div class="totals"><div><span class="k">${legs.length === 1 ? "Chance it hits" : "All legs hit"}</span><span class="v">${pctTxt(p)}</span><span class="s">about 1 in ${oneIn(p)}</span></div><div><span class="k">${money(st)} pays about</span><span class="v">${payTxt(cost, st)}</span><span class="s">${back > 0 ? `profit about ${money(back - st)} · ` : ""}before Kalshi's fee</span></div></div><p class="stakenote">Based on prices as of ${esc(D.asof)}. Change the bet amount above to see other payouts; check the live price on Kalshi before you place it.</p>${evHTML(legs, st)}`;
 }
 function filterSummary(){
   const w = {today:"Today",tomorrow:"Tomorrow",weekend:"This weekend",week:"Next 7 days",next:"Next week",all:"All upcoming"}[state.when];
