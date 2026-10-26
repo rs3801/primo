@@ -315,7 +315,7 @@ header.top .hint{color:#FFB52E;border-color:rgba(255,181,46,.6);background:rgba(
 <footer class="foot">Primo is an independent tool for personal use. It is not affiliated with, endorsed by or sponsored by Kalshi or any league or team. Market names and prices are shown only so you can find the same bets yourself. Chances are market estimates, not guarantees.</footer>
 <div class="toast" id="toast" role="status" hidden></div>
 
-<script>(function(){var v=Date.now();document.write('<script src="data/prices.js?v='+v+'"><\/script><script src="data/research.js?v='+v+'"><\/script><script src="data/scorecard.js?v='+v+'"><\/script><script src="data/report.js?v='+v+'"><\/script><script src="data/facts.js?v='+v+'"><\/script>')})();</script>
+<script>(function(){var v=Date.now();document.write('<script src="data/prices.js?v='+v+'"><\/script><script src="data/research.js?v='+v+'"><\/script><script src="data/scorecard.js?v='+v+'"><\/script><script src="data/report.js?v='+v+'"><\/script><script src="data/sharp.js?v='+v+'"><\/script><script src="data/facts.js?v='+v+'"><\/script>')})();</script>
 
 <script>
 (function(){
@@ -781,7 +781,23 @@ function smartScore(m){
 }
 // Primo's full judgment on a bet: its opinion (record, form, ranking, injuries, head-to-head...), value vs the sportsbooks, research, money moves
 const VERDICT_W = {keep: 2.5, okay: 1, risky: -1, drop: -4};
-function opOf(m){ if (m._op === undefined){ try { m._op = opinionFor(m) || null; } catch (e) { m._op = null; } } return m._op; }
+function opOf(m){ if (m._op === undefined){ try { m._op = sharpAdjust(m, opinionFor(m) || null); } catch (e) { m._op = null; } } return m._op; }
+// the sharp price check: Pinnacle's fair chance vs what a Yes costs on Kalshi. A real edge moves the verdict up a step, overpaying moves it down.
+const V_UP = {drop: ["risky", "🤔 Risky"], risky: ["okay", "👍 Okay"], okay: ["keep", "✅ Keep"]}, V_DN = {keep: ["okay", "👍 Okay"], okay: ["risky", "🤔 Risky"]};
+function sharpAdjust(m, op){
+  if (!op || !m.sharp || m.fair == null) return op;
+  const c = isNaN(m.ask) ? m.p : m.ask, e = m.fair - c, F = Math.round(m.fair*100), C = Math.round(c*100);
+  if (e >= .03){
+    op.pros = [`💰 Real edge: Pinnacle (the sportsbook the pros bet at) gives this ${F}%, and Kalshi sells it for ${C}¢.`].concat(op.pros || []);
+    const up = (op.v !== "drop" || m.fair >= .3) && V_UP[op.v]; if (up){ op.v = up[0]; op.badge = up[1]; }
+    op.say += ` 💰 Real edge: Pinnacle has it at ${F}%, Kalshi charges ${C}¢.`; op.edge = e;
+  } else if (e <= -.04){
+    op.cons = [`💸 Overpriced: Pinnacle (the sportsbook the pros bet at) gives this ${F}%, but Kalshi charges ${C}¢.`].concat(op.cons || []);
+    const dn = V_DN[op.v]; if (dn){ op.v = dn[0]; op.badge = dn[1]; }
+    op.say += ` 💸 Overpriced: Pinnacle has it at ${F}%, Kalshi charges ${C}¢.`; op.edge = e;
+  }
+  return op;
+}
 function primoScore(m){ const op = opOf(m); return smartScore(m) + (op ? VERDICT_W[op.v] + .3 * (op.pros.length - op.cons.length) : 0); }
 function candidatesFor(tierKey){
   const t = TIERS[tierKey];
@@ -1052,6 +1068,79 @@ for (const g of games){
   fairFromBooks(g, f);
 }
 
+const BOOK_ALIAS = [   // how sportsbooks write some schools
+  [/ mississippi (?!st |state )/g, " mississippi ole miss "], [/ miami \(?fl\)? | miami florida /g, " miami hurricanes "], [/ miami \(?oh\)? | miami ohio /g, " miami redhawks "],
+  [/ connecticut /g, " connecticut uconn "], [/ southern california /g, " usc "], [/ central florida /g, " ucf "], [/ southern methodist /g, " smu "], [/ brigham young /g, " byu "],
+  [/ louisiana state /g, " lsu "], [/ pittsburgh /g, " pittsburgh pitt "], [/ nevada las vegas /g, " unlv "], [/ texas christian /g, " tcu "], [/ florida intl /g, " florida international "]];
+function aliasWords(T){ for (const [r, w] of BOOK_ALIAS) T = T.replace(r, w); return T; }
+/* ---------- sharp prices: Pinnacle, the sportsbook professional bettors use (its cut removed) ---------- */
+const SH = window.PRIMO_SHARP || {games: []};
+const shNorm = x => " " + stFold(x).replace(/[^a-z0-9 ]/g, " ").replace(/\b(fc|cf|sc|afc|club|cd|ca|ac|de|the|deportivo|university|univ)\b/g, " ").replace(/\s+/g, " ").trim() + " ";
+function shName(k, pn){   // does Kalshi's name k mean the same team/player as Pinnacle's pn?
+  const a = shNorm(k), b = shNorm(pn), A = a.trim(), B = b.trim(); if (!A || !B) return false;
+  if (A === B || (A.length >= 4 && b.includes(a)) || (B.length >= 4 && a.includes(b))) return true;
+  const ab = aliasWords(" " + A + " "), bb = aliasWords(" " + B + " ");
+  if ((A.length >= 4 && bb.includes(" " + A + " ")) || (B.length >= 4 && ab.includes(" " + B + " "))) return true;
+  const wa = A.split(" "), wb = B.split(" ");   // players: same last name and first initial ("Adithya SURESH" / "A. Suresh")
+  return wa.length >= 2 && wb.length >= 2 && wa[wa.length-1].length >= 4 && wa[wa.length-1] === wb[wb.length-1] && wa[0][0] === wb[0][0];
+}
+function shLine(list, x){   // chance at line x from Pinnacle's ladder (exact half-point line, or in between two nearby ones)
+  const L = (list || []).filter(r => Math.abs(r[0] % 1) === .5);
+  const ex = L.find(r => r[0] === x); if (ex) return ex[1];
+  let lo = null, hi = null; for (const r of L){ if (r[0] < x && (!lo || r[0] > lo[0])) lo = r; if (r[0] > x && (!hi || r[0] < hi[0])) hi = r; }
+  if (lo && hi && hi[0] - lo[0] <= 3) return lo[1] + (hi[1] - lo[1]) * (x - lo[0]) / (hi[0] - lo[0]);
+  return null;
+}
+const SH_STAT = [[/^passing yards$/, /passing yards$/], [/^rushing yards$/, /rushing yards$/], [/^receiving yards$/, /receiving yards$/], [/^receptions$/, /receptions$/],
+  [/^touchdowns$/, /total touchdowns$/], [/^passing touchdowns$/, /touchdown passes$/], [/^passing completions$/, /completions$/], [/^passing attempts$/, /pass attempts$/],
+  [/^rushing attempts$/, /rush attempts$/], [/^passing interceptions$/, /interceptions$/], [/^points$/, /total points$/], [/^rebounds$/, /rebounds$/], [/^assists$/, /assists$/],
+  [/^(threes|3 pointers|three pointers|3 pointers made|three pointers made)$/, /3 point/], [/^strikeouts$/, /strikeouts$/], [/^hits$/, /total hits$/], [/^total bases$/, /total bases$/],
+  [/^shots on goal$/, /shots on goal$/], [/^goals$/, /total goals$/], [/^saves$/, /saves$/]];
+function shProp(x, lab){
+  const pm = /^(.+?):\s*(?:(\d+)\+|over ([\d.]+))\s+(.+)$/i.exec(lab); if (!pm) return null;
+  const line = pm[2] ? +pm[2] - .5 : +pm[3], stat = shNorm(pm[4]).trim();
+  const st = SH_STAT.find(r => r[0].test(stat)); if (!st) return null;
+  for (const [d, pts, pr] of x.pr || []){
+    if (pts !== line) continue;
+    const D = shNorm(d).trim(); if (!st[1].test(D)) continue;
+    const who = D.replace(/ total .*$/, "").replace(/ (passing|rushing|receiving|pass|rush) .*$/, "");
+    if (shName(pm[1], who)) return pr;
+  }
+  return null;
+}
+for (const g of games){
+  if (!g.start || !SH.games.length) continue;
+  const names = [...new Set(g.markets.filter(m => m.type === "winner" && !/^(tie|draw)$/i.test(m.label) && !/:|wins by/i.test(m.label)).map(m => m.label).concat((g.title || "").split(/ vs | at /)))].filter(x => x && x.length > 1 && !/ game$/i.test(x));
+  const x = SH.games.filter(x => x.s === g.sport && Math.abs(new Date(x.t + ":00Z") - g.start) < 14*3600000 && (/women|wnba|wta|\bw\b/i.test(x.l) === !!g.women || g.sport === "Tennis") &&
+    names.some(n => shName(n, x.h)) && names.some(n => shName(n, x.a))).sort((a, b) => Math.abs(new Date(a.t + ":00Z") - g.start) - Math.abs(new Date(b.t + ":00Z") - g.start))[0];
+  if (!x) continue;
+  g.sharp = x;
+  const side = lab => shName(lab, x.h) ? "h" : shName(lab, x.a) ? "a" : null;
+  for (const m of g.markets){
+    if (m.noOf || isNaN(m.p) || /(1H|2H|1Q|2Q|3Q|4Q|F3|F5|F7|1P|2P|3P|SET|EXACT|GSPREAD|GTOTAL)/.test(m.series)) continue;
+    let fair = null;
+    if (m.type === "winner" && x.ml){
+      if (/^(tie|draw)$/i.test(m.label)) fair = x.ml[2] != null ? x.ml[2] : null;
+      else if (!/:|wins by/i.test(m.label)){ const sd = side(m.label); if (sd) fair = x.ml[sd === "h" ? 0 : 1]; }
+    } else {
+      const sp = /^(.+?) wins by (?:over|more than) ([\d.]+) (points|runs|goals)$/i.exec(m.label);
+      const to = /^(?:full game:\s*)?(?:will )?over ([\d.]+) (points|runs|goals)(?: be)?(?: scored)?$/i.exec(m.label);
+      const tt = /^(.+?):? over ([\d.]+) (points|runs|goals)(?: scored)?$/i.exec(m.label);
+      if (sp && x.sp && g.sport !== "Tennis"){ const sd = side(sp[1]); if (sd){ const N = +sp[2], q = shLine(x.sp, sd === "h" ? -N : N); if (q != null) fair = sd === "h" ? q : 1 - q; } }
+      else if (to && x.to && g.sport !== "Tennis") fair = shLine(x.to, +to[1]);
+      else if (tt && !/^(full game|will)/i.test(tt[1])){ const sd = side(tt[1]); if (sd) fair = shLine(sd === "h" ? x.th : x.ta, +tt[2]); }
+      else if (x.pr) fair = shProp(x, m.label);
+    }
+    if (fair != null && fair > .005 && fair < .995){ m.fair = fair; m.sharp = true; m.valueEst = false; m.valueTh = 3; m.value = Math.round((fair - (isNaN(m.ask) ? m.p : m.ask))*100); }
+  }
+  for (const m of g.markets) if (m.noOf && m.noOf.sharp){ m.fair = 1 - m.noOf.fair; m.sharp = true; m.valueEst = false; m.valueTh = 3; m.value = Math.round((m.fair - (isNaN(m.ask) ? m.p : m.ask))*100); }
+  // winner bets: Pinnacle's chances replace DraftKings' in Primo's game opinion
+  if (x.ml && g.facts){
+    const f = g.facts, od = f.odds = f.odds || {}, H = f.teams.find(t => t.home), A = f.teams.find(t => !t.home);
+    const hk = H && shName(H.name, x.h) ? 0 : H && shName(H.name, x.a) ? 1 : null;
+    if (hk != null){ od.dk = od.home != null ? [od.home, od.away] : null; od.home = Math.round(x.ml[hk]*100); od.away = Math.round(x.ml[1-hk]*100); if (x.ml[2] != null) od.draw = Math.round(x.ml[2]*100); od.book = "Pinnacle"; }
+  }
+}
 // Fair chance for spreads and totals from the sportsbooks' line and total (an estimate): finds bets that are cheaper on Kalshi.
 function fairFromBooks(g, f){
   const od = f.odds || {}; if (od.total == null && !od.line) return;
@@ -1261,7 +1350,8 @@ function buildTotalTake(m){
   const need = Math.floor(X) + 1, pros = [], cons = [];
   let chance = p, bookP = null;
   const od = f && f.odds || {};
-  if (od.total != null){
+  if (m.sharp){ bookP = m.fair; chance = (p + bookP)/2; }
+  else if (od.total != null){
     bookP = 1 - TK.ncdf((X - od.total)/TK.tsd(g.sport, f && f.league)); chance = (p + bookP)/2;
     const d = od.total - X;
     if (d >= 2.5) pros.push(`Sportsbooks expect about ${od.total} total ${unit}, well above ${X}.`);
@@ -1424,8 +1514,9 @@ function legWhy(m, tier, legs){
   const r = m.g.research, p = Math.round(m.p*100), t = tier && TIERS[tier];
   const pts = [];
   pts.push(`Kalshi traders give this a <b>${p}%</b> chance. A Yes costs ${isNaN(m.ask)?"—":Math.round(m.ask*100)+"¢"} and pays $1 if it hits.`);
-  if (m.fair != null && m.book == null) pts.push(m.value >= (m.valueTh || 5) ? `✅ <b>Good value:</b> from the sportsbooks' ${/over/i.test(m.label) ? "total" : "spread"}, the fair chance is about ${Math.round(m.fair*100)}%, but Kalshi prices it at ${Math.round(m.p*100)}%, so it's cheaper here.` : m.value <= -(m.valueTh || 5) - 1 ? `⚠️ <b>Pricey:</b> from the sportsbooks' ${/over/i.test(m.label) ? "total" : "spread"}, the fair chance is about ${Math.round(m.fair*100)}%, but Kalshi prices it at ${Math.round(m.p*100)}%.` : `Fair price: the sportsbooks' ${/over/i.test(m.label) ? "total" : "spread"} puts this at about ${Math.round(m.fair*100)}%, close to Kalshi's ${Math.round(m.p*100)}%.`);
-  if (m.book != null) pts.push(m.value >= 3 ? `✅ <b>Good value:</b> the sportsbooks (DraftKings) give this ${m.book}%, but Kalshi prices it at ${Math.round(m.p*100)}%, so it's cheaper here.` : m.value <= -3 ? `Sportsbooks (DraftKings) give this only ${m.book}%, less than Kalshi's ${Math.round(m.p*100)}%, so it's on the expensive side here.` : `Sportsbooks (DraftKings) agree: they give this about ${m.book}%.`);
+  if (m.sharp){ const c = isNaN(m.ask) ? m.p : m.ask; pts.push(m.value >= 3 ? `💰 <b>Real edge:</b> Pinnacle (the sportsbook the pros bet at) gives this ${Math.round(m.fair*100)}%, but a Yes on Kalshi costs only ${Math.round(c*100)}¢. Over many bets like this, you come out ahead.` : m.value <= -4 ? `💸 <b>Overpriced:</b> Pinnacle (the sportsbook the pros bet at) gives this only ${Math.round(m.fair*100)}%, but a Yes on Kalshi costs ${Math.round(c*100)}¢.` : `Fair price: Pinnacle (the sportsbook the pros bet at) gives this about ${Math.round(m.fair*100)}%, close to Kalshi's ${Math.round(c*100)}¢.`); }
+  else if (m.fair != null && m.book == null) pts.push(m.value >= (m.valueTh || 5) ? `✅ <b>Good value:</b> from the sportsbooks' ${/over/i.test(m.label) ? "total" : "spread"}, the fair chance is about ${Math.round(m.fair*100)}%, but Kalshi prices it at ${Math.round(m.p*100)}%, so it's cheaper here.` : m.value <= -(m.valueTh || 5) - 1 ? `⚠️ <b>Pricey:</b> from the sportsbooks' ${/over/i.test(m.label) ? "total" : "spread"}, the fair chance is about ${Math.round(m.fair*100)}%, but Kalshi prices it at ${Math.round(m.p*100)}%.` : `Fair price: the sportsbooks' ${/over/i.test(m.label) ? "total" : "spread"} puts this at about ${Math.round(m.fair*100)}%, close to Kalshi's ${Math.round(m.p*100)}%.`);
+  else if (m.book != null) pts.push(m.value >= 3 ? `✅ <b>Good value:</b> the sportsbooks (DraftKings) give this ${m.book}%, but Kalshi prices it at ${Math.round(m.p*100)}%, so it's cheaper here.` : m.value <= -3 ? `Sportsbooks (DraftKings) give this only ${m.book}%, less than Kalshi's ${Math.round(m.p*100)}%, so it's on the expensive side here.` : `Sportsbooks (DraftKings) agree: they give this about ${m.book}%.`);
   if (m.move >= 3) pts.push(`📈 The price went <b>up ${m.move} points</b> in the last day, so money is moving toward this bet.`);
   else if (m.move <= -3) pts.push(`📉 The price went <b>down ${-m.move} points</b> in the last day, so money is moving away from this bet. Be careful.`);
   { const pi = playerInjury(m); if (pi) pts.unshift(`⚠️ Official injury report: ${injTxt(pi)}. ${pi.status === "Questionable" ? "He may not play, or may be limited. Check before the game." : "He is not expected to play, so skip this bet."}`); }
@@ -1455,7 +1546,7 @@ function legWhy(m, tier, legs){
 }
 function evHTML(legs, st){   // expected return per bet, using the sportsbooks' fair chances where Primo has them
   const cost = comboCost(legs); if (!(cost > 0)) return "";
-  const fairOf = m => m.book != null ? m.book/100 : m.fair != null ? m.fair : m.p;
+  const fairOf = m => m.sharp ? m.fair : m.book != null ? m.book/100 : m.fair != null ? m.fair : m.p;
   const n = legs.filter(m => m.book != null || m.fair != null).length; if (!n) return "";
   const fp = legs.reduce((a, m) => a * fairOf(m), 1), ev = st * fp / cost - st;
   return `<p class="stakenote" style="margin:6px 0 0"><b>Expected return:</b> ${ev >= 0 ? "+" : "−"}${money(Math.abs(ev))} per ${money(st)} on average (${n} of ${legs.length} leg${legs.length > 1 ? "s" : ""} checked against the sportsbooks). ${ev >= 0 ? "✅ Priced in your favor." : ev > -st*.15 ? "About a normal house cut." : "⚠️ Expensive for its chance: look for cheaper legs."}</p>`;
@@ -1681,7 +1772,7 @@ function render(){
   updateSlipCount();
 }
 
-$("stamp").innerHTML = "Prices as of " + esc(D.asof) + (R.asof ? "<br>Injury & research news as of " + esc(R.asof) : "");
+$("stamp").innerHTML = "Prices as of " + esc(D.asof) + (SH.asof ? "<br>Pinnacle (sharp sportsbook) prices as of " + esc(SH.asof) : "") + (R.asof ? "<br>Injury & research news as of " + esc(R.asof) : "");
 (function(){ const S = window.PRIMO_SCORE; if (!S || !S.summary) return; const s = S.summary, n = s.wins + s.losses; if (!n) return;
   const el = document.createElement("details"); el.className = "scorecard"; el.style.cssText = "margin:0 0 12px;padding:10px 12px;border-radius:12px;background:var(--card,#fff);box-shadow:0 1px 3px rgba(0,0,0,.08);font-size:14px";
   el.innerHTML = `<summary><b>How Primo's picks are doing:</b> ${s.wins} won, ${s.losses} lost (${Math.round(100*s.wins/n)}%). Kalshi's prices expected about ${s.expected_wins} wins.</summary><ul style="margin:8px 0 0;padding-left:18px">${(S.recent||[]).map(p => `<li>${p.result === "win" ? "✅" : "❌"} ${esc(p.text || p.bet)} <span class="muted">(${esc(p.day)}, was ${p.price}%)</span></li>`).join("")}</ul><p class="muted" style="margin:6px 0 0">Counts every bet Primo's research liked, graded with Kalshi's official results. Beating the expected number is what matters.</p>`;
@@ -1689,7 +1780,7 @@ $("stamp").innerHTML = "Prices as of " + esc(D.asof) + (R.asof ? "<br>Injury & r
 (function(){ const P = window.PRIMO_REPORT; if (!P) return;
   const el = document.createElement("details"); el.className = "scorecard"; el.style.cssText = "margin:0 0 12px;padding:10px 12px;border-radius:12px;background:var(--card,#fff);box-shadow:0 1px 3px rgba(0,0,0,.08);font-size:14px";
   const G = P.groups || {}, all = G.all;
-  const NAMES = {keep:"👍 Keep", okay:"👌 Okay", risky:"⚠️ Risky", drop:"❌ Drop", good:"✅ Good value", pricey:"💸 Pricey", keepgood:"👍 Keep + ✅ Good value"};
+  const NAMES = {keep:"👍 Keep", okay:"👌 Okay", risky:"⚠️ Risky", drop:"❌ Drop", good:"✅ Good value", pricey:"💸 Pricey", keepgood:"👍 Keep + ✅ Good value", sharpedge:"💰 Real edge (Pinnacle)", sharpover:"💸 Overpriced (Pinnacle)"};
   const row = (lab, s) => `<tr><td>${lab}</td><td>${s.n}</td><td><b>${s.hit}%</b></td><td>${s.expected}%</td><td style="color:${s.per10 >= 0 ? "#1a7f37" : "#c62828"}"><b>${s.per10 >= 0 ? "+" : "−"}$${Math.abs(s.per10).toFixed(2)}</b></td></tr>`;
   const table = rows => `<table style="width:100%;border-collapse:collapse;margin-top:6px;font-size:13px"><tr style="text-align:left;opacity:.7"><th>Bet</th><th>Bets</th><th>Won</th><th>Kalshi expected</th><th>Per $10</th></tr>${rows}</table>`;
   const head = all ? `<b>📊 Primo's report card:</b> ${all.n} bets graded over ${P.days} day${P.days === 1 ? "" : "s"}${G.keep ? `. "Keep" bets won ${G.keep.hit}% (Kalshi expected ${G.keep.expected}%)` : ""}.` : `<b>📊 Primo's report card:</b> collecting. ${P.waiting} bets recorded, waiting for their games to finish.`;
@@ -1867,11 +1958,6 @@ function teamHit(t, T, RAW){
   for (const [k, v] of Object.entries(ALT)) if (new RegExp("(^|[^A-Za-z])" + k + "([^A-Za-z]|$)").test(RAW) && ffold(t.loc || "").startsWith(ffold(v))) best += 1200;
   return best;
 }
-const BOOK_ALIAS = [   // how sportsbooks write some schools
-  [/ mississippi (?!st |state )/g, " mississippi ole miss "], [/ miami \(?fl\)? | miami florida /g, " miami hurricanes "], [/ miami \(?oh\)? | miami ohio /g, " miami redhawks "],
-  [/ connecticut /g, " connecticut uconn "], [/ southern california /g, " usc "], [/ central florida /g, " ucf "], [/ southern methodist /g, " smu "], [/ brigham young /g, " byu "],
-  [/ louisiana state /g, " lsu "], [/ pittsburgh /g, " pittsburgh pitt "], [/ nevada las vegas /g, " unlv "], [/ texas christian /g, " tcu "], [/ florida intl /g, " florida international "]];
-function aliasWords(T){ for (const [r, w] of BOOK_ALIAS) T = T.replace(r, w); return T; }
 function findTicketGame(txt, oppTxt){
   const T = aliasWords(TK.word(txt)), O = oppTxt ? aliasWords(TK.word(oppTxt)) : null; let best = null;
   const now = Date.now();
@@ -2618,7 +2704,7 @@ window.__primoSnapshot = function(hours){
       const vT = m.valueTh || (m.valueEst ? 5 : 3);
       out.push({series: src.series, code: src.code, label: src.label, inverse: !!m.noOf, pick: m.pick || m.label, game: g.title || "", sport: g.sport, league: g.leagueName || "", type: m.type,
         start: g.start.toISOString(), p: Math.round(m.p*100), ask: Math.round(m.ask*100), value: m.value == null ? null : m.value,
-        flag: m.value == null ? "none" : m.value >= vT ? "good" : m.value <= -(vT + 1) ? "pricey" : "fair", verdict: op ? op.v : "none"});
+        src: m.sharp ? "sharp" : m.book != null ? "book" : m.valueEst ? "est" : "none", fair: m.fair == null ? null : Math.round(m.fair*1000)/10, flag: m.value == null ? "none" : m.value >= vT ? "good" : m.value <= -(vT + 1) ? "pricey" : "fair", verdict: op ? op.v : "none"});
     }
   }
   return out;

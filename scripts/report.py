@@ -102,7 +102,9 @@ def main():
     for name, f in [("keep", lambda r: r["verdict"] == "keep"), ("okay", lambda r: r["verdict"] == "okay"),
                     ("risky", lambda r: r["verdict"] == "risky"), ("drop", lambda r: r["verdict"] == "drop"),
                     ("good", lambda r: r["flag"] == "good"), ("pricey", lambda r: r["flag"] == "pricey"),
-                    ("keepgood", lambda r: r["verdict"] == "keep" and r["flag"] == "good"), ("all", lambda r: True)]:
+                    ("keepgood", lambda r: r["verdict"] == "keep" and r["flag"] == "good"),
+                    ("sharpedge", lambda r: r.get("src") == "sharp" and r.get("fair") is not None and r["fair"] - r["ask"] >= 3),
+                    ("sharpover", lambda r: r.get("src") == "sharp" and r.get("fair") is not None and r["fair"] - r["ask"] <= -4), ("all", lambda r: True)]:
         s = summ([r for r in graded if f(r)])
         if s: groups[name] = s
     by_sport = {}
