@@ -1592,12 +1592,29 @@ function legWhy(m, tier, legs){
   const likeLine = liked ? `<div class="legnote like">✓ Primo likes this bet: ${esc(liked.why || liked.text)}</div>` : "";
   return `${clash}${likeLine}<details class="legwhy"><summary>Why Primo picked this · ${p}% chance · ${tag}</summary><p class="whyh">The numbers</p><ul>${pts.map(x=>`<li>${x}</li>`).join("")}</ul>${res}</details>`;
 }
-function evHTML(legs, st){   // expected return per bet, using the sportsbooks' fair chances where Primo has them
+function evHTML(legs, st){   // expected return per bet, and what each leg adds or costs, using the fairest price Primo has for each leg
   const cost = comboCost(legs); if (!(cost > 0)) return "";
   const fairOf = m => m.sharp ? m.fair : m.book != null ? m.book/100 : m.fair != null ? m.fair : m.p;
-  const n = legs.filter(m => m.book != null || m.fair != null).length; if (!n) return "";
+  const srcOf = m => m.sharp ? "Pinnacle" : m.book != null ? "DraftKings" : m.fair != null ? "sportsbook estimate" : "Kalshi middle price";
+  const costOf = m => isNaN(m.ask) ? m.p : m.ask;
+  const n = legs.filter(m => m.sharp || m.book != null || m.fair != null).length;
   const fp = legs.reduce((a, m) => a * fairOf(m), 1), ev = st * fp / cost - st;
-  return `<p class="stakenote" style="margin:6px 0 0"><b>Expected return:</b> ${ev >= 0 ? "+" : "−"}${money(Math.abs(ev))} per ${money(st)} on average (${n} of ${legs.length} leg${legs.length > 1 ? "s" : ""} checked against the sportsbooks). ${ev >= 0 ? "✅ Priced in your favor." : ev > -st*.15 ? "About a normal house cut." : "⚠️ Expensive for its chance: look for cheaper legs."}</p>`;
+  const rows = legs.map(m => ({m, r: fairOf(m) / costOf(m)})).filter(x => isFinite(x.r) && x.r > 0);
+  const keep = rows.reduce((a, x) => a * x.r, 1);
+  const sign = v => (v >= 0 ? "+" : "−") + Math.abs(v).toFixed(1) + "%";
+  let detail = "";
+  if (legs.length > 1 && rows.length){
+    const sorted = rows.slice().sort((a, b) => a.r - b.r), worst = sorted[0];
+    const evW = worst.r < .97 ? st * keep / worst.r - st : null;
+    detail = `<details style="margin:4px 0 0"><summary style="cursor:pointer"><b>What each leg adds or costs</b></summary>
+      <p style="margin:6px 0 4px">Each leg compares its fair chance (the best source Primo has) with what Kalshi charges for it. A leg at −3% shrinks your expected return by about 3%, and those costs multiply as you add legs. Your ${legs.length} legs together keep <b>${Math.round(keep*100)}%</b> of their fair value (100% = a fair bet).</p>
+      <ul style="margin:0;padding-left:18px">${sorted.map(x => { const v = (x.r - 1)*100; return `<li>${v >= 2 ? "✅" : v <= -4 ? "⚠️" : "•"} <b>${sign(v)}</b> ${esc(x.m.pick || x.m.label)} <span style="opacity:.7">(fair ${Math.round(fairOf(x.m)*100)}% from ${srcOf(x.m)}, costs ${Math.round(costOf(x.m)*100)}¢)</span></li>`; }).join("")}</ul>
+      ${evW != null ? `<p style="margin:6px 0 0">💡 The costliest leg is <b>${esc(worst.m.pick || worst.m.label)}</b>. Without it, expected return would be about ${evW >= 0 ? "+" : "−"}${money(Math.abs(evW))} per ${money(st)} (the payout gets smaller, but each dollar is better spent).</p>` : ""}
+      <p style="margin:6px 0 0;font-size:12.5px;opacity:.8">Legs marked "Kalshi middle price" have no sportsbook to compare against, so they only show the cost of the gap between Kalshi's buy and sell prices. Kalshi's fee comes on top.</p></details>`;
+  }
+  const head = n ? `<b>Expected return:</b> ${ev >= 0 ? "+" : "−"}${money(Math.abs(ev))} per ${money(st)} on average (${n} of ${legs.length} leg${legs.length > 1 ? "s" : ""} checked against the sportsbooks). ${ev >= 0 ? "✅ Priced in your favor." : ev > -st*.15 ? "About a normal house cut." : "⚠️ Expensive for its chance: look for cheaper legs."}` : (legs.length > 1 ? `<b>Leg costs:</b> no sportsbook prices for these legs, so Primo can only count Kalshi's buy/sell gap.` : "");
+  if (!head && !detail) return "";
+  return `<div class="stakenote" style="margin:6px 0 0">${head}${detail}</div>`;
 }
 function totalsHTML(legs){
   const p = comboP(legs), cost = comboCost(legs), st = state.stake;
