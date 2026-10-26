@@ -1,1 +1,16 @@
-sharp games 604 Counter({'Soccer': 279, 'Tennis': 116, 'Hockey': 110, 'Basketball': 85, 'Football': 8, 'Boxing': 4, 'Baseball': 2}) props 176 tennis units Counter({'Sets': 116})
+football/nfl lastFive [["Philadelphia Eagles", ["401872939", "401872963", "401872970", "401872981", "401872998"]], ["Dallas Cowboys", ["401872944", "401872960", "401872967", "401872980", "401873007"]]]
+  passing keys=['completions/passingAttempts', 'passingYards', 'yardsPerPassAttempt', 'passingTouchdowns', 'interceptions', 'sacks-sackYardsLost', 'adjQBR', 'QBRating'] labels=['C/ATT', 'YDS', 'AVG', 'TD', 'INT', 'SACKS', 'QBR', 'RTG'] ex=Jalen Hurts ['26/37', '264', '7.1', '2', '2', '3-12', '83.5', '85.9']
+  rushing keys=['rushingAttempts', 'rushingYards', 'yardsPerRushAttempt', 'rushingTouchdowns', 'longRushing'] labels=['CAR', 'YDS', 'AVG', 'TD', 'LONG'] ex=Tank Bigsby ['13', '33', '2.5', '1', '9']
+  receiving keys=['receptions', 'receivingYards', 'yardsPerReception', 'receivingTouchdowns', 'longReception', 'receivingTargets'] labels=['REC', 'YDS', 'AVG', 'TD', 'LONG', 'TGTS'] ex=DeVonta Smith ['10', '117', '11.7', '1', '22', '13']
+  fumbles keys=['fumbles', 'fumblesLost', 'fumblesRecovered'] labels=['FUM', 'LOST', 'REC'] ex=None None
+  defensive keys=['totalTackles', 'soloTackles', 'sacks', 'tacklesForLoss', 'passesDefended', 'QBHits', 'defensiveTouchdowns'] labels=['TOT', 'SOLO', 'SACKS', 'TFL', 'PD', 'QB HTS', 'TD'] ex=Jihaad Campbell ['10', '6', '0', '0', '0', '0', '0']
+  interceptions keys=['interceptions', 'interceptionYards', 'interceptionTouchdowns'] labels=['INT', 'YDS', 'TD'] ex=None None
+  kickReturns keys=['kickReturns', 'kickReturnYards', 'yardsPerKickReturn', 'longKickReturn', 'kickReturnTouchdowns'] labels=['NO', 'YDS', 'AVG', 'LONG', 'TD'] ex=None None
+  puntReturns keys=['puntReturns', 'puntReturnYards', 'yardsPerPuntReturn', 'longPuntReturn', 'puntReturnTouchdowns'] labels=['NO', 'YDS', 'AVG', 'LONG', 'TD'] ex=Britain Covey ['2', '31', '15.5', '23', '0']
+  kicking keys=['fieldGoalsMade/fieldGoalAttempts', 'fieldGoalPct', 'longFieldGoalMade', 'extraPointsMade/extraPointAttempts', 'totalKickingPoints'] labels=['FG', 'PCT', 'LONG', 'XP', 'PTS'] ex=Jake Elliott ['1/1', '100.0', '58', '3/3', '6']
+  punting keys=['punts', 'puntYards', 'grossAvgPuntYards', 'touchbacks', 'puntsInside20', 'longPunt'] labels=['NO', 'YDS', 'AVG', 'TB', 'In 20', 'LONG'] ex=Braden Mann ['2', '110', '55.0', '0', '2', '57']
+  team stats [["firstDowns", "23"], ["firstDownsPassing", "16"], ["firstDownsRushing", "5"], ["firstDownsPenalty", "2"], ["thirdDownEff", "11-18"], ["fourthDownEff", "1-1"], ["totalOffensivePlays", "72"], ["totalYards", "341"], ["yardsPerPlay", "4.7"], ["totalDrives", "8"], ["netPassingYards", "252"], ["completionAttempts", "26/37"], ["yardsPerPass", "6.3"], ["interceptions", "2"], ["sacksYardsLost", "3-12"], ["rushingYards", "89"], ["rushingAttempts", "32"], ["yardsPerRushAttempt", "2.8"], ["redZoneAttempts", "3-4"], ["totalPenaltiesYards", "4-35"], ["turnovers", "2"], ["fumblesLost", "0"], ["interceptions", "2"], ["defensiveTouchdowns", "0"], ["possessionTime", "36:25"]]
+  size 585909
+football/college-football lastFive []
+basketball/nba lastFive []
+hockey/nhl lastFive []
