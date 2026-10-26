@@ -353,12 +353,44 @@ def main():
     except Exception as e: print("tennis failed:", e); tennis = {}
     for g in games: g["espn"] = [g.pop("path", ""), g.pop("eid", "")]   # for live scores in the app
     t = datetime.datetime.now(PT)
-    out = {"tennis": tennis, "players": players, "asof": t.strftime("%a, %b ") + str(t.day) + ", " + t.strftime("%I:%M %p").lstrip("0") + " PT", "games": games, "injuries": inj}
+    try: news = injury_news(inj)
+    except Exception as e: print("injury news failed:", e); news = []
+    out = {"news": news, "tennis": tennis, "players": players, "asof": t.strftime("%a, %b ") + str(t.day) + ", " + t.strftime("%I:%M %p").lstrip("0") + " PT", "games": games, "injuries": inj}
     if not games and not inj: raise SystemExit("No facts found; keeping the old file.")
     with open("data/facts.js", "w") as f:
         f.write("window.PRIMO_FACTS=" + json.dumps(out, separators=(",", ":")).replace("</", "<\\/") + ";\n")
     print(out["asof"], len(games), "games,", sum(len(v) for v in inj.values()), "injured players,",
           sum(1 for g in games if g.get("odds")), "with odds,", sum(1 for g in games if g.get("lineups")), "with lineups,", CALLS["n"], "calls")
+
+def injury_news(inj):
+    """Compare today's injury lists with what we saw before: who changed status, and when we first saw it.
+    Status order: playing (not listed) < Questionable < Doubtful < Out."""
+    path = "data/injury_seen.json"
+    try: seen = json.load(open(path)); first = False
+    except Exception: seen = {}; first = True
+    now = datetime.datetime.now(datetime.timezone.utc); stamp = now.strftime("%Y-%m-%dT%H:%MZ")
+    cur = {}
+    for team, rows in inj.items():
+        for r in rows: cur[team + "|" + r["player"]] = r
+    for k, r in cur.items():
+        old = seen.get(k)
+        if not old: seen[k] = {"s": r["status"], "p": "Playing", "t": "old" if first else stamp, "pos": r.get("pos", "")}
+        elif old["s"] != r["status"]: seen[k] = {"s": r["status"], "p": old["s"], "t": stamp, "pos": r.get("pos", "")}
+    for k, old in list(seen.items()):
+        if k not in cur and old["s"] != "Playing" and k.split("|", 1)[0] in inj:   # dropped off his team's list = cleared to play
+            seen[k] = {"s": "Playing", "p": old["s"], "t": stamp, "pos": old.get("pos", "")}
+        elif k not in cur and old["t"] != "old" and old["t"] < (now - datetime.timedelta(days=10)).strftime("%Y-%m-%dT%H:%MZ"):
+            del seen[k]
+    json.dump(seen, open(path, "w"), separators=(",", ":"))
+    cut = (now - datetime.timedelta(hours=36)).strftime("%Y-%m-%dT%H:%MZ")
+    news = []
+    for k, v in seen.items():
+        if v["t"] == "old" or v["t"] < cut: continue
+        team, player = k.split("|", 1); r = cur.get(k) or {}
+        news.append({"team": team, "player": player, "pos": r.get("pos") or v.get("pos", ""), "status": v["s"], "prev": v["p"], "when": v["t"], "note": r.get("note", "")})
+    news.sort(key=lambda x: x["when"], reverse=True)
+    print("injury news:", len(news))
+    return news[:300]
 
 if __name__ == "__main__":
     main()

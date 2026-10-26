@@ -782,9 +782,32 @@ function smartScore(m){
 // Primo's full judgment on a bet: its opinion (record, form, ranking, injuries, head-to-head...), value vs the sportsbooks, research, money moves
 const VERDICT_W = {keep: 2.5, okay: 1, risky: -1, drop: -4};
 function opOf(m){ if (m._op === undefined){ try { m._op = sharpAdjust(m, opinionFor(m) || null); } catch (e) { m._op = null; } } return m._op; }
+// fresh injury news the price may not reflect yet: bets on the hurt team go down a step, teammates' player bets get a note
+function newsAdjust(m, op){
+  const g = m.g, f = g.facts; if (!f) return;
+  const who = (/^([^:]+):/.exec(m.label) || [])[1];
+  for (const a of g.newsAlerts || []){
+    const T = a.t.short || a.t.name;
+    if (who){
+      const me = ffold(who.trim()), team = (window.PRIMO_FACTS && PRIMO_FACTS.players || {})[who.trim()];
+      if (me === ffold(a.n.player)) continue;   // his own bets already show his status
+      const pos = a.n.pos || "", fits = /Basketball/.test(g.sport) ? /points|rebounds|assists|threes|pointers/i.test(m.label) : g.sport === "Football" ? (/^(WR|TE)$/.test(pos) && /recei|reception/i.test(m.label)) || (pos === "RB" && /rush/i.test(m.label)) : false;
+      if (a.bad && a.n.status === "Out" && team === a.t.name && fits) op.pros = [`📰 With ${a.n.player} out, ${who.trim()} may get more chances.`].concat(op.pros || []);
+      continue;
+    }
+    if (!a.big || a.priced) continue;
+    const forT = teamIn(a.t, m.label) && !f.teams.some(o => o !== a.t && teamIn(o, m.label));
+    const forO = !forT && f.teams.some(o => o !== a.t && teamIn(o, m.label));
+    if (!forT && !forO) continue;
+    const hurt = a.bad ? forT : forO;
+    if (hurt){ op.cons = [`📰 ${a.n.player} news (${a.n.status === "Playing" ? "cleared to play" : a.n.status.toLowerCase()}) isn't in Kalshi's price yet, and it works against this bet.`].concat(op.cons || []); const dn = V_DN[op.v]; if (dn){ op.v = dn[0]; op.badge = dn[1]; } op.say += ` 📰 Fresh news works against this bet: ${a.n.player} is ${a.n.status === "Playing" ? "cleared to play" : a.n.status.toLowerCase()}.`; }
+    else op.pros = [`📰 ${a.n.player} news (${a.n.status === "Playing" ? "cleared to play" : a.n.status.toLowerCase()}) isn't in Kalshi's price yet, and it helps this bet.`].concat(op.pros || []);
+  }
+}
 // the sharp price check: Pinnacle's fair chance vs what a Yes costs on Kalshi. A real edge moves the verdict up a step, overpaying moves it down.
 const V_UP = {drop: ["risky", "🤔 Risky"], risky: ["okay", "👍 Okay"], okay: ["keep", "✅ Keep"]}, V_DN = {keep: ["okay", "👍 Okay"], okay: ["risky", "🤔 Risky"]};
 function sharpAdjust(m, op){
+  if (op) newsAdjust(m, op);
   if (!op || !m.sharp || m.fair == null) return op;
   const c = isNaN(m.ask) ? m.p : m.ask, e = m.fair - c, F = Math.round(m.fair*100), C = Math.round(c*100);
   if (e >= .03){
@@ -1141,6 +1164,30 @@ for (const g of games){
     if (hk != null){ od.dk = od.home != null ? [od.home, od.away] : null; od.home = Math.round(x.ml[hk]*100); od.away = Math.round(x.ml[1-hk]*100); if (x.ml[2] != null) od.draw = Math.round(x.ml[2]*100); od.book = "Pinnacle"; }
   }
 }
+/* ---------- injury news: status changes in the last 36 hours, and whether Kalshi's price has reacted ---------- */
+const NEWS = FX.news || [], RANK = {Playing: 0, Questionable: 1, Doubtful: 2, Out: 3};
+const NEXT = new Map();   // each team's next game: news belongs there
+for (const g of games) if (g.facts && g.start && !started(g)) for (const t of g.facts.teams){ const o = NEXT.get(t.name); if (!o || g.start < o.start) NEXT.set(t.name, g); }
+for (const g of games){
+  const f = g.facts; if (!f || !NEWS.length || started(g)) continue;
+  const labs = g.markets.map(m => ffold((/^([^:]+):/.exec(m.label) || [])[1] || "")).filter(Boolean);
+  for (const n of NEWS){
+    const t = f.teams.find(x => x.name === n.team); if (!t || NEXT.get(t.name) !== g) continue;
+    const d = RANK[n.status] - RANK[n.prev]; if (!d || isNaN(d)) continue;
+    const named = labs.includes(ffold(n.player)), pos = n.pos || "";
+    const key = (g.sport === "Football" && pos === "QB") || (g.sport === "Hockey" && pos === "G") || named;
+    const big = (g.sport === "Football" && pos === "QB") || (g.sport === "Hockey" && pos === "G") || (named && /Basketball/.test(g.sport));
+    if (!key || (d > 0 && RANK[n.status] < 2) || (d < 0 && RANK[n.prev] < 2)) continue;   // only to/from Doubtful or Out
+    const bad = d > 0, hrs = Math.max(1, Math.round((Date.now() - new Date(n.when)) / 3600000));
+    const wm = g.markets.find(m => m.type === "winner" && !/:|wins by|tie|draw/i.test(m.label) && teamIn(t, m.label));
+    const om = g.markets.find(m => m.type === "winner" && !/:|wins by|tie|draw/i.test(m.label) && m !== wm && f.teams.some(o => o !== t && teamIn(o, m.label)));
+    const mv = wm ? wm.move || 0 : null, T = t.short || t.name;
+    const priced = !big || mv == null || hrs > 24 || (bad ? mv <= -3 : mv >= 3);
+    let text = `📰 News ${hrs < 2 ? "in the last hour" : hrs + " hours ago"}: ${n.player} (${T}${pos ? ", " + pos : ""}) is now ${n.status === "Playing" ? "cleared to play" : n.status.toLowerCase()} (was ${n.prev === "Playing" ? "playing" : n.prev.toLowerCase()}).`;
+    if (big && mv != null && hrs <= 24) text += priced ? ` Kalshi's price on ${T} has already moved ${mv > 0 ? "up" : "down"} ${Math.abs(mv)} points, so the news looks priced in.` : ` ⚠️ Kalshi's price on ${T} has barely moved (${mv >= 0 ? "+" : ""}${mv} points in the last day), so the news may not be priced in yet.`;
+    (g.newsAlerts = g.newsAlerts || []).push({n, t, bad, big, priced, hrs, wm, om, text});
+  }
+}
 // Fair chance for spreads and totals from the sportsbooks' line and total (an estimate): finds bets that are cheaper on Kalshi.
 function fairFromBooks(g, f){
   const od = f.odds || {}; if (od.total == null && !od.line) return;
@@ -1399,6 +1446,7 @@ function injuryLines(f, g){
 }
 function contextLines(g){
   const out = [], f = g.facts;
+  for (const a of g.newsAlerts || []) out.push(a.text);
   if (f){
     for (const t of f.teams){
       const rc = (f.records || {})[t.name] || {}, fm = (f.form || {})[t.name] || [];
@@ -1793,6 +1841,16 @@ $("stamp").innerHTML = "Prices as of " + esc(D.asof) + (SH.asof ? "<br>Pinnacle 
   }
   body += `<p style="margin:8px 0 0;font-size:12.5px;opacity:.8">A robot saves what Primo thinks of each bet shortly before the game starts, then grades it with Kalshi's official result. <b>Won</b> beating <b>Kalshi expected</b> means Primo's opinion adds an edge. <b>Per $10</b> is the average win or loss if you had put $10 on every one of those bets (before Kalshi's fees). Small numbers of bets can swing a lot, so give it a couple of weeks. ${P.waiting} bets still waiting. Updated ${esc(P.asof)}.</p>`;
   el.innerHTML = `<summary>${head}</summary>${body}`;
+  const v = document.getElementById("view-build") || document.querySelector("main"); if (v) v.prepend(el); })();
+(function(){ const A = []; for (const g of games) if (!started(g)) for (const a of g.newsAlerts || []) A.push([g, a]);
+  if (!A.length) return;
+  A.sort((x, y) => (x[1].priced - y[1].priced) || (y[1].big - x[1].big) || (x[1].hrs - y[1].hrs));
+  const fresh = A.filter(([, a]) => a.big && !a.priced).length;
+  const el = document.createElement("details"); el.className = "scorecard"; el.style.cssText = "margin:0 0 12px;padding:10px 12px;border-radius:12px;background:var(--card,#fff);box-shadow:0 1px 3px rgba(0,0,0,.08);font-size:14px";
+  const when = g => g.start ? g.start.toLocaleString([], {weekday: "short", hour: "numeric", minute: "2-digit"}) : "";
+  const li = ([g, a]) => { const side = a.bad ? a.om : a.wm;
+    return `<li style="margin:6px 0"><b>${esc(g.title)}</b> <span style="opacity:.7">(${esc(g.leagueName || g.sport)}, ${esc(when(g))})</span><br>${esc(a.text)}${!a.priced && side ? `<br>Bet that gains from this: <b>${esc(side.pick || side.label)}</b> at ${Math.round(side.ask*100)}¢${openBtns(side)}` : ""}</li>`; };
+  el.innerHTML = `<summary><b>📰 Injury news (last 36 hours):</b> ${A.length} update${A.length > 1 ? "s" : ""} on games that haven't started${fresh ? `, <b>${fresh} not priced in yet</b>` : ""}.</summary><ul style="margin:8px 0 0;padding-left:18px">${A.slice(0, 25).map(li).join("")}</ul><p style="margin:8px 0 0;font-size:12.5px;opacity:.8">Primo watches the official injury reports every hour and notes when a key player's status changes (a quarterback, a goalie, or a player with his own bets on Kalshi). "Not priced in yet" means Kalshi's price on that team has barely moved since the day before, so the market may not have caught up. Double-check the news before betting. Prices can catch up fast.</p>`;
   const v = document.getElementById("view-build") || document.querySelector("main"); if (v) v.prepend(el); })();
 $("filterbox").open = true;
 buildFilters(); renderLegChips(); render();
