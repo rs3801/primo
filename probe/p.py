@@ -1,29 +1,26 @@
-import json, urllib.request
+import json, urllib.request, collections
 out = []
 def get(u):
     try:
-        r = urllib.request.urlopen(urllib.request.Request(u, headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"}), timeout=25)
+        r = urllib.request.urlopen(urllib.request.Request(u, headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"}), timeout=40)
         return r.status, json.loads(r.read())
     except Exception as e:
         return "ERR", str(e)
 def log(*a): out.append(" ".join(str(x) for x in a))
 P = "https://guest.api.arcadia.pinnacle.com/0.1"
-s, sp = get(P + "/sports"); log("sports", s, [(x["id"], x["name"], x.get("matchupCount")) for x in sp] if s == 200 else sp)
-for sid in (15, 4, 29, 33, 3, 19):
-    s, lg = get(f"{P}/sports/{sid}/leagues?all=false")
-    if s == 200: log("sport", sid, [(x["id"], x["name"], x.get("matchupCount")) for x in lg if x.get("matchupCount")][:40])
-    else: log("sport", sid, s, str(lg)[:200])
-s, m = get(P + "/leagues/889/matchups")
-if s == 200:
-    log("889 matchups", len(m)); 
-    for x in m[:6]: log(json.dumps({k: x.get(k) for k in ("id","type","units","startTime","parentId","participants","special","isLive")})[:500])
+for u in ["/sports/29/matchups?withSpecials=false", "/sports/29/markets/straight?primaryOnly=false&withSpecials=false", "/sports/33/matchups", "/sports/33/markets/straight"]:
+    s, d = get(P + u); log(u, s, len(d) if s == 200 else d[:200])
+    if s == 200 and "markets" in u: log("  keys", collections.Counter(x["key"].split(";")[0] + ";" + x["key"].split(";")[2] if len(x["key"].split(";"))>2 else x["key"] for x in d).most_common(15))
 s, m = get(P + "/leagues/889/markets/straight")
-if s == 200:
-    log("889 markets", len(m))
-    for x in m[:8]: log(json.dumps(x)[:400])
-s, d = get("https://api.actionnetwork.com/web/v1/scoreboard/nfl?period=game&bookIds=15,30,68,69,71,75,76,79,123")
-if s == 200:
-    g = d["games"][0]; log("AN game", g.get("teams") and [t["full_name"] for t in g["teams"]], g.get("start_time"))
-    for o in (g.get("odds") or [])[:12]: log("  AN", o.get("book_id"), o.get("ml_home"), o.get("ml_away"), o.get("spread_home"), o.get("total"), o.get("over"), o.get("under"))
-    log("AN keys", list(g.keys()))
+log("types", collections.Counter((x["type"], x["key"][:9], bool(x.get("isAlternate"))) for x in m).most_common(20))
+sp = [x for x in m if x["type"] == "spread"][:3]
+for x in sp: log(json.dumps(x)[:500])
+tt = [x for x in m if x["type"] == "team_total"][:2]
+for x in tt: log(json.dumps(x)[:500])
+s, mu = get(P + "/leagues/889/matchups")
+main = [x for x in mu if x["type"] == "matchup"][:2]
+for x in main: log(json.dumps(x)[:900])
+log("special categories", collections.Counter((x.get("special") or {}).get("category") for x in mu))
+log("prop units", collections.Counter(x.get("units") for x in mu if (x.get("special") or {}).get("category") == "Player Props"))
+log([ (x["special"]["description"], [p["name"] for p in x["participants"]]) for x in mu if "Touchdown" in (x.get("special") or {}).get("description","")][:5])
 open("probe.txt", "w").write("\n".join(out))
