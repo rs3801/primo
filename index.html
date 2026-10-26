@@ -315,7 +315,7 @@ header.top .hint{color:#FFB52E;border-color:rgba(255,181,46,.6);background:rgba(
 <footer class="foot">Primo is an independent tool for personal use. It is not affiliated with, endorsed by or sponsored by Kalshi or any league or team. Market names and prices are shown only so you can find the same bets yourself. Chances are market estimates, not guarantees.</footer>
 <div class="toast" id="toast" role="status" hidden></div>
 
-<script>(function(){var v=Date.now();document.write('<script src="data/prices.js?v='+v+'"><\/script><script src="data/research.js?v='+v+'"><\/script><script src="data/scorecard.js?v='+v+'"><\/script><script src="data/report.js?v='+v+'"><\/script><script src="data/sharp.js?v='+v+'"><\/script><script src="data/facts.js?v='+v+'"><\/script>')})();</script>
+<script>(function(){var v=Date.now();document.write('<script src="data/prices.js?v='+v+'"><\/script><script src="data/research.js?v='+v+'"><\/script><script src="data/scorecard.js?v='+v+'"><\/script><script src="data/report.js?v='+v+'"><\/script><script src="data/sharp.js?v='+v+'"><\/script><script src="data/players.js?v='+v+'"><\/script><script src="data/facts.js?v='+v+'"><\/script>')})();</script>
 
 <script>
 (function(){
@@ -1209,9 +1209,23 @@ function fairFromBooks(g, f){
   for (const m of g.markets) if (m.noOf && m.noOf.fair != null){ m.fair = 1 - m.noOf.fair - .02; m.valueEst = true; m.valueTh = 7; m.value = Math.round((m.fair - m.p)*100); }
 }
 const injTxt = r => `${r.player} (${r.team}${r.pos ? ", " + r.pos : ""}): <b>${r.status}</b>${r.injury ? ` (${esc(r.injury.toLowerCase())})` : ""}`;
+function usageLines(g){   // who gets the ball, and what each defense has been giving up (last 5 games)
+  const f = g.facts, out = []; if (!f || typeof teamUsage !== "function") return out;
+  for (const t of f.teams){
+    const U = teamUsage(t.name), T = t.short || t.name;
+    if (U && U.rec.length) out.push(`<b>${esc(T)} — who the quarterback looks for</b> (share of ${U.useTgt ? "targets" : "catches"}, last ${U.n} games): ${U.rec.slice(0, 4).map(x => `${esc(x.v.name)} ${Math.round(x.tShare*100)}%`).join(", ")}.${U.run.length ? ` <b>Carries:</b> ${U.run.slice(0, 3).map(x => `${esc(x.v.name)} ${Math.round(x.cShare*100)}%`).join(", ")}.` : ""}`);
+    const D = defense(t.name);
+    if (D && D.rk.pts){ const bits = [];
+      if (D.pass != null && D.rk.pass) bits.push(`${Math.round(D.pass)} passing yards (${ordN(D.rk.pass.r)} most of ${D.rk.pass.of})`);
+      if (D.rush != null && D.rk.rush) bits.push(`${Math.round(D.rush)} rushing yards (${ordN(D.rk.rush.r)} most)`);
+      bits.push(`${Math.round(D.pts)} ${g.sport === "Hockey" ? "goals" : "points"} (${ordN(D.rk.pts.r)} most of ${D.rk.pts.of})`);
+      out.push(`<b>${esc(T)} defense, last ${D.n} games:</b> gives up ${bits.join(", ")} a game.`); }
+  }
+  return out;
+}
 function factsHTML(g){
   if (!g || (!g.facts && !(g.injuries||[]).length)) return "";
-  const notes = (g.facts && g.facts.notes || []).map(n => `<li>${esc(n)}</li>`).join("");
+  const notes = (g.facts && g.facts.notes || []).map(n => `<li>${esc(n)}</li>`).join("") + usageLines(g).map(n => `<li>${n}</li>`).join("");
   const inj = (g.injuries || []).map(([team, rows]) => `<li><b>${esc(team)}:</b> ${rows.map(r => `${esc(r.player)}${r.pos ? " (" + esc(r.pos) + ")" : ""} <b>${esc(r.status)}</b>${r.injury ? " – " + esc(r.injury.toLowerCase()) : ""}`).join("; ")}</li>`).join("");
   const lu = Object.entries(g.facts && g.facts.lineups || {}).map(([t, l]) => `<li><b>${esc(t)} starting lineup:</b> ${l.map(esc).join(", ")}</li>`).join("");
   const od = g.facts && g.facts.odds && g.facts.odds.home != null ? `<li><b>Sportsbooks (${esc(g.facts.odds.book || "DraftKings")}):</b> ${g.facts.teams.map(t => `${esc(t.short || t.name)} ${t.home ? g.facts.odds.home : g.facts.odds.away}%`).join(" · ")}${g.facts.odds.draw != null ? ` · Draw ${g.facts.odds.draw}%` : ""}${g.facts.odds.total ? ` · total ${g.facts.odds.total}` : ""}</li>` : "";
@@ -1470,7 +1484,7 @@ function contextLines(g){
 }
 function withContext(k, g){
   if (!k) return k;
-  k.ctx = contextLines(g);
+  k.ctx = (k.extra || []).concat(contextLines(g));
   if (!k.ctx.length && !k.pros.length && !k.cons.length && !/no stats|odds only/i.test(k.say)) k.say += ` Primo has no stats for ${g.leagueName || "this league"} yet, so this is the odds only.`;
   return k;
 }
@@ -1480,6 +1494,112 @@ function verdictFor(chance, pros, cons){
   return sc >= 1.6 ? ["keep", "✅ Keep", "Solid leg"] : sc >= .6 ? ["okay", "👍 Okay", "Decent, with some risk"] : sc >= -.4 ? ["risky", "🤔 Risky", "Close to a coin flip"] : ["drop", "❌ Drop", "Primo would leave this out"];
 }
 // Spreads, team totals, player props, halves and everything else: who the bet depends on, their form, injuries, research and the price
+/* ---------- player numbers from recent box scores: usage (targets, carries), game logs, the opponent's defense ---------- */
+const PL = window.PRIMO_PLAYERS || {teams: {}, players: {}};
+const PLX = new Map(Object.entries(PL.players || {}).map(([n, v]) => [ffold(n), Object.assign({name: n}, v)]));
+const PSTAT = {   // Kalshi's wording -> how to read it from a game line
+  Football: [[/^receiving yards$/, r => r[2], "receiving yards", "pass"], [/^receptions$/, r => r[1], "catches", "pass"], [/^rushing yards$/, r => r[5], "rushing yards", "rush"],
+    [/^rushing attempts$/, r => r[4], "carries", "rush"], [/^passing yards$/, r => r[9], "passing yards", "pass"], [/^passing touchdowns$/, r => r[10], "touchdown passes", "pass"],
+    [/^passing completions$/, r => r[7], "completions", "pass"], [/^passing attempts$/, r => r[8], "pass attempts", "pass"], [/^passing interceptions$/, r => r[11], "interceptions", "pass"],
+    [/^touchdowns?$/, r => (r[3] == null && r[6] == null) ? null : (r[3] || 0) + (r[6] || 0), "touchdowns", "pts"], [/^rushing and receiving yards combined$/, r => (r[2] == null && r[5] == null) ? null : (r[2] || 0) + (r[5] || 0), "rushing + receiving yards", "tot"],
+    [/^longest rush$/, r => r[13], "longest run", "rush"], [/^longest reception$/, r => r[12], "longest catch", "pass"]],
+  Basketball: [[/^points$/, r => r[1], "points", "pts"], [/^rebounds$/, r => r[2], "rebounds", "reb"], [/^assists$/, r => r[3], "assists", "pts"], [/^threes$/, r => r[4], "threes", "pts"],
+    [/^steals$/, r => r[5], "steals", ""], [/^blocks$/, r => r[6], "blocks", ""], [/^points, rebounds, and assists$/, r => r[1] + r[2] + r[3], "points + rebounds + assists", "pts"], [/^steals and blocks$/, r => r[5] + r[6], "steals + blocks", ""]],
+  Hockey: [[/^goals$/, r => r[0], "goals", "ga"], [/^assists$/, r => r[1], "assists", "ga"], [/^points$/, r => r[0] == null ? null : r[0] + r[1], "points", "ga"], [/^saves$/, r => r[3], "saves", "sh"], [/^shots on goal$/, r => r[2], "shots", "sh"]]};
+function propParse(m){
+  let x = /^(.+?):\s*(\d+)\+\s+(.+)$/i.exec(m.label), who, need, stat;
+  if (x){ who = x[1]; need = +x[2]; stat = x[3]; }
+  else if ((x = /^(.+?):\s*(?:over|longest (rush|reception) over)\s+([\d.]+)\s*(.*)$/i.exec(m.label))){ who = x[1]; need = Math.floor(+x[3]) + 1; stat = x[2] ? "longest " + x[2].toLowerCase() : x[4]; }
+  else if ((x = /^(.+?):\s*double double$/i.exec(m.label))) return {who: x[1], dd: true};
+  else return null;
+  return {who: who.trim(), need, stat: stat.toLowerCase().replace(/\s+/g, " ").trim()};
+}
+const avg = a => a.reduce((x, y) => x + y, 0) / a.length;
+const ordN = n => n + (n % 10 === 1 && n % 100 !== 11 ? "st" : n % 10 === 2 && n % 100 !== 12 ? "nd" : n % 10 === 3 && n % 100 !== 13 ? "rd" : "th");
+// how a team spreads the ball: each player's share of targets (or catches) and of the team's carries
+function teamUsage(team){
+  const T = PL.teams[team]; if (!T || T.sp !== "Football") return null;
+  const ps = [...PLX.values()].filter(v => v.tm === team), N = T.g.length, tgtTot = Array(N).fill(0), recTot = Array(N).fill(0);
+  for (const v of ps) v.log.forEach((r, i) => { if (r){ tgtTot[i] += r[0] || 0; recTot[i] += r[1] || 0; } });
+  const useTgt = tgtTot.some(x => x > 0), carTot = T.g.map(x => (x.f || {}).rushingAttempts || 0);
+  const rows = ps.map(v => { let t = 0, tt = 0, c = 0, ct = 0, gp = 0;
+    v.log.forEach((r, i) => { if (!r) return; gp++; t += useTgt ? (r[0] || 0) : (r[1] || 0); tt += useTgt ? tgtTot[i] : recTot[i]; c += r[4] || 0; ct += carTot[i]; });
+    return {v, gp, tShare: tt ? t / tt : 0, tPer: gp ? t / gp : 0, cShare: ct ? c / ct : 0, cPer: gp ? c / gp : 0, pass: v.log.some(r => r && r[8] > 5)}; });
+  const rec = rows.filter(x => !x.pass && x.tShare > 0).sort((a, b) => b.tShare - a.tShare), run = rows.filter(x => !x.pass && x.cShare > 0).sort((a, b) => b.cShare - a.cShare);
+  return {useTgt, rec, run, n: N};
+}
+// how much a team's defense has given up lately, and where that ranks in its league
+function defense(team){
+  const T = PL.teams[team]; if (!T || !T.g.length) return null;
+  const al = k => { const v = T.g.map(x => (x.a || {})[k]).filter(x => x != null); return v.length ? avg(v) : null; };
+  const d = {pass: al("netPassingYards"), rush: al("rushingYards"), pts: avg(T.g.map(x => x.pa).filter(x => x != null)), shots: al("shotsTotal"), n: T.g.length};
+  const peers = Object.entries(PL.teams).filter(([, v]) => v.lg === T.lg && v.g.length >= 2);
+  const rank = (k, f) => { const vals = peers.map(([n, v]) => [n, f(v)]).filter(x => x[1] != null).sort((a, b) => b[1] - a[1]); const i = vals.findIndex(x => x[0] === team); return i < 0 ? null : {r: i + 1, of: vals.length, lgAvg: avg(vals.map(x => x[1]))}; };
+  const fa = k => v => { const a = v.g.map(x => (x.a || {})[k]).filter(x => x != null); return a.length ? avg(a) : null; };
+  d.rk = {pass: rank("pass", fa("netPassingYards")), rush: rank("rush", fa("rushingYards")), pts: rank("pts", v => { const a = v.g.map(x => x.pa).filter(x => x != null); return a.length ? avg(a) : null; }), shots: rank("shots", fa("shotsTotal"))};
+  return d;
+}
+function propInsight(m){
+  const g = m.g, f = g.facts, pp = propParse(m); if (!pp) return null;
+  const P = PLX.get(ffold(pp.who)); if (!P) return null;
+  const T = PL.teams[P.tm]; if (!T) return null;
+  const pros = [], cons = [], lines = [], nm = pp.who;
+  const played = P.log.map((r, i) => r ? {r, o: (T.g[i] || {}).o} : null).filter(Boolean), missed = P.log.length - played.length;
+  let vals = [], est = null, proj = null, hitTxt = "";
+  if (pp.dd){ vals = played.map(x => [x.r[1], x.r[2], x.r[3], x.r[5], x.r[6]].filter(v => v >= 10).length >= 2 ? 1 : 0); const h = vals.filter(Boolean).length; hitTxt = `${nm} had a double-double in ${h} of the last ${vals.length} games played.`; est = (h + 4*m.p)/(vals.length + 4); }
+  else {
+    const S = (PSTAT[g.sport] || []).find(x => x[0].test(pp.stat)); if (!S) return null;
+    vals = played.map(x => S[1](x.r)).map(v => v == null ? 0 : v);
+    if (!vals.length) return null;
+    const h = vals.filter(v => v >= pp.need).length, a = avg(vals);
+    const recent = vals.slice().reverse().slice(0, 5).map(v => Math.round(v)).join(", ");
+    hitTxt = /^longest/.test(S[2]) ? `${nm}'s ${S[2]} went ${pp.need}+ yards in ${h} of the last ${vals.length} games played (latest first: ${recent} yards).` : `${nm} reached ${pp.need}+ ${S[2]} in ${h} of the last ${vals.length} games played (latest first: ${recent}; average ${a >= 10 ? Math.round(a) : a.toFixed(1)}).`;
+    // the matchup: what this opponent gives up
+    const opp = f && f.teams.find(t => t.name !== P.tm && !teamIn(t, P.tm)), D = opp ? defense(opp.name) : null;
+    let tilt = 0, k = S[3];
+    if (D){
+      const O = opp.short || opp.name;
+      if (S[2] === "saves" && opp){ const OT = PL.teams[opp.name], sh = OT && OT.g.map(x => (x.f || {}).shotsTotal).filter(x => x != null);
+        if (sh && sh.length >= 2){ const peers = Object.values(PL.teams).filter(v => v.lg === T.lg).map(v => v.g.map(x => (x.f || {}).shotsTotal).filter(x => x != null)).filter(a => a.length >= 2).map(avg).sort((a, b) => b - a), me = avg(sh), r = peers.findIndex(x => x <= me) + 1;
+          const txt = `${O} take ${Math.round(me)} shots a game over their last ${sh.length}, the ${ordN(r)} most of the ${peers.length} ${T.lg} teams Primo tracks.`;
+          if (r <= peers.length/3){ pros.push(`Busy night likely: ${txt}`); tilt = .04; } else if (r > peers.length*2/3){ cons.push(`Quiet night likely: ${txt}`); tilt = -.04; } else lines.push(`Matchup: ${txt}`);
+          proj = a * (.5 + .5 * Math.min(1.4, Math.max(.7, me / avg(peers)))); }
+      }
+      const use = S[2] === "saves" ? null : k === "pass" ? ["pass", D.pass, "passing yards"] : k === "rush" ? ["rush", D.rush, "rushing yards"] : k === "tot" ? ["pass", D.pass + (D.rush || 0), "yards"] : k === "pts" || k === "reb" || k === "ga" ? ["pts", D.pts, g.sport === "Hockey" ? "goals" : "points"] : k === "sh" ? ["shots", D.shots, "shots"] : null;
+      const rk = use && D.rk[use[0]];
+      if (use && use[1] != null && rk && rk.of >= 6){
+        const txt = `${O} have given up ${Math.round(use[1])} ${use[2]} a game over their last ${D.n}, the ${ordN(rk.r)} most of the ${rk.of} ${T.lg} teams Primo tracks.`;
+        const third = rk.of / 3, saves = k === "sh" && S[2] === "saves";
+        if (rk.r <= third){ (saves ? cons : pros).push(`Soft matchup: ${txt}`); tilt = saves ? -.04 : .04; }
+        else if (rk.r > rk.of - third){ (saves ? pros : cons).push(`Tough matchup: ${txt}`); tilt = saves ? .04 : -.04; }
+        else lines.push(`Matchup: ${txt}`);
+        if (/yards/.test(S[2]) && use[1] > 0 && rk.lgAvg > 0) proj = a * (.5 + .5 * Math.min(1.5, Math.max(.6, use[1] / rk.lgAvg)));
+      }
+    }
+    if (proj == null) proj = a;
+    const K = /touchdown|goals|interception|steals|blocks|assists/.test(S[2]) && g.sport !== "Basketball" || /steals|blocks/.test(S[2]) ? 10 : 4;   // rare events swing a lot: trust the price more
+    est = Math.min(.97, Math.max(.03, (h + K*m.p)/(vals.length + K) + tilt));
+    // usage: who the quarterback looks for, who gets the carries
+    if (g.sport === "Football"){
+      const U = teamUsage(P.tm);
+      if (U){
+        const ri = U.rec.findIndex(x => x.v.name === P.name), ci = U.run.findIndex(x => x.v.name === P.name), TT = (f && f.teams.find(t => t.name === P.tm) || {}).short || P.tm;
+        if (ri >= 0 && U.rec[ri].tShare >= .08 && k !== "rush"){ const x = U.rec[ri]; (ri === 0 ? pros : lines).push(`${ri === 0 ? "The quarterback's favorite target: " : ""}${nm} gets ${Math.round(x.tShare*100)}% of the ${TT}' ${U.useTgt ? "targets" : "catches"} (${x.tPer.toFixed(1)} a game), ${ri === 0 ? "the most on the team" : `${ordN(ri + 1)} on the team after ${U.rec.slice(0, ri).map(y => y.v.name).join(", ")}`}.`); }
+        if (ci >= 0 && U.run[ci].cShare >= .1 && k !== "pass"){ const x = U.run[ci]; (ci === 0 ? pros : lines).push(`${nm} gets ${Math.round(x.cShare*100)}% of the ${TT}' carries (${x.cPer.toFixed(1)} a game)${ci === 0 ? ", the lead runner" : ""}.`); }
+      }
+    }
+    if ((/yards|saves/.test(S[2]) || (g.sport === "Basketball" && /points|rebounds/.test(S[2]))) && proj > 0) lines.push(`Primo's projection: about ${Math.round(proj)} ${S[2]} in this game (recent average, adjusted for the opponent).`);
+  }
+  if (missed) lines.push(`${nm} didn't play in ${missed} of the team's last ${P.log.length} games.`);
+  const c = isNaN(m.ask) ? m.p : m.ask;
+  if (est != null && vals.length >= 3){
+    const e = est - c;
+    if (e >= .07) pros.unshift(`📊 ${hitTxt} Recent games point to about ${Math.round(est*100)}%, more than Kalshi's ${Math.round(c*100)}¢.`);
+    else if (e <= -.08) cons.unshift(`📊 ${hitTxt} Recent games point to only about ${Math.round(est*100)}%, less than Kalshi's ${Math.round(c*100)}¢.`);
+    else lines.unshift(`📊 ${hitTxt}`);
+  } else if (hitTxt) lines.unshift(`📊 ${hitTxt}`);
+  return {pros, cons, lines, est, n: vals.length, proj};
+}
 function buildOtherTake(m){
   const g = m.g, f = g.facts, p = m.p, pros = [], cons = [], unit = UNIT(g.sport);
   const t = f ? f.teams.find(x => teamIn(x, m.label.split(/:| wins by| over| under/i)[0])) : null;
@@ -1509,14 +1629,17 @@ function buildOtherTake(m){
     const note = g.research && g.research.players && g.research.players[pl.trim()];
     if (note && note.note) pros.push(`Primo's notes on ${pl.trim()}: ${String(note.note).slice(0, 160)}`);
     if (notStarting(m)) cons.push(`${pl} isn't in the posted starting lineup.`);
+    var ins = propInsight(m);
+    if (ins){ pros.unshift(...ins.pros); cons.unshift(...ins.cons); }
   }
   const rs = g.research;
   if (rs && rs.lean && t && f){ const L = f.teams.find(x => teamIn(x, rs.lean)); if (L === t) pros.push(`Primo's research leans ${t.short || t.name}.`); else if (L) cons.push(`Primo's research leans ${L.short || L.name}.`); }
   const l = likedBy(m); if (l) pros.push(`Primo's research likes this bet: ${(l.why || l.text || "").slice(0, 140)}`);
   if (Math.abs(m.move || 0) >= 4) (m.move > 0 ? pros : cons).push(`The Kalshi price moved ${m.move > 0 ? "up" : "down"} ${Math.abs(m.move)} points in the last day.`);
-  const v = verdictFor(p, pros, cons);
+  const ch = ins && ins.est != null && ins.n >= 3 ? (p + ins.est)/2 : p;
+  const v = verdictFor(ch, pros, cons);
   const why = (v[0] === "keep" || v[0] === "okay") ? pros.slice(0, 2) : cons.slice(0, 2);
-  return {v: v[0], badge: v[1], say: `${v[2]}. Kalshi gives it ${TK.pct(p)}.${why.length ? " " + why.join(" ") : ""}`, pros, cons, flip: null};
+  return {v: v[0], badge: v[1], say: `${v[2]}. Kalshi gives it ${TK.pct(p)}${ins && ins.est != null && ins.n >= 3 ? `; recent games say about ${TK.pct(ins.est)}` : ""}.${why.length ? " " + why.join(" ") : ""}`, pros, cons, flip: null, extra: ins ? ins.lines : null};
 }
 // Primo's own opinion on a winner pick (same reasoning as Check my bet): record, last 5, home/road, head-to-head, injuries, research, value
 function opinionFor(m){
@@ -1923,6 +2046,23 @@ $("stamp").innerHTML = "Prices as of " + esc(D.asof) + (SH.asof ? "<br>Pinnacle 
   const li = ([g, a]) => { const side = a.bad ? a.om : a.wm;
     return `<li style="margin:6px 0"><b>${esc(g.title)}</b> <span style="opacity:.7">(${esc(g.leagueName || g.sport)}, ${esc(when(g))})</span><br>${esc(a.text)}${!a.priced && side ? `<br>Bet that gains from this: <b>${esc(side.pick || side.label)}</b> at ${Math.round(side.ask*100)}¢${openBtns(side)}` : ""}</li>`; };
   el.innerHTML = `<summary><b>📰 Injury news (last 36 hours):</b> ${A.length} update${A.length > 1 ? "s" : ""} on games that haven't started${fresh ? `, <b>${fresh} not priced in yet</b>` : ""}.</summary><ul style="margin:8px 0 0;padding-left:18px">${A.slice(0, 25).map(li).join("")}</ul><p style="margin:8px 0 0;font-size:12.5px;opacity:.8">Primo watches the official injury reports every hour and notes when a key player's status changes (a quarterback, a goalie, or a player with his own bets on Kalshi). "Not priced in yet" means Kalshi's price on that team has barely moved since the day before, so the market may not have caught up. Double-check the news before betting. Prices can catch up fast.</p>`;
+  const v = document.getElementById("view-build") || document.querySelector("main"); if (v) v.prepend(el); })();
+(function(){ if (!PLX.size) return;
+  const now = Date.now(), L = [];
+  for (const g of games){
+    if (!g.start || started(g) || g.start - now > 48*3600000) continue;
+    for (const m of g.markets){
+      if (m.type === "winner" || isNaN(m.ask) || m.ask < .2 || m.ask > .85 || !/^[^:]+:/.test(m.label)) continue;
+      const ins = propInsight(m); if (!ins || ins.est == null || ins.n < 4) continue;
+      const e = ins.est - m.ask; if (e < .07) continue;
+      const op = opOf(m); if (!op || !/keep|okay/.test(op.v)) continue;
+      L.push({g, m, e, ins, op});
+    }
+  }
+  if (!L.length) return;
+  L.sort((a, b) => b.e - a.e);
+  const el = document.createElement("details"); el.className = "scorecard"; el.style.cssText = "margin:0 0 12px;padding:10px 12px;border-radius:12px;background:var(--card,#fff);box-shadow:0 1px 3px rgba(0,0,0,.08);font-size:14px";
+  el.innerHTML = `<summary><b>🎯 Player bets Primo likes</b> (next 2 days): ${L.length} where the player's recent games beat Kalshi's price.</summary><ul style="margin:8px 0 0;padding-left:18px">${L.slice(0, 15).map(({g, m, ins, op}) => `<li style="margin:8px 0"><b>${esc(m.pick || m.label)}</b> <span style="opacity:.7">(${esc(g.title)}, ${esc(g.leagueName)})</span> — Kalshi ${Math.round(m.ask*100)}¢, recent games ≈${Math.round(ins.est*100)}% · ${esc(op.badge)}${openBtns(m)}<ul style="margin:2px 0 0;padding-left:16px;font-size:13px">${op.pros.slice(0, 3).concat(ins.lines.filter(x => /projection|Matchup/.test(x)).slice(0, 1)).map(x => `<li>${esc(x)}</li>`).join("")}</ul></li>`).join("")}</ul><p style="margin:8px 0 0;font-size:12.5px;opacity:.8">From ESPN box scores of each player's last 5 games: how often he reached the line, his share of targets and carries, and how much the opponent's defense has been giving up. A few games is a small sample, so Primo blends it with Kalshi's price. Check injuries and the starting lineup before betting.</p>`;
   const v = document.getElementById("view-build") || document.querySelector("main"); if (v) v.prepend(el); })();
 $("filterbox").open = true;
 buildFilters(); renderLegChips(); render();
