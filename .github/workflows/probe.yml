@@ -13,6 +13,6 @@ jobs:
       - run: |
           git config user.name primo-bot
           git config user.email bot@example.com
-          git add probe.txt data/sharp.js
+          git add probe.txt data/players.js
           git commit -m out
           git push
