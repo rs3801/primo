@@ -315,7 +315,7 @@ header.top .hint{color:#FFB52E;border-color:rgba(255,181,46,.6);background:rgba(
 <footer class="foot">Primo is an independent tool for personal use. It is not affiliated with, endorsed by or sponsored by Kalshi or any league or team. Market names and prices are shown only so you can find the same bets yourself. Chances are market estimates, not guarantees.</footer>
 <div class="toast" id="toast" role="status" hidden></div>
 
-<script>(function(){var v=Date.now();document.write('<script src="data/prices.js?v='+v+'"><\/script><script src="data/research.js?v='+v+'"><\/script><script src="data/scorecard.js?v='+v+'"><\/script><script src="data/facts.js?v='+v+'"><\/script>')})();</script>
+<script>(function(){var v=Date.now();document.write('<script src="data/prices.js?v='+v+'"><\/script><script src="data/research.js?v='+v+'"><\/script><script src="data/scorecard.js?v='+v+'"><\/script><script src="data/report.js?v='+v+'"><\/script><script src="data/facts.js?v='+v+'"><\/script>')})();</script>
 
 <script>
 (function(){
@@ -1686,6 +1686,23 @@ $("stamp").innerHTML = "Prices as of " + esc(D.asof) + (R.asof ? "<br>Injury & r
   const el = document.createElement("details"); el.className = "scorecard"; el.style.cssText = "margin:0 0 12px;padding:10px 12px;border-radius:12px;background:var(--card,#fff);box-shadow:0 1px 3px rgba(0,0,0,.08);font-size:14px";
   el.innerHTML = `<summary><b>How Primo's picks are doing:</b> ${s.wins} won, ${s.losses} lost (${Math.round(100*s.wins/n)}%). Kalshi's prices expected about ${s.expected_wins} wins.</summary><ul style="margin:8px 0 0;padding-left:18px">${(S.recent||[]).map(p => `<li>${p.result === "win" ? "✅" : "❌"} ${esc(p.text || p.bet)} <span class="muted">(${esc(p.day)}, was ${p.price}%)</span></li>`).join("")}</ul><p class="muted" style="margin:6px 0 0">Counts every bet Primo's research liked, graded with Kalshi's official results. Beating the expected number is what matters.</p>`;
   const v = document.getElementById("view-build") || document.querySelector("main"); if (v) v.prepend(el); })();
+(function(){ const P = window.PRIMO_REPORT; if (!P) return;
+  const el = document.createElement("details"); el.className = "scorecard"; el.style.cssText = "margin:0 0 12px;padding:10px 12px;border-radius:12px;background:var(--card,#fff);box-shadow:0 1px 3px rgba(0,0,0,.08);font-size:14px";
+  const G = P.groups || {}, all = G.all;
+  const NAMES = {keep:"👍 Keep", okay:"👌 Okay", risky:"⚠️ Risky", drop:"❌ Drop", good:"✅ Good value", pricey:"💸 Pricey", keepgood:"👍 Keep + ✅ Good value"};
+  const row = (lab, s) => `<tr><td>${lab}</td><td>${s.n}</td><td><b>${s.hit}%</b></td><td>${s.expected}%</td><td style="color:${s.per10 >= 0 ? "#1a7f37" : "#c62828"}"><b>${s.per10 >= 0 ? "+" : "−"}$${Math.abs(s.per10).toFixed(2)}</b></td></tr>`;
+  const table = rows => `<table style="width:100%;border-collapse:collapse;margin-top:6px;font-size:13px"><tr style="text-align:left;opacity:.7"><th>Bet</th><th>Bets</th><th>Won</th><th>Kalshi expected</th><th>Per $10</th></tr>${rows}</table>`;
+  const head = all ? `<b>📊 Primo's report card:</b> ${all.n} bets graded over ${P.days} day${P.days === 1 ? "" : "s"}${G.keep ? `. "Keep" bets won ${G.keep.hit}% (Kalshi expected ${G.keep.expected}%)` : ""}.` : `<b>📊 Primo's report card:</b> collecting. ${P.waiting} bets recorded, waiting for their games to finish.`;
+  let body = "";
+  if (all){
+    body += table(Object.keys(NAMES).filter(k => G[k]).map(k => row(NAMES[k], G[k])).join(""));
+    const sp = Object.entries(P.sport || {}), ty = Object.entries(P.type || {});
+    if (sp.length) body += `<div style="margin-top:8px"><b>"Keep" bets by sport</b></div>` + table(sp.map(([k, s]) => row(esc(k), s)).join(""));
+    if (ty.length) body += `<div style="margin-top:8px"><b>"Keep" bets by kind</b></div>` + table(ty.map(([k, s]) => row(esc(k), s)).join(""));
+  }
+  body += `<p style="margin:8px 0 0;font-size:12.5px;opacity:.8">A robot saves what Primo thinks of each bet shortly before the game starts, then grades it with Kalshi's official result. <b>Won</b> beating <b>Kalshi expected</b> means Primo's opinion adds an edge. <b>Per $10</b> is the average win or loss if you had put $10 on every one of those bets (before Kalshi's fees). Small numbers of bets can swing a lot, so give it a couple of weeks. ${P.waiting} bets still waiting. Updated ${esc(P.asof)}.</p>`;
+  el.innerHTML = `<summary>${head}</summary>${body}`;
+  const v = document.getElementById("view-build") || document.querySelector("main"); if (v) v.prepend(el); })();
 $("filterbox").open = true;
 buildFilters(); renderLegChips(); render();
 
@@ -2588,6 +2605,24 @@ Rules: write every bet in plain words ("Guardians score 3 or more runs, win or l
     }
   });
 })();
+
+
+/* ---------- report card robot: what Primo thinks of every bet shortly before its game starts ---------- */
+window.__primoSnapshot = function(hours){
+  const now = Date.now(), lim = (hours || 3) * 3600000, out = [];
+  for (const g of games){
+    if (!g.start || started(g) || g.start.getTime() - now > lim) continue;
+    const ms = g.markets.filter(m => !isNaN(m.p) && !isNaN(m.ask) && m.p >= .08 && m.p <= .95 && (m.vol >= 25 || m.noOf)).sort((a, b) => b.vol - a.vol).slice(0, 50);
+    for (const m of ms){
+      const op = opOf(m), src = m.noOf || m;
+      const vT = m.valueTh || (m.valueEst ? 5 : 3);
+      out.push({series: src.series, code: src.code, label: src.label, inverse: !!m.noOf, pick: m.pick || m.label, game: g.title || "", sport: g.sport, league: g.leagueName || "", type: m.type,
+        start: g.start.toISOString(), p: Math.round(m.p*100), ask: Math.round(m.ask*100), value: m.value == null ? null : m.value,
+        flag: m.value == null ? "none" : m.value >= vT ? "good" : m.value <= -(vT + 1) ? "pricey" : "fair", verdict: op ? op.v : "none"});
+    }
+  }
+  return out;
+};
 
 })();
 </script>
