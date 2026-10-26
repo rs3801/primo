@@ -1,38 +1,29 @@
 import json, urllib.request
 out = []
-def get(u, h=None):
+def get(u):
     try:
-        r = urllib.request.urlopen(urllib.request.Request(u, headers=h or {"User-Agent": "Mozilla/5.0"}), timeout=25)
-        return r.status, r.read()
+        r = urllib.request.urlopen(urllib.request.Request(u, headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"}), timeout=25)
+        return r.status, json.loads(r.read())
     except Exception as e:
-        return "ERR", str(e).encode()
+        return "ERR", str(e)
 def log(*a): out.append(" ".join(str(x) for x in a))
-s, b = get("https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=20261026")
-evs = json.loads(b).get("events", []) if s == 200 else []
-log("nfl events", len(evs))
-for path, lg in [("football/leagues/nfl", None), ("basketball/leagues/nba", None), ("football/leagues/college-football", None)]:
-    s, b = get("https://site.api.espn.com/apis/site/v2/sports/" + path.replace("/leagues", "") + "/scoreboard")
-    try: ev = json.loads(b)["events"]
-    except Exception: log(path, "no sb", s); continue
-    ev = [e for e in ev if e["status"]["type"]["state"] == "pre"][:1]
-    if not ev: log(path, "no pre games"); continue
-    eid = ev[0]["id"]; log(path, ev[0]["name"], eid)
-    s, b = get(f"https://sports.core.api.espn.com/v2/sports/{path}/events/{eid}/competitions/{eid}/odds")
-    try:
-        d = json.loads(b)
-        for it in d.get("items", []):
-            p = it.get("provider", {})
-            log("  core", p.get("name"), p.get("id"), it.get("details"), it.get("overUnder"), (it.get("homeTeamOdds") or {}).get("moneyLine"), (it.get("awayTeamOdds") or {}).get("moneyLine"))
-    except Exception as e: log("  core err", s, b[:200])
-    s, b = get(f"https://site.api.espn.com/apis/site/v2/sports/{path.replace('/leagues','')}/summary?event={eid}")
-    try:
-        d = json.loads(b)
-        for it in d.get("pickcenter", []): log("  pickcenter", (it.get("provider") or {}).get("name"), it.get("details"), it.get("overUnder"))
-    except Exception as e: log("  sum err", s)
-for name, u in [("polymarket", "https://gamma-api.polymarket.com/events?tag_slug=nfl&closed=false&limit=3"),
-                ("polymarket-sports", "https://gamma-api.polymarket.com/sports"),
-                ("pinnacle", "https://guest.api.arcadia.pinnacle.com/0.1/leagues/889/matchups"),
-                ("actionnetwork", "https://api.actionnetwork.com/web/v1/scoreboard/nfl?period=game&bookIds=15,30,68,69,71,75,76,79,123"),
-                ("bovada", "https://www.bovada.lv/services/sports/event/v2/events/A/description/football/nfl")]:
-    s, b = get(u); log(name, s, b[:400].decode("utf8", "replace").replace("\n", " "))
+P = "https://guest.api.arcadia.pinnacle.com/0.1"
+s, sp = get(P + "/sports"); log("sports", s, [(x["id"], x["name"], x.get("matchupCount")) for x in sp] if s == 200 else sp)
+for sid in (15, 4, 29, 33, 3, 19):
+    s, lg = get(f"{P}/sports/{sid}/leagues?all=false")
+    if s == 200: log("sport", sid, [(x["id"], x["name"], x.get("matchupCount")) for x in lg if x.get("matchupCount")][:40])
+    else: log("sport", sid, s, str(lg)[:200])
+s, m = get(P + "/leagues/889/matchups")
+if s == 200:
+    log("889 matchups", len(m)); 
+    for x in m[:6]: log(json.dumps({k: x.get(k) for k in ("id","type","units","startTime","parentId","participants","special","isLive")})[:500])
+s, m = get(P + "/leagues/889/markets/straight")
+if s == 200:
+    log("889 markets", len(m))
+    for x in m[:8]: log(json.dumps(x)[:400])
+s, d = get("https://api.actionnetwork.com/web/v1/scoreboard/nfl?period=game&bookIds=15,30,68,69,71,75,76,79,123")
+if s == 200:
+    g = d["games"][0]; log("AN game", g.get("teams") and [t["full_name"] for t in g["teams"]], g.get("start_time"))
+    for o in (g.get("odds") or [])[:12]: log("  AN", o.get("book_id"), o.get("ml_home"), o.get("ml_away"), o.get("spread_home"), o.get("total"), o.get("over"), o.get("under"))
+    log("AN keys", list(g.keys()))
 open("probe.txt", "w").write("\n".join(out))
