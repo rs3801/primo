@@ -1,23 +1,15 @@
-import json, urllib.request
+import json, urllib.request, collections
 out = []
 def get(u):
-    try: return json.load(urllib.request.urlopen(urllib.request.Request(u, headers={"User-Agent": "primo-family-app/1.0", "Accept": "application/json"}), timeout=40))
+    try: return json.load(urllib.request.urlopen(urllib.request.Request(u, headers={"User-Agent": "primo-family-app/1.0"}), timeout=40))
     except Exception as e: return {"err": str(e)}
 A = "https://api.elections.kalshi.com/trade-api/v2"
-cur = None; cols = []
-for i in range(10):
-    d = get(A + "/multivariate_event_collections?status=open&limit=200" + ("&cursor=" + cur if cur else ""))
-    if "err" in d: out.append(d["err"]); break
-    cols += d.get("multivariate_contracts") or d.get("multivariate_event_collections") or []
-    cur = d.get("cursor")
-    if not cur: break
-out.append("collections %d keys %s" % (len(cols), list(cols[0].keys()) if cols else None))
-ser = set()
-for c in cols:
-    for e in c.get("associated_events") or []:
-        t = e.get("ticker") if isinstance(e, dict) else e
-        if t: ser.add(t.split("-")[0])
-    for s in c.get("series_tickers") or []: ser.add(s)
-for c in cols[:3]: out.append(json.dumps(c)[:800])
-out.append("series: " + " ".join(sorted(ser)))
+evs = get(A + "/events?series_ticker=KXNBAGAME&status=open&limit=20").get("events", [])
+for e in evs[:4]:
+    code = e["event_ticker"].split("-")[1]
+    for s in ["KXNBAPTS", "KXNBAREB", "KXNBAAST", "KXNBA3PT", "KXNBASTL", "KXNBABLK", "KXNBAPRA", "KXNBA2D", "KXNBA3D", "KXNBASTOCK"]:
+        ms = get(A + "/markets?event_ticker=%s-%s&limit=500" % (s, code)).get("markets", [])
+        nob = sum(1 for m in ms if float(m.get("yes_bid_dollars") or 0) <= 0)
+        nov = sum(1 for m in ms if float(m.get("volume_fp") or 0) < 1)
+        out.append("%s %s total=%d nobid=%d novol=%d status=%s" % (code, s, len(ms), nob, nov, collections.Counter(m.get("status") for m in ms)))
 open("probe.txt", "w").write("\n".join(out))
