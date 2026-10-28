@@ -831,7 +831,8 @@ function candidatesFor(tierKey){
     if (!gameOK(g)) continue;
     for (const m of g.markets){
       if (!typeOK(m) || isNaN(m.p) || isNaN(m.ask) || m.ask <= 0 || m.ask >= 1) continue;
-      if (m.vol < 10 || m.ask - m.p > .08) continue;   // skip thinly traded bets whose price can't be trusted
+      const fresh = m.g.start && m.g.start - Date.now() < 24*3600000 && m.ask - m.p > 0 && m.ask - m.p <= .03;   // new lines for today's games: a tight buy/sell gap is enough
+      if ((m.vol < 10 && !fresh) || m.ask - m.p > .08) continue;   // skip thinly traded bets whose price can't be trusted
       if (/^tie$/i.test(m.label)) continue;
       if (started(m.g) && !(m.live && m.g.liveNow)) continue;   // game under way: only bets with a fresh live price from the live robot
       { const pi = playerInjury(m); if (pi && (pi.status === "Out" || pi.status === "Doubtful")) continue; if (notStarting(m)) continue; }   // never pick a bet on a player who is out or doubtful
@@ -1532,7 +1533,7 @@ function propParse(m){
   let x = /^(.+?):\s*(\d+)\+\s+(.+)$/i.exec(m.label), who, need, stat;
   if (x){ who = x[1]; need = +x[2]; stat = x[3]; }
   else if ((x = /^(.+?):\s*(?:over|longest (rush|reception) over)\s+([\d.]+)\s*(.*)$/i.exec(m.label))){ who = x[1]; need = Math.floor(+x[3]) + 1; stat = x[2] ? "longest " + x[2].toLowerCase() : x[4]; }
-  else if ((x = /^(.+?):\s*double double$/i.exec(m.label))) return {who: x[1], dd: true};
+  else if ((x = /^(.+?):\s*(double|triple) double$/i.exec(m.label))) return {who: x[1], dd: x[2].toLowerCase() === "triple" ? 3 : 2};
   else return null;
   return {who: who.trim(), need, stat: stat.toLowerCase().replace(/\s+/g, " ").trim()};
 }
@@ -1568,7 +1569,7 @@ function propInsight(m){
   const pros = [], cons = [], lines = [], nm = pp.who;
   const played = P.log.map((r, i) => r ? {r, o: (T.g[i] || {}).o} : null).filter(Boolean), missed = P.log.length - played.length;
   let vals = [], est = null, proj = null, hitTxt = "";
-  if (pp.dd){ vals = played.map(x => [x.r[1], x.r[2], x.r[3], x.r[5], x.r[6]].filter(v => v >= 10).length >= 2 ? 1 : 0); const h = vals.filter(Boolean).length; hitTxt = `${nm} had a double-double in ${h} of the last ${vals.length} games played.`; est = (h + 4*m.p)/(vals.length + 4); }
+  if (pp.dd){ vals = played.map(x => [x.r[1], x.r[2], x.r[3], x.r[5], x.r[6]].filter(v => v >= 10).length >= pp.dd ? 1 : 0); const h = vals.filter(Boolean).length; hitTxt = `${nm} had a ${pp.dd === 3 ? "triple" : "double"}-double in ${h} of the last ${vals.length} games played.`; est = (h + 4*m.p)/(vals.length + 4); }
   else {
     const S = (PSTAT[g.sport] || []).find(x => x[0].test(pp.stat)); if (!S) return null;
     vals = played.map(x => S[1](x.r)).map(v => v == null ? 0 : v);
