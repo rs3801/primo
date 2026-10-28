@@ -88,6 +88,8 @@ def main():
     data = {"asof": asof, "SER": SER, "G": G}
     if not G: raise SystemExit("No games found; keeping the old prices.")
     data["moves"] = price_moves(R)
+    try: data["COMBO"] = combo_series()
+    except (Exception, SystemExit) as e: print("combo list skipped:", e)
     try: data["starts"] = real_starts({g[1] for g in G})
     except BaseException as e: print("start times skipped:", e)
     try: update_scorecard(R)
@@ -140,6 +142,20 @@ def price_moves(R):
 
 def fold(x): return "".join(c for c in unicodedata.normalize("NFD", (x or "").lower()) if unicodedata.category(c) != "Mn")
 def base_code(c): return re.sub(r"^(\d{2}[A-Z]{3}\d{2})\d{4}", r"\1", c)
+
+def combo_series():
+    """Which kinds of bets Kalshi lets you put in a combo right now (from Kalshi's combo collections)."""
+    ser, cur = set(), ""
+    for _ in range(10):
+        p = {"status": "open", "limit": 200}
+        if cur: p["cursor"] = cur
+        d = get("/multivariate_event_collections", p, tries=2)
+        for c in d.get("multivariate_contracts") or d.get("multivariate_event_collections") or []:
+            for t in c.get("associated_event_tickers") or []: ser.add(t.split("-")[0])
+        cur = d.get("cursor") or ""
+        if not cur: break
+    print("combo series:", len(ser))
+    return sorted(ser)
 
 def update_scorecard(R):
     """Remember every bet Primo's research liked, then grade it with Kalshi's official result."""

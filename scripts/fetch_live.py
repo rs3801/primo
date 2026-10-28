@@ -51,11 +51,14 @@ def main():
     ser = {i: x[0] for i, x in enumerate(D["SER"])}
     n = 0
     for code in sorted(live, key=lambda c: -sum(r[4] for r in codes[c][3]))[:120]:
-        series = sorted({ser[r[0]] for r in codes[code][3] if WIN.search(ser[r[0]]) or "TOTAL" in ser[r[0]] or "SPREAD" in ser[r[0]]},
-                        key=lambda x: (0 if WIN.search(x) else 1 if "TOTAL" in x else 2, bool(re.search(r"\d[HQP]|1ST|2ND|HALF", x)), x))
+        big = any(ser[r[0]].startswith(("KXNBA", "KXNFL", "KXNHL", "KXNCAAF", "KXWNBA", "KXMLB")) for r in codes[code][3])
+        allser = {ser[r[0]] for r in codes[code][3]}
+        series = sorted({x for x in allser if WIN.search(x) or "TOTAL" in x or "SPREAD" in x or (big and not re.search(r"\d[HQP]|1ST|2ND|HALF|MOST|FIRST|LEADER|RACE|OT$|WINMARGIN|PROT", x))},
+                        key=lambda x: (0 if WIN.search(x) else 1 if "TOTAL" in x else 2 if "SPREAD" in x else 3, bool(re.search(r"\d[HQP]|1ST|2ND|HALF", x)), x))
         rows = []
-        for st in series[:4]:
-            j = get("/markets", {"event_ticker": st + "-" + code, "status": "open", "limit": 100}); n += 1
+        for st in series[:(14 if big else 4)]:
+            if n >= 450: break
+            j = get("/markets", {"event_ticker": st + "-" + code, "status": "open", "limit": 200}); n += 1
             for m in j.get("markets") or []:
                 b, a = cents(m.get("yes_bid_dollars")), cents(m.get("yes_ask_dollars"))
                 if not (0 < a < 100): continue

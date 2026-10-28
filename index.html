@@ -767,7 +767,9 @@ const COMBO_OK = new Set(("KXNFLGAME KXNFLSPREAD KXNFLTOTAL KXNFLTD KXNFLFIRSTTD
  "KXMLSGAME KXMLSSPREAD KXMLSTOTAL KXMLSBTTS KXMLS1H KXMLS1HSPREAD KXMLS1HTOTAL KXMLS1HBTTS KXNCAAFGAME KXNCAAFSPREAD KXNCAAFTOTAL KXNCAAFTEAMTOTAL KXNCAAF1H KXNCAAF1HSPREAD KXNCAAF1HTOTAL KXNCAAF1Q KXNCAAF1QSPREAD KXNCAAF1QTOTAL "+
  "KXUFCFIGHT KXUFCMOF KXUFCMOV KXUFCROUNDS KXUFCDISTANCE KXATPMATCH KXATPSETWINNER KXATPGTOTAL KXATPEXACTMATCH KXATPCHALLENGERMATCH KXWTAMATCH KXWTASETWINNER KXWTAGTOTAL KXWTACHALLENGERMATCH").split(" "));
 const COMBO_FAMILIES = /^KX(NFL|NBA|WNBA|NHL|MLB|MLS|NCAAF|UFC|ATP|WTA)/;
-const comboOK = m => !COMBO_FAMILIES.test(m.series) || COMBO_OK.has(m.series);
+// the price robot reads Kalshi's current combo list every hour; the list above is only a fallback
+const COMBO_LIVE = D.COMBO && D.COMBO.length > 50 ? new Set(D.COMBO) : null;
+const comboOK = m => { const s = m.noOf ? m.noOf.series : m.series; return COMBO_LIVE ? COMBO_LIVE.has(s) : !COMBO_FAMILIES.test(s) || COMBO_OK.has(s); };
 // "Best value" score: real edges first (cheaper than sportsbooks, research likes it, money moving in), then the likelier bet
 function smartScore(m){
   let s = 0;
@@ -831,14 +833,16 @@ function candidatesFor(tierKey){
       if (!typeOK(m) || isNaN(m.p) || isNaN(m.ask) || m.ask <= 0 || m.ask >= 1) continue;
       if (m.vol < 10 || m.ask - m.p > .08) continue;   // skip thinly traded bets whose price can't be trusted
       if (/^tie$/i.test(m.label)) continue;
-      if (started(m.g)) continue;          // game already under way: snapshot price is stale
+      if (started(m.g) && !(m.live && m.g.liveNow)) continue;   // game under way: only bets with a fresh live price from the live robot
       { const pi = playerInjury(m); if (pi && (pi.status === "Out" || pi.status === "Doubtful")) continue; if (notStarting(m)) continue; }   // never pick a bet on a player who is out or doubtful
       if (leanClash(m)) continue;          // never pick against Primo's research
       if (tierKey === "safe" && m.g.research && m.g.research.level === "Preseason") continue;
       out.push(m);
     }
   }
-  if (t.liked){   // bets Primo's research likes, then the bets Primo rates ✅ Keep with the best value
+  if (t.liked){   // bets Primo's research likes (pre-game opinions, so no live games here)
+    // then the bets Primo rates ✅ Keep with the best value
+    for (let i = out.length - 1; i >= 0; i--) if (out[i].live) out.splice(i, 1);
     const liked = out.filter(m => likedBy(m) && m.p >= t.lo && m.p <= t.hi).sort((a,b) => b.p - a.p);
     const fill = out.filter(m => !liked.includes(m) && m.p >= .55 && m.p <= .9 && m.vol >= 25).sort((a,b) => smartScore(b) - smartScore(a)).slice(0, 700)
       .filter(m => { const op = opOf(m); return op && op.v === "keep"; }).sort((a,b) => primoScore(b) - primoScore(a));
@@ -932,7 +936,25 @@ function sgKey(m){
   const who = (/^([^:]+):/.exec(m.label) || /^(.+?) (?:over|under|wins)\b/i.exec(m.label) || [,""])[1];
   return m.g.code + "|" + m.series + "|" + who.trim().toLowerCase();
 }
-function build(){
+// live games: bets with a fresh price from the live robot (every few minutes) can go in combos too, marked 🔴 LIVE
+function applyLive(){
+  const L = LV.data; if (!L || !L.games || Date.now()/1000 - L.ts > 900) return 0;
+  let n = 0;
+  for (const g of games){
+    g.liveNow = false;
+    if (!started(g)) continue;
+    const code = g.codes.find(c => L.games[c] && (L.status || {})[c]); if (!code) continue;
+    g.liveNow = true;
+    for (const [st, label, mid, ask] of L.games[code]){
+      const m = g.markets.find(x => x.series === st && x.label === label && !x.noOf); if (!m || !(ask > 0 && ask < 100)) continue;
+      if (m.p0 === undefined){ m.p0 = m.p; m.ask0 = m.ask; }
+      m.p = mid/100; m.ask = ask/100; m.live = true; m.liveTs = L.ts; m._op = undefined; n++;
+    }
+  }
+  return n;
+}
+async function build(){
+  if (state.live !== false){ if (!LV.data || Date.now() - LV.loaded > 90000) await loadLive(); applyLive(); }
   const n = Math.max(1, Math.min(40, parseInt($("legs").value,10) || 6));
   state.legs = n; $("legs").value = n;
   built = {};
@@ -1668,7 +1690,8 @@ function legHTML(m, i, tier, legs){
     : tier
     ? `<button class="mini" type="button" data-swap="${tier}:${i}">Swap</button><button class="mini" type="button" data-drop="${tier}:${i}">Remove</button>`
     : `<button class="mini" type="button" data-remove="${esc(m.key)}">Remove</button>`;
-  return `<li class="leg" style="--c:var(${color})"><div class="legmain"><div class="legpick">${esc(m.pick)}</div><div class="legsub">${esc(m.g.title)} · ${esc(fmtShort(m.g.date))}${m.g.start?" · "+esc(fmtTime(m.g.start)):""} · <span class="sp">${esc(m.g.sport)}</span>${m.g.women?" · Women":""}</div><div class="legsub legleague">League: <b>${esc(m.g.leagueName)}</b></div>${(pt => pt ? `<div class="legsub legleague">Player: <b>${esc(pt[0])}</b> plays for <b>${esc(pt[1])}</b></div>` : "")(playerTeam(m))}<div class="legsub">On Kalshi: <b>${esc(m.stitle)}</b>${m.type!=="winner"?` · pick “${esc(m.label)}”`:""} · <a href="${kalshiLink(m)}" target="_blank" rel="noopener">Open this game ↗</a></div><div class="legnote mean"><b>To win:</b> ${esc(explain(m))}</div>${comboOK(m)?"":`<div class="legnote mean"><b>Single bet only:</b> Kalshi doesn't let this bet go in a combo. Bet it by itself on Kalshi.</div>`}${gameCall(m)}${legWhy(m, tier, legs)}</div><div class="legright"><div class="pct">${pctTxt(m.p)}</div><div class="legact">${actions}</div></div></li>`;
+  const liveTag = m.live && m.g.liveNow ? `<div class="legsub" style="color:#c62828;font-weight:700">🔴 LIVE: this game has already started. Price from ${Math.max(1, Math.round((Date.now()/1000 - m.liveTs)/60))} min ago (Kalshi ${Math.round(m.ask*100)}¢); check it on Kalshi before adding.</div>` : "";
+  return `<li class="leg" style="--c:var(${color})"><div class="legmain"><div class="legpick">${m.live && m.g.liveNow ? "🔴 " : ""}${esc(m.pick)}</div>${liveTag}<div class="legsub">${esc(m.g.title)} · ${esc(fmtShort(m.g.date))}${m.g.start?" · "+esc(fmtTime(m.g.start)):""} · <span class="sp">${esc(m.g.sport)}</span>${m.g.women?" · Women":""}</div><div class="legsub legleague">League: <b>${esc(m.g.leagueName)}</b></div>${(pt => pt ? `<div class="legsub legleague">Player: <b>${esc(pt[0])}</b> plays for <b>${esc(pt[1])}</b></div>` : "")(playerTeam(m))}<div class="legsub">On Kalshi: <b>${esc(m.stitle)}</b>${m.type!=="winner"?` · pick “${esc(m.label)}”`:""} · <a href="${kalshiLink(m)}" target="_blank" rel="noopener">Open this game ↗</a></div><div class="legnote mean"><b>To win:</b> ${esc(explain(m))}</div>${comboOK(m)?"":`<div class="legnote mean"><b>Single bet only:</b> Kalshi doesn't let this bet go in a combo. Bet it by itself on Kalshi.</div>`}${gameCall(m)}${legWhy(m, tier, legs)}</div><div class="legright"><div class="pct">${pctTxt(m.p)}</div><div class="legact">${actions}</div></div></li>`;
 }
 function meaning(m){
   const t = m.stitle.toUpperCase();
