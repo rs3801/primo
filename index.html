@@ -353,7 +353,7 @@ function betType(series, stitle){
   if (/GAME$|MATCH$|FIGHT$|BOUT$/.test(series) || /\b(GAME|MATCH|FIGHT|WINNER)\b/.test(t) && !/1ST|2ND|HALF|SET|MAP|QUARTER|PERIOD/.test(t)) return "winner";
   return "other";
 }
-const isWinnerSeries = st => /GAME$|MATCH$|FIGHT$|BOUT$/.test(st);
+const isWinnerSeries = st => /GAME$|MATCH$|FIGHT$|BOUT$|^KXBOXING$/.test(st);
 const isWomen = (series, stitle) => /WNBA|WTA|NWSL|WOMEN|NCAAW|WCBB|LPGA|ITFW|WSL\b/i.test(series + " " + stitle);
 function gameDate(code){
   const m = /^(\d{2})([A-Z]{3})(\d{2})/.exec(code||"");
@@ -517,7 +517,8 @@ const gameByBase = new Map();
 for (const [sport, code, , rows, ends] of D.G){
   const date = gameDate(code); if (!date) continue;
   // Kalshi sometimes lists one game under two codes that differ only in the start time (e.g. 26OCT121700LADMIL and 26OCT122000LADMIL); merge them
-  const base = sport + "|" + code.replace(/^(\d{2}[A-Z]{3}\d{2})\d{4}/, "$1");
+  // ...and sometimes with the two names swapped (26OCT31CALVARMBILLI and 26OCT31MBILLICALVAR): same letters, rotated
+  const base = sport + "|" + (cm => { if (!cm) return code; const t = cm[3]; let best = t; for (let i = 1; i < t.length; i++){ const r = t.slice(i) + t.slice(0, i); if (r < best) best = r; } return cm[1] + best; })(/^(\d{2}[A-Z]{3}\d{2})(\d{4})?(.*)$/.exec(code));
   let g = gameByBase.get(base);
   const fresh = !g;
   if (fresh){ g = { sport, code, codes:[], date, women:false, markets:[], title:"", winners:[], vol:0 }; gameByBase.set(base, g); games.push(g); }
@@ -533,7 +534,7 @@ for (const [sport, code, , rows, ends] of D.G){
     m.pick = cleanPick(m);
     g.markets.push(m); byKey.set(m.key, m);
     if (isWomen(st, stitle)) g.women = true;
-    if (isWinnerSeries(st) && !/tie$|draw/i.test(label)){ g.winners.push(niceName(sport, label.replace(/^Reg Time:\s*/i,""))); g.league = stitle; }
+    if (isWinnerSeries(st) && !/tie$|draw/i.test(label)){ g.winners.push(niceName(sport, label.replace(/^Reg Time:\s*/i,"").replace(/ wins$/i, ""))); g.league = stitle; }
   }
   if (!g.league) g.league = D.SER[rows[0][0]][1];
   g.research = g.research || R.games[code] || null;
@@ -847,7 +848,9 @@ function candidatesFor(tierKey){
     const liked = out.filter(m => likedBy(m) && m.p >= t.lo && m.p <= t.hi).sort((a,b) => b.p - a.p);
     const fill = out.filter(m => !liked.includes(m) && m.p >= .55 && m.p <= .9 && m.vol >= 25).sort((a,b) => smartScore(b) - smartScore(a)).slice(0, 700)
       .filter(m => { const op = opOf(m); return op && op.v === "keep"; }).sort((a,b) => primoScore(b) - primoScore(a));
-    return liked.concat(fill);
+    const fill2 = out.filter(m => !liked.includes(m) && !fill.includes(m) && m.p >= .45 && m.p <= .92 && m.vol >= 10).sort((a,b) => smartScore(b) - smartScore(a)).slice(0, 700)
+      .filter(m => { const op = opOf(m); return op && op.v === "okay"; }).sort((a,b) => primoScore(b) - primoScore(a));
+    return liked.concat(fill, fill2);   // research likes first, then ✅ Keep, then 👍 Okay so the combo can still reach the legs asked for
   }
   let inRange = out.filter(m => m.p >= t.lo && m.p <= t.hi && m.vol >= 10);
   const key = t.sort === "score" ? (a,b) => smartScore(b) - smartScore(a) || b.p - a.p : t.sort === "p" ? (a,b) => b.p - a.p || b.vol - a.vol : (a,b) => b.vol - a.vol;
@@ -1787,7 +1790,11 @@ function renderBuild(){
     const single = state.legs === 1;
     html += `<section class="tier tier-${k}"><header class="thead"><div><h3>${t.name}${single ? " · single bet" : ""}</h3><p>${t.blurb}</p></div><button class="btn sm" type="button" data-use="${k}"${legs.length?"":" disabled"}>${single ? "Use this bet" : "Use this combo"}</button></header>`;
     html += legs.length ? totalsHTML(legs) : "";
-    if (short) html += t.liked ? `<p class="warn">${legs.length ? `Primo's research likes only ${legs.length} bet${legs.length>1?"s":""} that fit these filters right now.` : "None of the bets Primo's research likes fit these filters yet."} Primo writes its take for every NFL game, every MLB playoff game and the biggest other games; more appear after each refresh.</p>` : `<p class="warn">Only ${legs.length} picks fit these filters for this risk level. Widen the dates, sports or bet types for more legs.</p>`;
+    const poolGames = new Set(built[k].pool.map(m => m.g)).size, sportsTxt = [...new Set(built[k].pool.map(m => m.g.sport))].join(" and ").toLowerCase() || "these";
+    const allGames = Math.max(...Object.values(built).map(b => new Set(b.pool.map(m => m.g)).size)), fights = built[k].pool.length && built[k].pool.every(m => m.g.sport === "Boxing" || m.g.sport === "MMA"), GW = fights ? "fights" : "games";
+    if (short && !single && t.liked && poolGames < allGames && poolGames <= legs.length) html += `<p class="warn">Primo only rates bets in ${poolGames} of the ${allGames} ${GW} ✅ Keep or 👍 Okay right now, so Primo's picks has ${legs.length} leg${legs.length>1?"s":""}. The other combos below use every ${fights ? "fight" : "game"}${allGames < state.legs ? `, but Kalshi only allows ${allGames} ${GW} with these filters in a combo${fights ? " (only the winner bet, one fighter per fight)" : ""}. Add another sport to reach ${state.legs} legs` : ""}.</p>`;
+    else if (short && !single && poolGames <= legs.length) html += `<p class="warn">Only ${legs.length} leg${legs.length>1?"s":""} possible with these filters: there ${poolGames === 1 ? "is 1 game" : `are ${poolGames} ${GW}`} (${esc(sportsTxt)}) with bets Kalshi lets you put in a combo, and Primo won't pair bets in the same game that work against each other.${built[k].pool.some(m => m.g.sport === "Boxing" || m.g.sport === "MMA") ? " For fights, Kalshi only allows the winner bet in combos (method of victory and goes-the-distance are single bets only), and you can only pick one fighter per fight." : ""} Add another sport or widen the dates to reach ${state.legs} legs.</p>`;
+    else if (short) html += t.liked ? `<p class="warn">${legs.length ? `Primo's research likes only ${legs.length} bet${legs.length>1?"s":""} that fit these filters right now.` : "None of the bets Primo's research likes fit these filters yet."} Primo writes its take for every NFL game, every MLB playoff game and the biggest other games; more appear after each refresh.</p>` : `<p class="warn">Only ${legs.length} picks fit these filters for this risk level. Widen the dates, sports or bet types for more legs.</p>`;
     const nGames = new Set(legs.map(m => m.g)).size;
     if (legs.length > nGames) html += `<p class="warn" style="color:var(--muted)">Some legs come from the same game (a same-game combo). Primo never pairs picks that contradict each other, but legs from one game tend to win or lose together.</p>`;
     html += `<ol class="legs">${legs.map((m,i)=>legHTML(m,i,k,legs)).join("")}</ol>`;
