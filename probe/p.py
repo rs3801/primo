@@ -7,7 +7,7 @@ d = get("https://site.api.espn.com/apis/site/v2/sports/mma/ufc/scoreboard?dates=
 c = d["events"][0]["competitions"][-1]
 x = c["competitors"][0]; a = x["athlete"]
 out.append("comp keys " + json.dumps(list(c.keys())) + " athlete " + json.dumps(a)[:600])
-aid = a.get("id")
+aid = x.get("id")
 for u in ["https://sports.core.api.espn.com/v2/sports/mma/athletes/%s" % aid,
           "https://site.web.api.espn.com/apis/common/v3/sports/mma/athletes/%s" % aid,
           "https://site.web.api.espn.com/apis/common/v3/sports/mma/athletes/%s/fightHistory" % aid,
