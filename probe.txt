@@ -1,14 +1,11 @@
-EVENT UFC Fight Night: Moicano vs. Nolan 600061420
-  Tainara Lisboa rec=['7-4-0'] | Lucia Szabová rec=['12-0-0'] type=W Flyweight
-  Piera Rodriguez rec=['12-2-0'] | Talita Alencar rec=['8-1-1'] type=W Strawweight
-  Joe Kropschot rec=['9-3-0'] | Nick Klein rec=['6-3-0'] type=Middleweight
-  Mickey Gall rec=['7-7-0'] | Zach Reese rec=['10-4-0'] type=Middleweight
-  Julian Erosa rec=['31-14-0'] | JeongYeong Lee rec=['11-3-0'] type=Featherweight
-  Theodor Berggren rec=['8-4-0'] | Rodrigo Sezinando rec=['9-2-0'] type=Welterweight
-  Dakota Hope rec=['11-2-0'] | Francis Marshall rec=['10-3-0'] type=Featherweight
-  Jean-Paul Lebosnoyani rec=['11-2-0'] | Farman Hasanov rec=['5-0-0'] type=Welterweight
-  Yana Santos rec=['17-8-0'] | Luana Santos rec=['11-2-0'] type=W Bantamweight
-  Ode' Osbourne rec=['13-9-0'] | Cody Durden rec=['18-11-1'] type=Flyweight
-  Randy Brown rec=['20-8-0'] | Jacobe Smith rec=['13-0-0'] type=Welterweight
-  Renato Moicano rec=['21-7-1'] | Tom Nolan rec=['11-1-0'] type=Lightweight
-ATHLETE {"err": "HTTP Error 404: Not Found"}
+comp keys ["id", "uid", "date", "endDate", "type", "timeValid", "neutralSite", "playByPlayAvailable", "recent", "venue", "competitors", "status", "broadcasts", "format", "startDate", "broadcast", "geoBroadcasts", "highlights"] athlete {"fullName": "Renato Moicano", "displayName": "Renato Moicano", "shortName": "R. Moicano", "flag": {"href": "https://a.espncdn.com/i/teamlogos/countries/500/bra.png", "alt": "Brazil", "rel": ["country-flag"]}}
+https://sports.core.api.espn.com/v2/sports/mma/athletes/None
+   {"err": "HTTP Error 404: Not Found"}
+https://site.web.api.espn.com/apis/common/v3/sports/mma/athletes/None
+   {"err": "HTTP Error 404: Not Found"}
+https://site.web.api.espn.com/apis/common/v3/sports/mma/athletes/None/fightHistory
+   {"err": "HTTP Error 404: Not Found"}
+https://sports.core.api.espn.com/v2/sports/mma/athletes/None/eventlog
+   {"err": "HTTP Error 400: Bad Request"}
+https://site.web.api.espn.com/apis/common/v3/sports/mma/athletes/None/overview
+   {"err": "HTTP Error 404: Not Found"}
