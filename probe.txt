@@ -1,40 +1,14 @@
-26OCT27PORLAL KXNBAPTS total=50 nobid=0 novol=1 status=Counter({'active': 50})
-26OCT27PORLAL KXNBAREB total=48 nobid=0 novol=1 status=Counter({'active': 48})
-26OCT27PORLAL KXNBAAST total=38 nobid=0 novol=1 status=Counter({'active': 38})
-26OCT27PORLAL KXNBA3PT total=60 nobid=0 novol=5 status=Counter({'active': 60})
-26OCT27PORLAL KXNBASTL total=28 nobid=0 novol=7 status=Counter({'active': 28})
-26OCT27PORLAL KXNBABLK total=6 nobid=0 novol=0 status=Counter({'active': 6})
-26OCT27PORLAL KXNBAPRA total=22 nobid=0 novol=0 status=Counter({'active': 22})
-26OCT27PORLAL KXNBA2D total=5 nobid=0 novol=0 status=Counter({'active': 5})
-26OCT27PORLAL KXNBA3D total=2 nobid=0 novol=0 status=Counter({'active': 2})
-26OCT27PORLAL KXNBASTOCK total=0 nobid=0 novol=0 status=Counter()
-26OCT28CHADET KXNBAPTS total=0 nobid=0 novol=0 status=Counter()
-26OCT28CHADET KXNBAREB total=0 nobid=0 novol=0 status=Counter()
-26OCT28CHADET KXNBAAST total=0 nobid=0 novol=0 status=Counter()
-26OCT28CHADET KXNBA3PT total=0 nobid=0 novol=0 status=Counter()
-26OCT28CHADET KXNBASTL total=0 nobid=0 novol=0 status=Counter()
-26OCT28CHADET KXNBABLK total=0 nobid=0 novol=0 status=Counter()
-26OCT28CHADET KXNBAPRA total=0 nobid=0 novol=0 status=Counter()
-26OCT28CHADET KXNBA2D total=0 nobid=0 novol=0 status=Counter()
-26OCT28CHADET KXNBA3D total=0 nobid=0 novol=0 status=Counter()
-26OCT28CHADET KXNBASTOCK total=0 nobid=0 novol=0 status=Counter()
-26OCT28MIAATL KXNBAPTS total=11 nobid=0 novol=11 status=Counter({'active': 11})
-26OCT28MIAATL KXNBAREB total=0 nobid=0 novol=0 status=Counter()
-26OCT28MIAATL KXNBAAST total=0 nobid=0 novol=0 status=Counter()
-26OCT28MIAATL KXNBA3PT total=10 nobid=4 novol=10 status=Counter({'active': 10})
-26OCT28MIAATL KXNBASTL total=0 nobid=0 novol=0 status=Counter()
-26OCT28MIAATL KXNBABLK total=0 nobid=0 novol=0 status=Counter()
-26OCT28MIAATL KXNBAPRA total=0 nobid=0 novol=0 status=Counter()
-26OCT28MIAATL KXNBA2D total=0 nobid=0 novol=0 status=Counter()
-26OCT28MIAATL KXNBA3D total=0 nobid=0 novol=0 status=Counter()
-26OCT28MIAATL KXNBASTOCK total=0 nobid=0 novol=0 status=Counter()
-26OCT28PHIIND KXNBAPTS total=0 nobid=0 novol=0 status=Counter()
-26OCT28PHIIND KXNBAREB total=0 nobid=0 novol=0 status=Counter()
-26OCT28PHIIND KXNBAAST total=0 nobid=0 novol=0 status=Counter()
-26OCT28PHIIND KXNBA3PT total=0 nobid=0 novol=0 status=Counter()
-26OCT28PHIIND KXNBASTL total=0 nobid=0 novol=0 status=Counter()
-26OCT28PHIIND KXNBABLK total=0 nobid=0 novol=0 status=Counter()
-26OCT28PHIIND KXNBAPRA total=0 nobid=0 novol=0 status=Counter()
-26OCT28PHIIND KXNBA2D total=0 nobid=0 novol=0 status=Counter()
-26OCT28PHIIND KXNBA3D total=0 nobid=0 novol=0 status=Counter()
-26OCT28PHIIND KXNBASTOCK total=0 nobid=0 novol=0 status=Counter()
+EVENT UFC Fight Night: Moicano vs. Nolan 600061420
+  Tainara Lisboa rec=['7-4-0'] | Lucia Szabová rec=['12-0-0'] type=W Flyweight
+  Piera Rodriguez rec=['12-2-0'] | Talita Alencar rec=['8-1-1'] type=W Strawweight
+  Joe Kropschot rec=['9-3-0'] | Nick Klein rec=['6-3-0'] type=Middleweight
+  Mickey Gall rec=['7-7-0'] | Zach Reese rec=['10-4-0'] type=Middleweight
+  Julian Erosa rec=['31-14-0'] | JeongYeong Lee rec=['11-3-0'] type=Featherweight
+  Theodor Berggren rec=['8-4-0'] | Rodrigo Sezinando rec=['9-2-0'] type=Welterweight
+  Dakota Hope rec=['11-2-0'] | Francis Marshall rec=['10-3-0'] type=Featherweight
+  Jean-Paul Lebosnoyani rec=['11-2-0'] | Farman Hasanov rec=['5-0-0'] type=Welterweight
+  Yana Santos rec=['17-8-0'] | Luana Santos rec=['11-2-0'] type=W Bantamweight
+  Ode' Osbourne rec=['13-9-0'] | Cody Durden rec=['18-11-1'] type=Flyweight
+  Randy Brown rec=['20-8-0'] | Jacobe Smith rec=['13-0-0'] type=Welterweight
+  Renato Moicano rec=['21-7-1'] | Tom Nolan rec=['11-1-0'] type=Lightweight
+ATHLETE {"err": "HTTP Error 404: Not Found"}
