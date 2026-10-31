@@ -43,7 +43,7 @@ def main():
             if not d or d.group(2) not in MO: continue
             try: gd = datetime.date(2000 + int(d.group(1)), MO[d.group(2)], int(d.group(3)))
             except ValueError: continue
-            if gd < today or gd > last: continue
+            if gd < today - datetime.timedelta(days=1) or gd > last: continue   # Kalshi sometimes dates a game's winner bet the day before (e.g. 26OCT30KUTCU for an Oct 31 game)
             b, a, l = cents(m.get("yes_bid_dollars")), cents(m.get("yes_ask_dollars")), cents(m.get("last_price_dollars"))
             pr = (a + b) / 2 if (b > 0 and 0 < a < 100) else (l if l > 0 else a)
             if not (0 < a < 100) or pr < 3 or pr > 97: continue
@@ -62,6 +62,24 @@ def main():
         cursor = j.get("cursor") or ""
         if not cursor or not ms or zeros >= 3 or page >= 80: break
         time.sleep(0.4)
+    # Kalshi's live-score feed links all of a game's bets; when one bet type uses a different code (often the winner bet,
+    # dated a day earlier), file it under the game's main code so Primo sees one game. REMAP keeps the real code for links.
+    try: MS = get_milestones()
+    except BaseException as e: print("milestones skipped:", e); MS = []
+    evmap, REMAP = {}, {}
+    from collections import Counter
+    for ms in MS:
+        tk = [t for t in (ms.get("primary_event_tickers") or []) + (ms.get("related_event_tickers") or []) if "-" in t]
+        if not tk: continue
+        cnt = Counter(t.split("-")[1] for t in tk); main = cnt.most_common(1)[0][0]
+        for t in tk:
+            st_, cd = t.split("-")[0], t.split("-")[1]
+            if cd != main: evmap[t] = st_ + "-" + main; REMAP.setdefault(main, {})[st_] = cd
+    for k, v in R.items():
+        if v[0] in evmap: v[0] = evmap[v[0]]
+    used = {v[0].split("-")[1] for v in R.values()}
+    REMAP = {k: v for k, v in REMAP.items() if k in used}
+    print("codes merged:", sum(len(v) for v in REMAP.values()))
     # compact (same shape Primo already reads)
     by_ev = {}
     for v in R.values(): by_ev.setdefault(v[0], []).append(v)
@@ -85,12 +103,12 @@ def main():
     G = sorted((g["e"] for g in games.values()), key=lambda e: e[2])
     t = datetime.datetime.now(PT)
     asof = t.strftime("%a, %b ") + str(t.day) + ", " + t.strftime("%I:%M %p").lstrip("0") + " PT"
-    data = {"asof": asof, "SER": SER, "G": G}
+    data = {"asof": asof, "SER": SER, "G": G, "REMAP": REMAP}
     if not G: raise SystemExit("No games found; keeping the old prices.")
     data["moves"] = price_moves(R)
     try: data["COMBO"] = combo_series()
     except (Exception, SystemExit) as e: print("combo list skipped:", e)
-    try: data["starts"] = real_starts({g[1] for g in G})
+    try: data["starts"] = real_starts({g[1] for g in G}, MS)
     except BaseException as e: print("start times skipped:", e)
     try: update_scorecard(R)
     except Exception as e: print("scorecard skipped:", e)
@@ -99,16 +117,25 @@ def main():
         f.write("window.PRIMO_DATA=" + json.dumps(data, separators=(",", ":")).replace("</", "<\\/") + ";\n")
     print(asof, len(G), "games", sum(len(g[3]) for g in G), "markets")
 
-def real_starts(codes):
-    """Kalshi's live-score feed ("milestones") has each match's real start time and whether it's under way.
-    The market's own time is only a rough end time (for tennis it can be hours after the start)."""
+def get_milestones():
     since = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=20)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    out, cursor, page = {}, "", 0
+    out, cursor, page = [], "", 0
     while page < 60:
         params = {"limit": 500, "category": "Sports", "minimum_start_date": since}
         if cursor: params["cursor"] = cursor
         j = get("/milestones", params, tries=3); page += 1
-        for ms in j.get("milestones") or []:
+        out += j.get("milestones") or []
+        cursor = j.get("cursor") or ""
+        if not cursor or not j.get("milestones"): break
+        time.sleep(0.3)
+    return out
+
+def real_starts(codes, MS):
+    """Kalshi's live-score feed ("milestones") has each match's real start time and whether it's under way.
+    The market's own time is only a rough end time (for tennis it can be hours after the start)."""
+    out, page = {}, 0
+    for _ in [0]:
+        for ms in MS:
             st = ms.get("start_date") or ""
             status = str((ms.get("details") or {}).get("status") or "").lower()
             # 1 = under way or over, -1 = confirmed not started yet (tennis often runs late), 0 = unknown
@@ -117,9 +144,6 @@ def real_starts(codes):
                 parts = ev.split("-")
                 if len(parts) > 1 and parts[1] in codes and st:
                     out[parts[1]] = [st[:16], begun, status[:12]]
-        cursor = j.get("cursor") or ""
-        if not cursor or not j.get("milestones"): break
-        time.sleep(0.3)
     print("real start times:", len(out), "of", len(codes), "games,", sum(1 for v in out.values() if v[1] == 1), "under way,", page, "pages")
     return out
 

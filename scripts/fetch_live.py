@@ -58,7 +58,8 @@ def main():
         rows = []
         for st in series[:(14 if big else 4)]:
             if n >= 450: break
-            j = get("/markets", {"event_ticker": st + "-" + code, "status": "open", "limit": 200}); n += 1
+            real = (D.get("REMAP") or {}).get(code, {}).get(st, code)   # some bet types use a different code on Kalshi
+            j = get("/markets", {"event_ticker": st + "-" + real, "status": "open", "limit": 200}); n += 1
             for m in j.get("markets") or []:
                 b, a = cents(m.get("yes_bid_dollars")), cents(m.get("yes_ask_dollars"))
                 if not (0 < a < 100): continue
