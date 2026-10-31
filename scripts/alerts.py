@@ -3,7 +3,7 @@ Runs inside the live robot every few minutes. Uses ESPN's live scores and win ch
 (live.json) to spot:
   - LATE UPSETS: the team that was the clear underdog before the game (40% or less) is ahead, tied or within one score
     late in the game (4th quarter, 3rd period, 7th inning on, last half hour of soccer).
-  - LIVE VALUE: Kalshi sells a team for at least 8 cents less than ESPN's live win chance.
+  - LIVE VALUE: Kalshi sells a team for at least 10 cents less than ESPN's live win chance.
 Each game alerts once per level (watch -> brewing -> happening), so the phone doesn't buzz nonstop."""
 import json, os, re, time, calendar, unicodedata, urllib.request
 
@@ -59,6 +59,67 @@ def send(title, body, click):
         urllib.request.urlopen(req, timeout=20).read(); print("alert sent:", title)
     except Exception as e: print("alerts: send failed", e)
 
+def num(v):
+    m = re.match(r"\s*(-?\d+(?:\.\d+)?)", str(v if v is not None else ""))
+    return float(m.group(1)) if m else None
+
+def game_story(path, eid, sport, dog_id, fav_id, dog_home, dname, fname):
+    """Read ESPN's game page: how each team is actually playing, the momentum, and the dog's key players.
+    Returns (reasons, warnings, wp_now, wp_jump) where wp_* are the underdog's ESPN live win chance and its rise
+    over roughly the last 10 plays."""
+    d = get(ESPN + path + "/summary?event=" + str(eid)) or {}
+    reasons, warns = [], []
+    box = {}
+    for t in (d.get("boxscore") or {}).get("teams") or []:
+        box[str((t.get("team") or {}).get("id"))] = {x.get("name"): x.get("displayValue") for x in t.get("statistics") or []}
+    B, F = box.get(str(dog_id), {}), box.get(str(fav_id), {})
+    def cmp(key, label, better="more", pct=False, margin=0):
+        b, f = num(B.get(key)), num(F.get(key))
+        if b is None or f is None: return
+        good = (b > f + margin) if better == "more" else (b < f - margin)
+        bad = (f > b + margin) if better == "more" else (f < b - margin)
+        txt = f"{label}: {dname} {B.get(key)}{'%' if pct else ''} vs {fname} {F.get(key)}{'%' if pct else ''}"
+        if good: reasons.append(txt)
+        elif bad: warns.append(txt)
+    if sport == "Football":
+        cmp("totalYards", "Total yards", margin=20); cmp("netPassingYards", "Passing yards", margin=25); cmp("rushingYards", "Rushing yards", margin=20)
+        cmp("turnovers", "Turnovers", better="less"); cmp("firstDowns", "First downs", margin=2)
+        # the underdog's quarterback and top runner today
+        for t in (d.get("boxscore") or {}).get("players") or []:
+            if str((t.get("team") or {}).get("id")) != str(dog_id): continue
+            for cat in t.get("statistics") or []:
+                a = (cat.get("athletes") or [None])[0]
+                if not a: continue
+                row = dict(zip(cat.get("keys") or [], a.get("stats") or [])); who = (a.get("athlete") or {}).get("displayName", "")
+                if cat.get("name") == "passing" and row.get("passingYards"):
+                    reasons.append(f"QB {who}: {row.get('completions/passingAttempts', '')}, {row.get('passingYards')} yds, {row.get('passingTouchdowns', 0)} TD, {row.get('interceptions', 0)} INT")
+                if cat.get("name") == "rushing" and num(row.get("rushingYards") or 0) and num(row.get("rushingYards")) >= 50:
+                    reasons.append(f"Runner {who}: {row.get('rushingAttempts')} carries, {row.get('rushingYards')} yds")
+                if cat.get("name") == "receiving" and num(row.get("receivingYards") or 0) and num(row.get("receivingYards")) >= 60:
+                    reasons.append(f"Top target {who}: {row.get('receptions')} catches, {row.get('receivingYards')} yds")
+    elif sport == "Basketball":
+        cmp("fieldGoalPct", "Shooting", pct=True, margin=2); cmp("threePointFieldGoalPct", "3-point shooting", pct=True, margin=3)
+        cmp("totalRebounds", "Rebounds", margin=2); cmp("totalTurnovers", "Turnovers", better="less", margin=1)
+    elif sport == "Hockey":
+        cmp("shotsTotal", "Shots", margin=3); cmp("powerPlayGoals", "Power-play goals")
+    elif sport == "Soccer":
+        cmp("shotsOnTarget", "Shots on target", margin=0); cmp("possessionPct", "Possession", pct=True, margin=5)
+    # momentum: the last scores of the game
+    sp = d.get("scoringPlays") or []
+    last = [x for x in sp[-3:]]
+    dog_last = [x for x in last if str((x.get("team") or {}).get("id")) == str(dog_id)]
+    if len(last) >= 2 and len(dog_last) >= 2: reasons.append(f"Momentum: {dname} scored {len(dog_last)} of the last {len(last)} times")
+    elif len(last) >= 2 and not dog_last: warns.append(f"{fname} scored the last {len(last)} times")
+    # ESPN's live win chance and how fast it's rising
+    wps = d.get("winprobability") or []
+    wp_now = wp_jump = None
+    if wps:
+        f = lambda w: w.get("homeWinPercentage") if dog_home else 1 - w.get("homeWinPercentage", 0) - (w.get("tiePercentage") or 0)
+        wp_now = f(wps[-1]); old = f(wps[-12] if len(wps) > 12 else wps[0]); wp_jump = wp_now - old
+        if wp_jump >= .08: reasons.append(f"ESPN's live chance for {dname} rose from {round(old*100)}% to {round(wp_now*100)}% over the last plays")
+        elif wp_jump <= -.08: warns.append(f"ESPN's live chance for {dname} dropped from {round(old*100)}% to {round(wp_now*100)}% over the last plays")
+    return reasons, warns, wp_now, wp_jump
+
 def main():
     D = load_js("data/prices.js"); FX = load_js("data/facts.js")
     try: LV = json.load(open("live.json"))
@@ -80,7 +141,7 @@ def main():
         for u in urls:
             d = get(ESPN + u) or {}
             for ev in d.get("events") or []:
-                c = (ev.get("competitions") or [{}])[0]; c["_path"] = p; sb[str(ev.get("id"))] = c
+                c = (ev.get("competitions") or [{}])[0]; c["_path"] = p; c["_fcs"] = "groups=81" in u; sb[str(ev.get("id"))] = c
     n_alerts = 0
     for g in cand:
         c = sb.get(str(g["espn"][1]))
@@ -117,8 +178,10 @@ def main():
         situation = c.get("situation") or {}
         wp = situation.get("lastPlay", {}).get("probability", {}).get("homeWinPercentage") if isinstance(situation.get("lastPlay"), dict) else None
         msgs = []
-        # 1) late upset
-        if stage and preH is not None and Ht and At:
+        # 1) late upset (or a strong comeback already in the 2nd half)
+        P = int(period or 0)
+        half2 = (g["sport"] in ("Football", "Basketball") and (P >= 3 or ("mens-college-basketball" in c["_path"] and P >= 2))) or (g["sport"] == "Hockey" and P >= 2) or (g["sport"] == "Baseball" and P >= 5) or (g["sport"] == "Soccer" and P >= 2)
+        if (stage or half2) and preH is not None and Ht and At:
             dogHome = preH < .5; dog, fav = (H, A) if dogHome else (A, H); dogT = Ht if dogHome else At
             pre = preH if dogHome else 1 - preH
             if pre <= .40:
@@ -126,23 +189,37 @@ def main():
                 near = {"Football": 8 if ball else 3, "Basketball": 6 if "college" in c["_path"] else 7, "Hockey": 1, "Baseball": 1, "Soccer": 0}.get(g["sport"])
                 if near is not None and diff >= -near:
                     level = 3 if diff > 0 else 2 if diff == 0 else 1
-                    key = f"late|{g['espn'][1]}"
+                    key = f"{'late' if stage else 'come'}|{g['espn'][1]}"
+                    story = None
                     if sent.get(key, 0) < level:
+                        story = game_story(c["_path"], g["espn"][1], g["sport"], (dog.get("team") or {}).get("id"), (fav.get("team") or {}).get("id"), dogHome, nm(dog), nm(fav))
+                        reasons, warns, wpd, jump = story
+                        if not stage:   # earlier in the 2nd half: only a real comeback with momentum counts
+                            if not (jump is not None and jump >= .12 and len(reasons) >= 3): level = 0
+                        elif level == 1 and len(reasons) < 2: level = 0   # close but not playing better: don't buzz
+                    if level and sent.get(key, 0) < level:
+                        reasons, warns, wpd, jump = story
                         ask, ser = ask_for(dogT)
-                        head = {3: "UPSET HAPPENING", 2: "UPSET BREWING", 1: "UPSET WATCH"}[level]
+                        head = {3: "UPSET HAPPENING", 2: "UPSET BREWING", 1: "UPSET WATCH"}[level] if stage else "COMEBACK"
                         title = f"{head}: {nm(dog)} vs {nm(fav)}"
-                        body = f"{nm(dog)} were only {round(pre*100)}% to win before the game. Now {sc(dog)}-{sc(fav)} in the {stage} ({clock})."
+                        when = stage or (str((st.get("type") or {}).get("shortDetail") or ""))
+                        body = f"{nm(dog)} were only {round(pre*100)}% to win before the game. Now {sc(dog)}-{sc(fav)} ({when}{', ' + clock if stage and clock else ''})."
                         if ball: body += f" {nm(dog)} have the ball."
-                        if wp is not None: body += f" ESPN live: {nm(dog)} {round((wp if dogHome else 1 - wp)*100)}%."
+                        if wpd is not None: body += f" ESPN live chance: {round(wpd*100)}%."
+                        elif wp is not None: body += f" ESPN live: {nm(dog)} {round((wp if dogHome else 1 - wp)*100)}%."
+                        if reasons: body += " WHY: " + "; ".join(reasons[:5]) + "."
+                        if warns: body += " CAREFUL: " + "; ".join(warns[:2]) + "."
                         if ask: body += f" Kalshi: {round(ask*100)}c, $10 wins about ${10/ask - 10:.2f}."
                         else: body += " Check Kalshi's live price."
                         link = f"https://kalshi.com/markets/{ser.lower()}/x/{(ser + '-' + code).lower()}" if ask and code else APP
                         msgs.append((title, body, link)); sent[key] = level
         # 2) live value: Kalshi well below ESPN's live chance
-        if wp is not None and rows:
+        fresh = now - (LV.get("ts") or 0) < 8 * 60
+        big = g.get("league") in ("NFL", "NBA", "WNBA", "NHL", "MLB", "College football") and not c.get("_fcs")
+        if wp is not None and rows and fresh and big:
             for t, p in ((Ht, wp), (At, 1 - wp)):
                 ask, ser = ask_for(t) if t else (None, None)
-                if ask and .15 <= ask <= .75 and p - ask >= .08:
+                if ask and .15 <= ask <= .75 and p - ask >= .10:
                     key = f"value|{g['espn'][1]}|{t['name']}"
                     if now - sent.get(key, 0) > 45 * 60:
                         title = f"LIVE VALUE: {t.get('short') or t['name']} to win"
