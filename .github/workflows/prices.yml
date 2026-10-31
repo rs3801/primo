@@ -23,11 +23,12 @@ jobs:
       - run: python scripts/fetch_facts.py || echo 'facts skipped'
       - run: python scripts/fetch_sharp.py || echo 'sharp skipped'
       - run: python scripts/fetch_players.py || echo 'players skipped'
+      - run: python scripts/fetch_fights.py || echo 'fights skipped'
       - name: Save new prices
         run: |
           git config user.name "primo-bot"
           git config user.email "primo-bot@users.noreply.github.com"
-          for f in data/prices.js data/baseline.json data/scorecard.json data/scorecard.js data/facts.js data/rosters.json data/form_cache.json data/tennis_results.json data/standings.json data/sharp.js data/injury_seen.json data/players.js data/box_cache.json data/sched_cache.json; do [ -f "$f" ] && git add "$f"; done
+          for f in data/prices.js data/baseline.json data/scorecard.json data/scorecard.js data/facts.js data/rosters.json data/form_cache.json data/tennis_results.json data/standings.json data/sharp.js data/injury_seen.json data/players.js data/box_cache.json data/sched_cache.json data/fights.js data/fighter_cache.json data/fight_past.json; do [ -f "$f" ] && git add "$f"; done
           git diff --cached --quiet && exit 0
           git commit -m "Prices update"
           for i in 1 2 3; do git pull --rebase -X theirs origin main && git push && exit 0; sleep 5; done

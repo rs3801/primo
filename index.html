@@ -315,7 +315,7 @@ header.top .hint{color:#FFB52E;border-color:rgba(255,181,46,.6);background:rgba(
 <footer class="foot">Primo is an independent tool for personal use. It is not affiliated with, endorsed by or sponsored by Kalshi or any league or team. Market names and prices are shown only so you can find the same bets yourself. Chances are market estimates, not guarantees.</footer>
 <div class="toast" id="toast" role="status" hidden></div>
 
-<script>(function(){var v=Date.now();document.write('<script src="data/prices.js?v='+v+'"><\/script><script src="data/research.js?v='+v+'"><\/script><script src="data/scorecard.js?v='+v+'"><\/script><script src="data/report.js?v='+v+'"><\/script><script src="data/sharp.js?v='+v+'"><\/script><script src="data/players.js?v='+v+'"><\/script><script src="data/facts.js?v='+v+'"><\/script>')})();</script>
+<script>(function(){var v=Date.now();document.write('<script src="data/prices.js?v='+v+'"><\/script><script src="data/research.js?v='+v+'"><\/script><script src="data/scorecard.js?v='+v+'"><\/script><script src="data/report.js?v='+v+'"><\/script><script src="data/sharp.js?v='+v+'"><\/script><script src="data/players.js?v='+v+'"><\/script><script src="data/fights.js?v='+v+'"><\/script><script src="data/facts.js?v='+v+'"><\/script>')})();</script>
 
 <script>
 (function(){
@@ -811,6 +811,8 @@ function newsAdjust(m, op){
 const V_UP = {drop: ["risky", "🤔 Risky"], risky: ["okay", "👍 Okay"], okay: ["keep", "✅ Keep"]}, V_DN = {keep: ["okay", "👍 Okay"], okay: ["risky", "🤔 Risky"]};
 function sharpAdjust(m, op){
   if (op) newsAdjust(m, op);
+  if (op && op.v === "drop" && likedBy(m)){ op.v = "risky"; op.badge = "🤔 Risky"; op.say = op.say.replace(/^Primo would leave this out\./, "A long shot Primo's research likes."); }
+  if (op && op.cautioned){ const dn = V_DN[op.v]; if (dn){ op.v = dn[0]; op.badge = dn[1]; op.say = op.say.replace(/^Solid leg\./, "Decent, but careful."); } }   // a long shot Primo's research likes: risky, not a drop
   if (!op || !m.sharp || m.fair == null) return op;
   const c = isNaN(m.ask) ? m.p : m.ask, e = m.fair - c, F = Math.round(m.fair*100), C = Math.round(c*100);
   if (e >= .03){
@@ -2293,9 +2295,55 @@ function kalshiFind(leg){
   return best && best.m;
 }
 
+/* ---------- fights: UFC tale of the tape from ESPN (record, age, height, reach, stance, last 5 fights) ---------- */
+const FIGHTS = (window.PRIMO_FIGHTS || {}).fights || [];
+function sameFighter(k, e){
+  const a = ffold(k).replace(/[^a-z ]/g, " ").replace(/\s+/g, " ").trim().split(" "), b = ffold(e).replace(/[^a-z ]/g, " ").replace(/\s+/g, " ").trim().split(" ");
+  if (a.join("") === b.join("")) return true;
+  const la = a[a.length - 1], lb = b[b.length - 1];
+  if (la !== lb || la.length < 3) return false;
+  return a[0][0] === b[0][0] || a.some(x => x.length > 3 && b.includes(x) && x !== la);
+}
+function fightFor(g){
+  if (g._fight !== undefined) return g._fight;
+  const names = [...new Set(g.markets.filter(m => m.type === "winner" || /FIGHT$|^KXBOXING$/.test(m.series)).map(m => m.label.replace(/ wins$/i, "")))];
+  const f = FIGHTS.find(x => (!g.start || Math.abs(new Date(x.start) - g.start) < 30*3600000) && x.f.every(p => names.some(n => sameFighter(n, p.name))));
+  return (g._fight = f || null);
+}
+function fightTake(m, g){   // pros, cons and tale-of-the-tape lines for a fighter-to-win bet
+  const F = fightFor(g); if (!F) return null;
+  const meName = m.label.replace(/ wins$/i, ""), me = F.f.find(p => sameFighter(meName, p.name)), op = F.f.find(p => p !== me); if (!me || !op) return null;
+  const pros = [], cons = [], lines = [];
+  const rec = r => { const x = /(\d+)-(\d+)(?:-(\d+))?/.exec(r || ""); return x ? {w: +x[1], l: +x[2], g: +x[1] + +x[2] + +(x[3] || 0)} : null; };
+  const A = rec(me.rec), B = rec(op.rec), M = me.name, O = op.name;
+  const fin = p => p.last.filter(x => x.r === "W" && /KO|TKO|Sub/i.test(x.how)).length, wins = p => p.last.filter(x => x.r === "W").length;
+  const streak = p => { let n = 0; const r = (p.last[0] || {}).r; for (const x of p.last){ if (x.r !== r) break; n++; } return r ? {r, n} : null; };
+  const inch = v => { const x = /(\d+)' (\d+(?:\.\d)?)"/.exec(v || ""); return x ? +x[1]*12 + +x[2] : parseFloat(v) || null; };
+  lines.push(`🥊 Tale of the tape (${F.wc}${F.rounds ? `, ${F.rounds} rounds` : ""}): ${M} ${me.rec || "?"}, age ${me.age ?? "?"}, ${me.ht || "?"} tall, ${me.reach || "?"} reach, ${me.stance || "?"}${me.team ? `, ${me.team}` : ""} · ${O} ${op.rec || "?"}, age ${op.age ?? "?"}, ${op.ht || "?"}, ${op.reach || "?"} reach, ${op.stance || "?"}${op.team ? `, ${op.team}` : ""}.`);
+  const last = p => p.last.slice(0, 3).map(x => `${x.r} ${x.how}${x.rd ? " R" + x.rd : ""} vs ${x.opp}`).join("; ");
+  if (me.last.length) lines.push(`${M}'s last fights: ${last(me)}.`);
+  if (op.last.length) lines.push(`${O}'s last fights: ${last(op)}.`);
+  if (A && B){
+    if (A.l === 0 && A.w >= 5 && B.l > 0) pros.push(`${M} is unbeaten (${me.rec}); ${O} has lost ${B.l} times (${op.rec}).`);
+    else if (B.l === 0 && B.w >= 5 && A.l > 0) cons.push(`${O} is unbeaten (${op.rec}); ${M} has lost ${A.l} times (${me.rec}).`);
+  }
+  const sm = streak(me), so = streak(op);
+  if (sm && sm.n >= 3 && sm.r === "W") pros.push(`${M} has won ${sm.n} fights in a row.`); else if (sm && sm.n >= 2 && sm.r === "L") cons.push(`${M} has lost ${sm.n} fights in a row.`);
+  if (so && so.n >= 3 && so.r === "W") cons.push(`${O} has won ${so.n} fights in a row.`); else if (so && so.n >= 2 && so.r === "L") pros.push(`${O} has lost ${so.n} fights in a row.`);
+  if (me.age && op.age && me.age - op.age >= 5) cons.push(`${M} is ${me.age - op.age} years older (${me.age} vs ${op.age}).`); else if (me.age && op.age && op.age - me.age >= 5) pros.push(`${M} is ${op.age - me.age} years younger (${me.age} vs ${op.age}).`);
+  const rm = inch(me.reach), ro = inch(op.reach);
+  if (rm && ro && rm - ro >= 3) pros.push(`${M} has a ${rm - ro}" reach advantage.`); else if (rm && ro && ro - rm >= 3) cons.push(`${O} has a ${ro - rm}" reach advantage.`);
+  if (me.last.length >= 3 && fin(me) >= 3) pros.push(`${M} finishes fights: ${fin(me)} of the last ${me.last.length} were wins by knockout or submission.`);
+  const lossesBy = (p, re) => p.last.filter(x => x.r === "L" && re.test(x.how)).length;
+  if (lossesBy(op, /KO|TKO/) >= 2 && fin(me) >= 2) pros.push(`${O} has been knocked out ${lossesBy(op, /KO|TKO/)} times in the last ${op.last.length} fights.`);
+  if (lossesBy(me, /KO|TKO/) >= 2) cons.push(`${M} has been knocked out ${lossesBy(me, /KO|TKO/)} times in the last ${me.last.length} fights.`);
+  const days = p => p.last[0] ? Math.round((Date.now() - new Date(p.last[0].d)) / 86400000) : null, dm = days(me);
+  if (dm && dm > 500) cons.push(`${M} hasn't fought in ${Math.round(dm/30)} months (ring rust).`);
+  return {pros, cons, lines};
+}
 function buildTakeK(r, m, g){   // Kalshi-only games (tennis, smaller leagues): odds, form, head-to-head, research, price moves
   const p = r.chance; if (p == null) return null;
-  const me = m.label, other = (g.markets.find(x => x.type === "winner" && !isNaN(x.p) && x.label !== me && !/:|wins by|tie|draw/i.test(x.label)) || {}).label || "the other side";
+  const me = m.label.replace(/ wins$/i, ""), other = ((g.markets.find(x => x.type === "winner" && !isNaN(x.p) && x.label !== m.label && !/:|wins by|tie|draw/i.test(x.label)) || {}).label || "the other side").replace(/ wins$/i, "");
   const pros = [], cons = [];
   const lead = p >= .5 ? `${me} is the favorite (${TK.pct(p)}).` : `${other} is the favorite; ${me} is the underdog (${TK.pct(p)}).`;
   const P = TEN.players || {}, a = P[me], b = P[other];
@@ -2306,17 +2354,20 @@ function buildTakeK(r, m, g){   // Kalshi-only games (tennis, smaller leagues): 
   const h = (TEN.h2h || {})[me + "|" + other], h2 = (TEN.h2h || {})[other + "|" + me];
   const mw = h ? h.a : h2 ? h2.b : 0, ow = h ? h.b : h2 ? h2.a : 0;
   if (mw + ow){ if (mw > ow) pros.push(`${me} leads their meetings ${mw}-${ow}.`); else if (ow > mw) cons.push(`${other} leads their meetings ${ow}-${mw}.`); }
+  const FT = (g.sport === "MMA" || g.sport === "Boxing") ? fightTake(m, g) : null;
+  if (FT){ pros.push(...FT.pros); cons.push(...FT.cons); }
   const rs = g.research;
-  if (rs && rs.lean){ if (ffold(rs.lean) === ffold(me)) pros.push(`Primo's research picks ${me}.`); else cons.push(`Primo's research picks ${rs.lean}.`); }
+  for (const c of (rs && rs.caution) || []) if ((c.match || []).some(k => k[0] === "=" ? ffold(m.label) === ffold(k.slice(1)) : ffold(m.label).includes(ffold(k)))) { cons.unshift(`⚠️ Primo's research warns: ${c.why}`); var cautioned = true; }
+  if (rs && rs.lean){ const mine = ffold(rs.lean) === ffold(me) || ffold(me).includes(ffold(rs.lean)) || ffold(rs.lean).includes(ffold(me.replace(/ wins$/i, ""))); if (mine) pros.push(`Primo's research picks ${rs.lean}.`); else cons.push(`Primo's research picks ${rs.lean}.`); }
   const l = likedBy(m); if (l) pros.push(`Primo's research likes this bet: ${(l.why || l.text || "").slice(0, 140)}`);
   if (Math.abs(m.move || 0) >= 4) (m.move > 0 ? pros : cons).push(`The Kalshi price moved ${m.move > 0 ? "up" : "down"} ${Math.abs(m.move)} points in the last day.`);
   if (r.edge != null && r.edge <= -.05) cons.push(`The price dropped since your slip (${TK.pct(r.implied)} → ${TK.pct(p)}).`);
-  const noInfo = !pros.length && !cons.length;
+  const noInfo = !pros.length && !cons.length && !FT;
   let sc = p >= .8 ? 2 : p >= .7 ? 1.4 : p >= .6 ? .7 : p >= .5 ? -.1 : p >= .4 ? -1 : -1.8;
   sc += Math.min(pros.length, 3)*.45 - Math.min(cons.length, 3)*.55;
   const v = sc >= 1.6 ? ["keep", "✅ Keep", "Solid leg"] : sc >= .6 ? ["okay", "👍 Okay", "Decent, with some risk"] : sc >= -.4 ? ["risky", "🤔 Risky", "Close to a coin flip"] : ["drop", "❌ Drop", "Primo would leave this out"];
   const why = (v[0] === "keep" || v[0] === "okay") ? pros.slice(0, 2) : cons.slice(0, 2);
-  return {v: v[0], badge: v[1], say: `${v[2]}. ${lead}${why.length ? " " + why.join(" ") : ""}${noInfo ? " Primo has no stats or research on this one, so this is the odds only." : ""}`, pros, cons, flip: p < .4 && v[0] === "drop" ? `The other side (${other}, about ${TK.pct(1 - p)}) is the safer pick.` : null, other};
+  return {v: v[0], badge: v[1], say: `${v[2]}. ${lead}${why.length ? " " + why.join(" ") : ""}${noInfo ? " Primo has no stats or research on this one, so this is the odds only." : ""}`, pros, cons, cautioned: typeof cautioned !== "undefined", extra: FT ? FT.lines : null, flip: p < .4 && v[0] === "drop" ? `The other side (${other}, about ${TK.pct(1 - p)}) is the safer pick.` : null, other};
 }
 
 // Kalshi player bets ("Brice Turang: 1+ hits + runs + RBIs"): the exact line, or at least the game and that player's other lines
