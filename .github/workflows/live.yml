@@ -21,13 +21,14 @@ jobs:
     timeout-minutes: 58
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      NTFY_TOPIC: ${{ secrets.NTFY_TOPIC || 'primo-2544a51391' }}
     steps:
       - uses: actions/checkout@v4
       - name: Live prices every 3 minutes, and keep the hourly robots on time
         run: |
           publish() {
-            rm -rf /tmp/lv && mkdir /tmp/lv && cp live.json /tmp/lv/ && cd /tmp/lv
-            git init -q && git checkout -q -b live && git add live.json
+            rm -rf /tmp/lv && mkdir /tmp/lv && cp live.json /tmp/lv/ && { [ -f /tmp/lv_alerts.json ] && cp /tmp/lv_alerts.json /tmp/lv/alerts_state.json || true; } && cd /tmp/lv
+            git init -q && git checkout -q -b live && git add live.json $( [ -f alerts_state.json ] && echo alerts_state.json )
             git -c user.name=primo-bot -c user.email=primo-bot@users.noreply.github.com commit -qm "Live prices"
             git push -qf "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" live
             cd "$GITHUB_WORKSPACE"
@@ -40,12 +41,14 @@ jobs:
             [ -n "$last" ] && age=$(( ( $(date +%s) - $(date -d "$last" +%s) ) / 60 ))
             if [ "${busy:-1}" = "0" ] && [ "$age" -ge 55 ]; then echo "starting $wf (last start $age min ago)"; gh workflow run "$wf" -R "$GITHUB_REPOSITORY" || true; fi
           }
+          git fetch -q origin live && git show origin/live:alerts_state.json > /tmp/lv_alerts.json 2>/dev/null || true   # which alerts were already sent
           end=$(( $(date +%s) + 50*60 ))
           while true; do
             keep_on_time prices.yml
             keep_on_time report.yml
             git pull -q origin main || true          # newest hourly prices (which games exist)
             python3 scripts/fetch_live.py | tee /tmp/out.txt || true
+            python3 scripts/alerts.py || true            # phone/watch alerts for live upsets
             [ -f live.json ] && publish || true
             n=$(grep -o '^[0-9]*' /tmp/out.txt | head -1)
             wait=170; [ "${n:-0}" = "0" ] && wait=420   # nothing being played: check less often
