@@ -1,1 +1,8 @@
-{"id":"ezTo3iS9Jqas","time":1793464880,"expires":1793508080,"event":"message","topic":"primo-2544a51391","title":"Primo alerts are on","message":"Primo alerts are connected. You'll get a buzz when an underdog is ahead, tied or close late in a game, or when Kalshi's live price is well below ESPN's live chance.","tags":["white_check_mark"],"click":"https://rs3801.github.io/primo/"}
+ND VS NAVY 7-3 9:26 - 2nd | WHY ['Passing yards: Notre Dame 60 vs Navy 8', 'QB CJ Carr: 5/7, 60 yds, 1 TD, 0 INT'] | CAREFUL ['Total yards: Notre Dame 75 vs Navy 115', 'Rushing yards: Notre Dame 15 vs Navy 107', 'First downs: Notre Dame 5 vs Navy 9'] | wp 0.9685 jump -0.01429999999999998
+ARIZ @ TTU 3-7 14:55 - 2nd | WHY ['QB Noah Fifita: 5/7, 68 yds, 0 TD, 0 INT'] | CAREFUL ['Rushing yards: Arizona -3 vs Texas Tech 37', 'First downs: Arizona 1 vs Texas Tech 5'] | wp 0.23050000000000004 jump -0.05909999999999993
+SMU @ SYR 10-7 10:12 - 2nd | WHY ['Total yards: SMU 163 vs Syracuse 129', 'Passing yards: SMU 136 vs Syracuse 34', 'QB Kevin Jennings: 10/13, 136 yds, 1 TD, 0 INT', 'Momentum: SMU scored 2 of the last 3 times'] | CAREFUL ['Rushing yards: SMU 27 vs Syracuse 95'] | wp 0.6602 jump -0.07869999999999999
+WIS @ IOWA 0-10 14:53 - 2nd | WHY ['QB Colton Joseph: 2/4, 16 yds, 0 TD, 0 INT'] | CAREFUL ['Total yards: Wisconsin 16 vs Iowa 142', 'Passing yards: Wisconsin 16 vs Iowa 90', 'Rushing yards: Wisconsin 0 vs Iowa 52', 'First downs: Wisconsin 1 vs Iowa 6', 'Iowa scored the last 2 times'] | wp 0.19440000000000002 jump -0.05069999999999997
+alerts: no NTFY_TOPIC set; UPSET HAPPENING: Brighton vs Man City
+alerts: no NTFY_TOPIC set; UPSET BREWING: Portsmouth vs Burnley
+alerts: no NTFY_TOPIC set; UPSET HAPPENING: West Brom vs West Ham
+alerts: 40 games checked, 3 sent
