@@ -1964,13 +1964,13 @@ function lateUpset(x, c){
   if (preH == null && f.odds && f.odds.home != null){ const h = f.odds.home, a = f.odds.away; preH = h/(h + a); src = "the sportsbooks"; }
   if (preH == null) return null;
   const dogHome = preH < .5, dog = dogHome ? H : A, fav = dogHome ? A : H, pre = dogHome ? preH : 1 - preH;
-  if (pre > .4) return null;   // must have been a clear favorite ("should have been an easy game")
+  if (pre > .46) return null;   // the team that was expected to lose
   const diff = (+dog.score || 0) - (+fav.score || 0), D = dog.short || dog.name, F = fav.short || fav.name;
   const sit = LV.sit[f.espn[1]], ball = sit && sit.possession && String(sit.possession) === String(dog.id);
-  const near = {Football: ball ? 8 : 3, Basketball: /mens-college/.test(f.espn[0]) ? 6 : 7, Hockey: 1, Baseball: 1, Soccer: 0}[g.sport];
+  const near = {Football: ball ? 8 : 3, Basketball: 5, Hockey: 1, Baseball: 1, Soccer: 0}[g.sport];
   if (near == null || diff < -near) return null;
   const level = diff > 0 ? "happening" : diff === 0 ? "brewing" : "watch";
-  const why = [`Before the game ${D} had only about ${Math.round(pre*100)}% to win (${src}). ${F} were supposed to win this one easily.`];
+  const why = [`Before the game ${D} had only about ${Math.round(pre*100)}% to win (${src}). ${F} were expected to win.`];
   why.push(diff > 0 ? `Now ${D} lead ${dog.score}-${fav.score} in the ${stage}${s.clock ? ` (${s.clock})` : ""}.` : diff === 0 ? `It's tied ${dog.score}-${fav.score} in the ${stage}${s.clock ? ` (${s.clock})` : ""}.` : `${D} are only down ${-diff} (${dog.score}-${fav.score}) in the ${stage}${s.clock ? ` (${s.clock})` : ""}.`);
   if (ball) why.push(`${D} have the ball${sit.downDistanceText ? `: ${sit.downDistanceText}` : ""}${sit.isRedZone ? " (red zone!)" : ""}.`);
   const bm = (es && es.box || {})[dog.id] || {}, bt = (es && es.box || {})[fav.id] || {}, n = v => parseFloat(String(v || "").replace(/[^0-9.]/g, "")) || 0;

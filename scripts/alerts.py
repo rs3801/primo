@@ -185,12 +185,20 @@ def main():
         # 1) late upset (or a strong comeback already in the 2nd half)
         P = int(period or 0)
         half2 = (g["sport"] in ("Football", "Basketball") and (P >= 3 or ("mens-college-basketball" in c["_path"] and P >= 2))) or (g["sport"] == "Hockey" and P >= 2) or (g["sport"] == "Baseball" and P >= 5) or (g["sport"] == "Soccer" and P >= 2)
+        # no sportsbook line on the scoreboard (common for college games once they start): use ESPN's win chance at kickoff
+        if preH is None and (stage or half2) and abs(sc(H) - sc(A)) <= 8:
+            pk = f"pre|{g['espn'][1]}"
+            if pk not in sent:
+                dd = get(ESPN + c["_path"] + "/summary?event=" + str(g["espn"][1])) or {}
+                w = (dd.get("winprobability") or [None])[0]
+                sent[pk] = w.get("homeWinPercentage") if w else None
+            preH = sent.get(pk)
         if (stage or half2) and preH is not None and Ht and At:
             dogHome = preH < .5; dog, fav = (H, A) if dogHome else (A, H); dogT = Ht if dogHome else At
             pre = preH if dogHome else 1 - preH
-            if pre <= .40:
+            if pre <= .46:   # the team that was expected to lose
                 diff = sc(dog) - sc(fav); ball = str(situation.get("possession") or "") == str((dog.get("team") or {}).get("id"))
-                near = {"Football": 8 if ball else 3, "Basketball": 6 if "college" in c["_path"] else 7, "Hockey": 1, "Baseball": 1, "Soccer": 0}.get(g["sport"])
+                near = {"Football": 8 if ball else 3, "Basketball": 5, "Hockey": 1, "Baseball": 1, "Soccer": 0}.get(g["sport"])
                 if near is not None and diff >= -near:
                     level = 3 if diff > 0 else 2 if diff == 0 else 1
                     key = f"{'late' if stage else 'come'}|{g['espn'][1]}"
@@ -200,7 +208,7 @@ def main():
                         reasons, warns, wpd, jump = story
                         if not stage:   # earlier in the 2nd half: only a real comeback with momentum counts
                             if not (jump is not None and jump >= .12 and len(reasons) >= 3): level = 0
-                        elif level == 1 and len(reasons) < 2: level = 0   # close but not playing better: don't buzz
+
                     if level and sent.get(key, 0) < level:
                         reasons, warns, wpd, jump = story
                         ask, ser = ask_for(dogT)
