@@ -2000,7 +2000,7 @@ function liveCardHTML(x, c){
     : es && es.home != null ? `<div class="legnote mean" style="margin:6px 0">⏸️ <b>No edge right now.</b> Kalshi's price is in line with ESPN's live chance. Wait or skip.</div>`
     : `<div class="legnote mean" style="margin:6px 0">ℹ️ Primo can't see a live win chance for this one${g.facts ? "" : ` (${esc(g.leagueName)} has no free live feed)`}, so it shows Kalshi's live prices only.</div>`;
   const lu = lateUpset(x, c), up = lu ? null : liveUpset(x, c);
-  return `<article class="game" style="--c:var(${SPORT_COLOR[g.sport] || "--s-other"});padding:12px 14px;margin-bottom:10px"><div class="gtitle">🔴 ${esc(g.title)}</div>${lu ? lateCardHTML(x, lu) : up ? upsetCardHTML(x, up) : ""}<div class="gsub"><b>${esc(g.leagueName)}</b>${es ? ` · ${esc(es.detail)}` : " · in progress"}${score ? ` · ${score}` : ""}</div>${call}${c.sides.length ? `<ul style="margin:6px 0 0;padding-left:18px">${sideRows}</ul>` : `<p class="muted">No live Kalshi price yet; the live robot checks every few minutes.</p>`}${c.notes.length ? `<p class="muted" style="margin:6px 0 0">${c.notes.map(esc).join(" ")}</p>` : ""}${link ? `<p style="margin:6px 0 0"><a href="${link}" target="_blank" rel="noopener">Open on Kalshi ↗</a></p>` : ""}</article>`;
+  return `<article class="game" data-eid="${esc(String((g.facts && g.facts.espn || [])[1] || ""))}" style="--c:var(${SPORT_COLOR[g.sport] || "--s-other"});padding:12px 14px;margin-bottom:10px"><div class="gtitle">🔴 ${esc(g.title)}</div>${lu ? lateCardHTML(x, lu) : up ? upsetCardHTML(x, up) : ""}<div class="gsub"><b>${esc(g.leagueName)}</b>${es ? ` · ${esc(es.detail)}` : " · in progress"}${score ? ` · ${score}` : ""}</div>${call}${c.sides.length ? `<ul style="margin:6px 0 0;padding-left:18px">${sideRows}</ul>` : `<p class="muted">No live Kalshi price yet; the live robot checks every few minutes.</p>`}${c.notes.length ? `<p class="muted" style="margin:6px 0 0">${c.notes.map(esc).join(" ")}</p>` : ""}${link ? `<p style="margin:6px 0 0"><a href="${link}" target="_blank" rel="noopener">Open on Kalshi ↗</a></p>` : ""}</article>`;
 }
 async function renderLive(force){
   const el = $("liveview");
@@ -2025,6 +2025,11 @@ async function renderLive(force){
     <button class="btn ghost sm" type="button" id="liverefresh" style="margin-top:8px">↻ Refresh now</button></div>
     <div style="margin-top:12px">${shown.length ? shown.map(([x, c]) => liveCardHTML(x, c)).join("") : `<div class="empty">${LV.view === "upset" ? "No live upset chances right now. Primo looks for an underdog in a close game with the ball, more yards or shots, momentum, or that was favored before the game. Check back in a few minutes." : LV.view === "value" ? "No live value spots right now." : `No games are being played right now${LV.sport !== "all" ? " in this sport" : ""}. Check back when games start.`}</div>`}</div>`;
   clearTimeout(LV.timer);
+  if (LV.focus){   // opened from a phone alert: jump to that game's card
+    const card = el.querySelector(`article[data-eid="${LV.focus}"]`);
+    if (card){ card.style.outline = "3px solid #e53935"; card.style.outlineOffset = "2px"; setTimeout(() => { const hd = [...document.querySelectorAll("header, .topbar, .hero")].find(x => getComputedStyle(x).position === "sticky" || getComputedStyle(x).position === "fixed"); window.scrollTo({top: card.getBoundingClientRect().top + window.scrollY - (hd ? hd.offsetHeight : 0) - 12, behavior: "smooth"}); }, 60); LV.focus = null; }
+    else if (LV.data){ toast("That game has finished or isn't live right now."); LV.focus = null; }
+  }
   LV.timer = setTimeout(() => { if (state.tab === "live" && !document.hidden) renderLive(); }, 30000);
 }
 document.addEventListener("click", e => {
@@ -2100,6 +2105,10 @@ $("stamp").innerHTML = "Prices as of " + esc(D.asof) + (SH.asof ? "<br>Pinnacle 
   el.innerHTML = `<summary><b>🎯 Player bets Primo likes</b> (next 2 days): ${L.length} where the player's recent games beat Kalshi's price.</summary><ul style="margin:8px 0 0;padding-left:18px">${L.slice(0, 15).map(({g, m, ins, op}) => `<li style="margin:8px 0"><b>${esc(m.pick || m.label)}</b> <span style="opacity:.7">(${esc(g.title)}, ${esc(g.leagueName)})</span> — Kalshi ${Math.round(m.ask*100)}¢, recent games ≈${Math.round(ins.est*100)}% · ${esc(op.badge)}${openBtns(m)}<ul style="margin:2px 0 0;padding-left:16px;font-size:13px">${op.pros.slice(0, 3).concat(ins.lines.filter(x => /projection|Matchup/.test(x)).slice(0, 1)).map(x => `<li>${esc(x)}</li>`).join("")}</ul></li>`).join("")}</ul><p style="margin:8px 0 0;font-size:12.5px;opacity:.8">From ESPN box scores of each player's last 5 games: how often he reached the line, his share of targets and carries, and how much the opponent's defense has been giving up. A few games is a small sample, so Primo blends it with Kalshi's price. Check injuries and the starting lineup before betting.</p>`;
   const v = document.getElementById("view-build") || document.querySelector("main"); if (v) v.prepend(el); })();
 $("filterbox").open = true;
+// a phone alert links here as ...#live-<ESPN game id>: open the Live tab on that game
+function openFromLink(){ const h = /^#live-(\d+)/.exec(location.hash || ""); if (!h) return false; LV.focus = h[1]; LV.view = "all"; LV.sport = "all"; state.tab = "live"; history.replaceState(null, "", location.pathname + location.search); return true; }
+window.addEventListener("hashchange", () => { if (openFromLink()){ render(); window.scrollTo({top: 0}); } });
+openFromLink();
 buildFilters(); renderLegChips(); render();
 
 /* ---------- Ask Primo: check the viewer's own picks (typed or a screenshot) ---------- */
