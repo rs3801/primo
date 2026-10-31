@@ -1386,7 +1386,8 @@ function whyHTML(g){
 function leanClash(m){
   const r = m.g.research;
   if (!r || !r.lean || m.type !== "winner" || /^tie$/i.test(m.label)) return false;
-  return m.label !== r.lean;
+  const nm = x => ffold(x).replace(/ wins$/, "").trim();
+  return nm(m.label) !== nm(r.lean);
 }
 function gameHTML(g){
   const color = SPORT_COLOR[g.sport] || "--s-other";
