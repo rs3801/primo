@@ -1,17 +1,2 @@
-ARIZ @ TTU ['34', '23'] 2:04 - 4th odds=False
-SMU @ SYR ['23', '27'] 1:57 - 4th odds=False
-BC @ DUKE ['47', '2'] 1:27 - 4th odds=False
-UAB @ USF ['30', '10'] 1:36 - 4th odds=False
-MICH @ RUTG ['21', '21'] 5:05 - 4th odds=False
-AUB @ MISS ['24', '15'] 15:00 - 3rd odds=False
-MRSH @ ODU ['17', '27'] 9:57 - 3rd odds=False
-KSU @ COLO ['7', '7'] Halftime odds=False
-CCU @ GAST ['3', '17'] 1:05 - 2nd odds=False
-CONN @ AFA ['7', '0'] 6:14 - 1st odds=False
-TEM @ ECU ['0', '0'] 5:03 - 1st odds=False
-LT @ USA ['7', '0'] 8:26 - 1st odds=False
-alerts: no NTFY_TOPIC set; UPSET WATCH: Syracuse vs SMU | Syracuse were only 27% to win before the game. Now 23-27 (4th quarter, 1:57). Syracuse have the ball. ESPN live chance: 21%. WHY: Rushing yards: Syracuse 135 vs SMU 70; Turnovers: Syracuse 0 vs SMU 1; QB Steve Angeli: 17/30, 161 yds, 0 TD, 0 INT (playing well); Runner Ahmad Miller: 18 carries, 56 yds; Top target Umari Hatcher: 6 catches, 65 yds. CAREFUL: Total yards: Syracuse 296 vs SMU 419; Passing yards: Syracuse 161 vs SMU 349. Check Kalshi's live price.
-alerts: no NTFY_TOPIC set; UPSET BREWING: Rutgers vs Michigan | Rutgers were only 17% to win before the game. Now 21-21 (4th quarter, 5:05). ESPN live chance: 15%. WHY: Runner Antwan Raymond: 11 carries, 85 yds; Top target Jourdin Houston: 1 catches, 80 yds; Momentum: Rutgers scored 2 of the last 3 times. CAREFUL: Total yards: Rutgers 247 vs Michigan 396; Passing yards: Rutgers 123 vs Michigan 257. Check Kalshi's live price.
-alerts: no NTFY_TOPIC set; UPSET BREWING: Elon vs NC A&T | Elon were only 43% to win before the game. Now 10-10 (4th quarter, 13:21). ESPN live chance: 38%. WHY: Turnovers: Elon 0 vs NC A&T 3; Runner Kamerin McDowell-Moore: 21 carries, 77 yds; Momentum: Elon scored 2 of the last 3 times. CAREFUL: Total yards: Elon 138 vs NC A&T 227; Passing yards: Elon 43 vs NC A&T 83. Kalshi: 61c, $10 wins about $6.39.
-alerts: no NTFY_TOPIC set; UPSET HAPPENING: Dayton vs Stetson | Dayton were only 44% to win before the game. Now 37-32 (4th quarter, 7:40). ESPN live chance: 74%. WHY: QB Bryce Schondelmyer: 17/24, 184 yds, 3 TD, 1 INT (playing well); Runner Luke Hansen: 7 carries, 108 yds; Top target Donovan Weatherly: 6 catches, 79 yds. CAREFUL: Total yards: Dayton 387 vs Stetson 535; Passing yards: Dayton 184 vs Stetson 346. Kalshi: 96c, $10 wins about $0.42.
-alerts: 80 games checked, 4 sent
+{"err": "HTTP Error 404: Not Found"}
+{"err": "HTTP Error 404: Not Found"}
