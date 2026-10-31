@@ -1106,7 +1106,8 @@ for (const g of games){
   if (!f) continue;
   g.facts = f;
   const st = new Date(f.start), overridden = R.starts && g.codes.some(c => R.starts[c]);
-  if (!overridden && !g.realStart && !isNaN(st) && (!g.start || Math.abs(st - g.start) > 20*60000)){ g.start = st; g.date = new Date(st.getFullYear(), st.getMonth(), st.getDate(), 12); }
+  // ESPN's kickoff time wins when it's earlier than Kalshi's (never treat a game that has started as upcoming)
+  if (!overridden && !isNaN(st) && (!g.realStart || (g.start && st < g.start - 10*60000)) && (!g.start || Math.abs(st - g.start) > 20*60000)){ g.start = st; g.date = new Date(st.getFullYear(), st.getMonth(), st.getDate(), 12); }
   g.injuries = f.teams.map(t => [t.name, (FX.injuries || {})[t.name] || []]).filter(([, rows]) => rows.length);
   // sportsbook chance for each winner bet (DraftKings via ESPN, with the sportsbook's cut removed)
   if (f.odds && f.odds.home != null) for (const m of g.markets){

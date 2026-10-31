@@ -1,24 +1,29 @@
 name: Live prices
+# The "keeper": GitHub often starts scheduled robots hours late, so this one keeps itself running.
+# Each run works for about 50 minutes (live prices every 3 minutes while games are on), makes sure the hourly
+# price robot and the report card have run in the last hour, then starts the next run of itself.
+# The schedule below is only a backup to restart the chain if it ever stops.
 on:
   schedule:
-    - cron: "*/5 * * * *"   # GitHub actually starts this about every 25-30 minutes; each run keeps going ~27 minutes
+    - cron: "*/15 * * * *"
   workflow_dispatch: {}
   push:
     paths: ["scripts/fetch_live.py", ".github/workflows/live.yml"]
 permissions:
   contents: write
+  actions: write
 concurrency:
   group: live
   cancel-in-progress: false
 jobs:
   live:
     runs-on: ubuntu-latest
-    timeout-minutes: 32
+    timeout-minutes: 58
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
-      - name: Refresh live prices every 3 minutes while games are on (published to the live branch, no website rebuild)
+      - name: Live prices every 3 minutes, and keep the hourly robots on time
         run: |
           publish() {
             rm -rf /tmp/lv && mkdir /tmp/lv && cp live.json /tmp/lv/ && cd /tmp/lv
@@ -27,13 +32,26 @@ jobs:
             git push -qf "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" live
             cd "$GITHUB_WORKSPACE"
           }
-          end=$(( $(date +%s) + 27*60 ))
+          keep_on_time() {   # start a robot if it hasn't started in the last 55 minutes and isn't running now
+            wf=$1
+            busy=$(gh run list -R "$GITHUB_REPOSITORY" -w "$wf" -L 5 --json status -q '[.[] | select(.status != "completed")] | length' 2>/dev/null || echo 1)
+            last=$(gh run list -R "$GITHUB_REPOSITORY" -w "$wf" -L 1 --json createdAt -q '.[0].createdAt' 2>/dev/null || echo "")
+            age=99999
+            [ -n "$last" ] && age=$(( ( $(date +%s) - $(date -d "$last" +%s) ) / 60 ))
+            if [ "${busy:-1}" = "0" ] && [ "$age" -ge 55 ]; then echo "starting $wf (last start $age min ago)"; gh workflow run "$wf" -R "$GITHUB_REPOSITORY" || true; fi
+          }
+          end=$(( $(date +%s) + 50*60 ))
           while true; do
+            keep_on_time prices.yml
+            keep_on_time report.yml
             git pull -q origin main || true          # newest hourly prices (which games exist)
-            python3 scripts/fetch_live.py | tee /tmp/out.txt
-            publish
+            python3 scripts/fetch_live.py | tee /tmp/out.txt || true
+            [ -f live.json ] && publish || true
             n=$(grep -o '^[0-9]*' /tmp/out.txt | head -1)
-            [ "${n:-0}" = "0" ] && break             # nothing being played: stop until the next run
-            [ $(( $(date +%s) + 200 )) -gt $end ] && break
-            sleep 170
+            wait=170; [ "${n:-0}" = "0" ] && wait=420   # nothing being played: check less often
+            [ $(( $(date +%s) + wait + 30 )) -gt $end ] && break
+            sleep $wait
           done
+      - name: Start the next run
+        if: always()
+        run: gh workflow run live.yml -R "$GITHUB_REPOSITORY" --ref main || true
