@@ -50,11 +50,14 @@ def imp(a):
     except (TypeError, ValueError): return None
     return 100 / (a + 100) if a > 0 else -a / (-a + 100)
 
-def send(title, body, click):
-    if not TOPIC: print("alerts: no NTFY_TOPIC set;", title, "|", body); return
-    req = urllib.request.Request("https://ntfy.sh/" + TOPIC, data=body.encode("utf-8"), method="POST",
-                                 headers={"Title": title.encode("ascii", "ignore").decode(),
-                                          "Tags": "rotating_light", "Priority": "high", "Click": click})
+def send(title, body, click, kalshi=None):
+    """Tapping the alert opens that game's card in Primo's Live tab; a second button opens it on Kalshi."""
+    if not TOPIC: print("alerts: no NTFY_TOPIC set;", title, "|", body, "|", click, kalshi); return
+    h = {"Title": title.encode("ascii", "ignore").decode(), "Tags": "rotating_light", "Priority": "high", "Click": click}
+    acts = [f"view, Open in Primo, {click}"]
+    if kalshi: acts.append(f"view, Open on Kalshi, {kalshi}")
+    h["Actions"] = "; ".join(acts)
+    req = urllib.request.Request("https://ntfy.sh/" + TOPIC, data=body.encode("utf-8"), method="POST", headers=h)
     try:
         urllib.request.urlopen(req, timeout=20).read(); print("alert sent:", title)
     except Exception as e: print("alerts: send failed", e)
@@ -223,8 +226,34 @@ def main():
                         if warns: body += " CAREFUL: " + "; ".join(warns[:2]) + "."
                         if ask: body += f" Kalshi: {round(ask*100)}c, $10 wins about ${10/ask - 10:.2f}."
                         else: body += " Check Kalshi's live price."
-                        link = f"https://kalshi.com/markets/{ser.lower()}/x/{(ser + '-' + code).lower()}" if ask and code else APP
-                        msgs.append((title, body, link)); sent[key] = level
+                        kal = f"https://kalshi.com/markets/{ser.lower()}/x/{(ser + '-' + ((D.get('REMAP') or {}).get(code, {}).get(ser, code))).lower()}" if ask and code else None
+                        msgs.append((title, body, f"{APP}#live-{g['espn'][1]}", kal)); sent[key] = level
+        # 1b) close finish: a coin-flip game (neither team a real underdog) that's within one score late
+        big_lg = g.get("league") in ("NFL", "NBA", "WNBA", "NHL", "MLB", "College football", "College basketball") and not c.get("_fcs")
+        if stage and big_lg and Ht and At and f"late|{g['espn'][1]}" not in sent and f"close|{g['espn'][1]}" not in sent:
+            lead, trail = (H, A) if sc(H) >= sc(A) else (A, H); gap = sc(lead) - sc(trail)
+            poss = str(situation.get("possession") or ""); tball = poss == str((trail.get("team") or {}).get("id"))
+            m_ = re.match(r"(\d+):(\d+)", clock or ""); mins = int(m_.group(1)) + int(m_.group(2)) / 60 if m_ else 99
+            close = {"Football": gap <= 3 or (tball and gap <= 8), "Basketball": gap <= 4 and mins <= 6, "Hockey": gap <= 1, "Baseball": gap <= 1 and int(period or 0) >= 8}.get(g["sport"], False)
+            if close:
+                trailT = Ht if trail is H else At
+                story = game_story(c["_path"], g["espn"][1], g["sport"], (trail.get("team") or {}).get("id"), (lead.get("team") or {}).get("id"), trail is H, nm(trail), nm(lead))
+                reasons, warns, wpt, jump = story
+                title = f"CLOSE FINISH: {nm(trail)} {sc(trail)} - {nm(lead)} {sc(lead)}" if gap else f"TIED LATE: {nm(H)} {sc(H)} - {nm(A)} {sc(A)}"
+                body = f"{stage}{', ' + clock if clock else ''}. " + (f"{nm(trail)} have the ball{': ' + situation.get('downDistanceText') if situation.get('downDistanceText') else ''}. " if tball else "")
+                parts = []
+                for side, t in ((H, Ht), (A, At)):
+                    ask, ser = ask_for(t)
+                    ch = (wp if side is H else (1 - wp)) if wp is not None else None
+                    seg = f"{nm(side)}: " + (f"ESPN {round(ch*100)}%" if ch is not None else "") + (f", Kalshi {round(ask*100)}c" if ask else "")
+                    if ask and ch is not None and ch - ask >= .05: seg += " (cheaper than it should be)"
+                    parts.append(seg)
+                body += " | ".join(parts) + "."
+                if reasons: body += f" {nm(trail)} WHY: " + "; ".join(reasons[:4]) + "."
+                if warns: body += " CAREFUL: " + "; ".join(warns[:2]) + "."
+                ask_t, ser_t = ask_for(trailT)
+                kal = f"https://kalshi.com/markets/{ser_t.lower()}/x/{(ser_t + '-' + ((D.get('REMAP') or {}).get(code, {}).get(ser_t, code))).lower()}" if ask_t and code else None
+                msgs.append((title, body, f"{APP}#live-{g['espn'][1]}", kal)); sent[f"close|{g['espn'][1]}"] = 1
         # 2) live value: Kalshi well below ESPN's live chance
         fresh = now - (LV.get("ts") or 0) < 8 * 60
         big = g.get("league") in ("NFL", "NBA", "WNBA", "NHL", "MLB", "College football") and not c.get("_fcs")
@@ -236,8 +265,8 @@ def main():
                     if now - sent.get(key, 0) > 45 * 60:
                         title = f"LIVE VALUE: {t.get('short') or t['name']} to win"
                         body = f"Kalshi sells it at {round(ask*100)}c but ESPN's live model gives {t.get('short') or t['name']} {round(p*100)}% ({nm(H)} {sc(H)} - {nm(A)} {sc(A)}, {(st.get('type') or {}).get('shortDetail', '')}). $10 wins about ${10/ask - 10:.2f}."
-                        link = f"https://kalshi.com/markets/{ser.lower()}/x/{(ser + '-' + code).lower()}" if code else APP
-                        msgs.append((title, body, link)); sent[key] = now
+                        kal = f"https://kalshi.com/markets/{ser.lower()}/x/{(ser + '-' + ((D.get('REMAP') or {}).get(code, {}).get(ser, code))).lower()}" if code else None
+                        msgs.append((title, body, f"{APP}#live-{g['espn'][1]}", kal)); sent[key] = now
         for m in msgs[:2]:
             send(*m); n_alerts += 1
     json.dump(sent, open(STATE, "w"))
