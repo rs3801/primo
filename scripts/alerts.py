@@ -3,7 +3,9 @@ Runs inside the live robot every few minutes. Uses ESPN's live scores and win ch
 (live.json) to spot:
   - LATE UPSETS: the team that was the clear underdog before the game (40% or less) is ahead, tied or within one score
     late in the game (4th quarter, 3rd period, 7th inning on, last half hour of soccer).
-  - LIVE VALUE: Kalshi sells a team for at least 10 cents less than ESPN's live win chance.
+  - LIVE VALUE: Kalshi sells a team for at least 7 cents less than ESPN's live win chance.
+  - CLOSE FINISH: coin-flip games within one score late.
+Every alert says whether the team is REALLY outplaying the other or the score is LUCKY (turnovers, hot shooting, a goalie).
 Each game alerts once per level (watch -> brewing -> happening), so the phone doesn't buzz nonstop."""
 import json, os, re, time, calendar, unicodedata, urllib.request
 
@@ -66,6 +68,66 @@ def num(v):
     m = re.match(r"\s*(-?\d+(?:\.\d+)?)", str(v if v is not None else ""))
     return float(m.group(1)) if m else None
 
+def ratio(v):
+    """'7-12' (made-attempts) -> 0.583"""
+    m = re.match(r"\s*(\d+)\s*[-/]\s*(\d+)", str(v or ""))
+    return int(m.group(1)) / int(m.group(2)) if m and int(m.group(2)) else None
+
+def mins_of(v):
+    m = re.match(r"\s*(\d+):(\d+)", str(v or "")); return int(m.group(1)) + int(m.group(2)) / 60 if m else None
+
+def real_or_lucky(sport, B, F, dname, fname, diff):
+    """Is the team (B) really outplaying the other (F), or is the score flattering them?
+    Returns (verdict, label, details): label is REAL, EVEN or LUCKY. diff = B's score minus F's."""
+    pts, luck, plus, minus = 0, [], [], []
+    def side(cond_good, cond_bad, w, txt):
+        nonlocal pts
+        if cond_good: pts += w; plus.append(txt)
+        elif cond_bad: pts -= w; minus.append(txt)
+    if sport == "Football":
+        yb, yf = num(B.get("yardsPerPlay")), num(F.get("yardsPerPlay"))
+        if yb is not None and yf is not None: side(yb - yf >= .7, yf - yb >= .7, 2, f"yards per play {yb} vs {yf}")
+        tb, tf = num(B.get("totalYards")), num(F.get("totalYards"))
+        if tb and tf: side(tb >= tf * 1.15, tf >= tb * 1.15, 1, f"total yards {int(tb)} vs {int(tf)}")
+        fb, ff = num(B.get("firstDowns")), num(F.get("firstDowns"))
+        if fb is not None and ff is not None: side(fb - ff >= 3, ff - fb >= 3, 1, f"first downs {int(fb)} vs {int(ff)}")
+        rb, rf = ratio(B.get("thirdDownEff")), ratio(F.get("thirdDownEff"))
+        if rb is not None and rf is not None: side(rb - rf >= .15, rf - rb >= .15, 1, f"3rd downs {B.get('thirdDownEff')} vs {F.get('thirdDownEff')}")
+        pb, pf = mins_of(B.get("possessionTime")), mins_of(F.get("possessionTime"))
+        if pb and pf: side(pb - pf >= 5, pf - pb >= 5, 1, f"time with the ball {B.get('possessionTime')} vs {F.get('possessionTime')}")
+        ob, of_ = num(B.get("turnovers")), num(F.get("turnovers"))
+        if ob is not None and of_ is not None and of_ - ob >= 2: luck.append(f"{fname} have given the ball away {int(of_)} times ({dname} {int(ob)}), which handed {dname} extra chances")
+        if ob is not None and of_ is not None and ob - of_ >= 2: minus.append(f"{dname} have {int(ob)} turnovers to {int(of_)}")
+        if num(B.get("defensiveTouchdowns") or 0): luck.append(f"{dname} scored a defensive touchdown")
+    elif sport == "Basketball":
+        gb, gf = num(B.get("fieldGoalPct")), num(F.get("fieldGoalPct"))
+        if gb is not None and gf is not None: side(gb - gf >= 4, gf - gb >= 4, 2, f"shooting {gb}% vs {gf}%")
+        rb, rf = num(B.get("totalRebounds")), num(F.get("totalRebounds"))
+        if rb is not None and rf is not None: side(rb - rf >= 5, rf - rb >= 5, 1, f"rebounds {int(rb)} vs {int(rf)}")
+        ob, of_ = num(B.get("totalTurnovers") or B.get("turnovers")), num(F.get("totalTurnovers") or F.get("turnovers"))
+        if ob is not None and of_ is not None: side(of_ - ob >= 3, ob - of_ >= 3, 1, f"turnovers {int(ob)} vs {int(of_)}")
+        pb, pf = num(B.get("pointsInPaint")), num(F.get("pointsInPaint"))
+        if pb is not None and pf is not None: side(pb - pf >= 8, pf - pb >= 8, 1, f"points in the paint {int(pb)} vs {int(pf)}")
+        t3 = num(B.get("threePointFieldGoalPct"))
+        if t3 is not None and t3 >= 45 and (gb or 0) - (gf or 0) < 4: luck.append(f"{dname} are hitting {t3}% from 3, a hot streak that often cools off")
+    elif sport == "Hockey":
+        sb, sf = num(B.get("shotsTotal")), num(F.get("shotsTotal"))
+        if sb and sf:
+            share = sb / (sb + sf)
+            side(share >= .55, share <= .45, 2, f"shots {int(sb)} vs {int(sf)}")
+            if share <= .42 and diff >= 0: luck.append(f"{dname} are being out-shot {int(sf)} to {int(sb)}: their goalie is keeping them in it")
+    elif sport == "Soccer":
+        sb, sf = num(B.get("shotsOnTarget")), num(F.get("shotsOnTarget"))
+        if sb is not None and sf is not None: side(sb - sf >= 2, sf - sb >= 2, 2, f"shots on target {int(sb)} vs {int(sf)}")
+        pb = num(B.get("possessionPct"))
+        if pb is not None: side(pb >= 58, pb <= 42, 1, f"possession {pb}%")
+    if pts >= 3 and not luck: label, v = "REAL", f"{dname} are truly outplaying {fname}: " + ", ".join(plus[:4]) + "."
+    elif pts >= 2: label, v = "REAL", f"{dname} are playing better: " + ", ".join(plus[:3]) + "." + (" (Some help: " + "; ".join(luck[:1]) + ".)" if luck else "")
+    elif pts <= -2: label, v = "LUCKY", f"{dname} are being outplayed: " + ", ".join(minus[:3]) + "." + (" The score is helped by luck: " + "; ".join(luck[:2]) + "." if luck else " The score may not last.")
+    elif luck: label, v = "LUCKY", f"Even game on the field, but the score is helped by luck: " + "; ".join(luck[:2]) + "."
+    else: label, v = "EVEN", f"Even game on the field" + (": " + ", ".join((plus + minus)[:3]) if plus or minus else "") + "."
+    return v, label
+
 def game_story(path, eid, sport, dog_id, fav_id, dog_home, dname, fname):
     """Read ESPN's game page: how each team is actually playing, the momentum, and the dog's key players.
     Returns (reasons, warnings, wp_now, wp_jump) where wp_* are the underdog's ESPN live win chance and its rise
@@ -125,7 +187,13 @@ def game_story(path, eid, sport, dog_id, fav_id, dog_home, dname, fname):
         wp_now = f(wps[-1]); old = f(wps[-12] if len(wps) > 12 else wps[0]); wp_jump = wp_now - old
         if wp_jump >= .08: reasons.append(f"ESPN's live chance for {dname} rose from {round(old*100)}% to {round(wp_now*100)}% over the last plays")
         elif wp_jump <= -.08: warns.append(f"ESPN's live chance for {dname} dropped from {round(old*100)}% to {round(wp_now*100)}% over the last plays")
-    return reasons, warns, wp_now, wp_jump
+    try:
+        sb_ = {}
+        for x in ((d.get("header") or {}).get("competitions") or [{}])[0].get("competitors") or []: sb_[str((x.get("team") or {}).get("id"))] = num(x.get("score")) or 0
+        verdict = real_or_lucky(sport, B, F, dname, fname, (sb_.get(str(dog_id), 0) - sb_.get(str(fav_id), 0)))
+    except Exception as e:
+        print("verdict failed", e); verdict = None
+    return reasons, warns, wp_now, wp_jump, verdict
 
 def main():
     D = load_js("data/prices.js"); FX = load_js("data/facts.js")
@@ -208,12 +276,12 @@ def main():
                     story = None
                     if sent.get(key, 0) < level:
                         story = game_story(c["_path"], g["espn"][1], g["sport"], (dog.get("team") or {}).get("id"), (fav.get("team") or {}).get("id"), dogHome, nm(dog), nm(fav))
-                        reasons, warns, wpd, jump = story
+                        reasons, warns, wpd, jump, verdict = story
                         if not stage:   # earlier in the 2nd half: only a real comeback with momentum counts
                             if not (jump is not None and jump >= .12 and len(reasons) >= 3): level = 0
 
                     if level and sent.get(key, 0) < level:
-                        reasons, warns, wpd, jump = story
+                        reasons, warns, wpd, jump, verdict = story
                         ask, ser = ask_for(dogT)
                         head = {3: "UPSET HAPPENING", 2: "UPSET BREWING", 1: "UPSET WATCH"}[level] if stage else "COMEBACK"
                         title = f"{head}: {nm(dog)} vs {nm(fav)}"
@@ -222,8 +290,11 @@ def main():
                         if ball: body += f" {nm(dog)} have the ball."
                         if wpd is not None: body += f" ESPN live chance: {round(wpd*100)}%."
                         elif wp is not None: body += f" ESPN live: {nm(dog)} {round((wp if dogHome else 1 - wp)*100)}%."
-                        if reasons: body += " WHY: " + "; ".join(reasons[:5]) + "."
+                        if verdict: body += f" {'REAL' if verdict[1] == 'REAL' else 'LUCKY?' if verdict[1] == 'LUCKY' else 'EVEN'}: {verdict[0]}"
+                        if reasons: body += " WHY: " + "; ".join(reasons[:4]) + "."
                         if warns: body += " CAREFUL: " + "; ".join(warns[:2]) + "."
+                        ask0, _ = ask_for(dogT)
+                        if ask0 and wpd is not None and wpd - ask0 >= .05: body += f" VALUE: Kalshi sells {nm(dog)} at {round(ask0*100)}c but ESPN gives them {round(wpd*100)}%."
                         if ask: body += f" Kalshi: {round(ask*100)}c, $10 wins about ${10/ask - 10:.2f}."
                         else: body += " Check Kalshi's live price."
                         kal = f"https://kalshi.com/markets/{ser.lower()}/x/{(ser + '-' + ((D.get('REMAP') or {}).get(code, {}).get(ser, code))).lower()}" if ask and code else None
@@ -238,7 +309,7 @@ def main():
             if close:
                 trailT = Ht if trail is H else At
                 story = game_story(c["_path"], g["espn"][1], g["sport"], (trail.get("team") or {}).get("id"), (lead.get("team") or {}).get("id"), trail is H, nm(trail), nm(lead))
-                reasons, warns, wpt, jump = story
+                reasons, warns, wpt, jump, verdict = story
                 title = f"CLOSE FINISH: {nm(trail)} {sc(trail)} - {nm(lead)} {sc(lead)}" if gap else f"TIED LATE: {nm(H)} {sc(H)} - {nm(A)} {sc(A)}"
                 body = f"{stage}{', ' + clock if clock else ''}. " + (f"{nm(trail)} have the ball{': ' + situation.get('downDistanceText') if situation.get('downDistanceText') else ''}. " if tball else "")
                 parts = []
@@ -249,7 +320,8 @@ def main():
                     if ask and ch is not None and ch - ask >= .05: seg += " (cheaper than it should be)"
                     parts.append(seg)
                 body += " | ".join(parts) + "."
-                if reasons: body += f" {nm(trail)} WHY: " + "; ".join(reasons[:4]) + "."
+                if verdict: body += f" {verdict[1]}: {verdict[0]}"
+                if reasons: body += f" {nm(trail)} WHY: " + "; ".join(reasons[:3]) + "."
                 if warns: body += " CAREFUL: " + "; ".join(warns[:2]) + "."
                 ask_t, ser_t = ask_for(trailT)
                 kal = f"https://kalshi.com/markets/{ser_t.lower()}/x/{(ser_t + '-' + ((D.get('REMAP') or {}).get(code, {}).get(ser_t, code))).lower()}" if ask_t and code else None
@@ -260,11 +332,15 @@ def main():
         if wp is not None and rows and fresh and big:
             for t, p in ((Ht, wp), (At, 1 - wp)):
                 ask, ser = ask_for(t) if t else (None, None)
-                if ask and .15 <= ask <= .75 and p - ask >= .10:
+                if ask and .10 <= ask <= .85 and p - ask >= .07:
                     key = f"value|{g['espn'][1]}|{t['name']}"
                     if now - sent.get(key, 0) > 45 * 60:
                         title = f"LIVE VALUE: {t.get('short') or t['name']} to win"
                         body = f"Kalshi sells it at {round(ask*100)}c but ESPN's live model gives {t.get('short') or t['name']} {round(p*100)}% ({nm(H)} {sc(H)} - {nm(A)} {sc(A)}, {(st.get('type') or {}).get('shortDetail', '')}). $10 wins about ${10/ask - 10:.2f}."
+                        me_, op_ = (H, A) if t is Ht else (A, H)
+                        stv = game_story(c["_path"], g["espn"][1], g["sport"], (me_.get("team") or {}).get("id"), (op_.get("team") or {}).get("id"), t is Ht, nm(me_), nm(op_))
+                        if stv[4]: body += f" {stv[4][1]}: {stv[4][0]}"
+                        if stv[4] and stv[4][1] == "LUCKY": title = title.replace("LIVE VALUE", "LIVE VALUE (careful)")
                         kal = f"https://kalshi.com/markets/{ser.lower()}/x/{(ser + '-' + ((D.get('REMAP') or {}).get(code, {}).get(ser, code))).lower()}" if code else None
                         msgs.append((title, body, f"{APP}#live-{g['espn'][1]}", kal)); sent[key] = now
         for m in msgs[:2]:
