@@ -60,7 +60,7 @@ def main():
         print(f"page {page}: {len(ms)} markets, kept {kept}, total {len(R)}")
         zeros = zeros + 1 if kept == 0 and len(R) else 0
         cursor = j.get("cursor") or ""
-        if not cursor or not ms or zeros >= 3 or page >= 80: break
+        if not cursor or not ms or page >= 150: break   # read every page: sports bets can come after many pages of other markets
         time.sleep(0.4)
     # Kalshi's live-score feed links all of a game's bets; when one bet type uses a different code (often the winner bet,
     # dated a day earlier), file it under the game's main code so Primo sees one game. REMAP keeps the real code for links.
