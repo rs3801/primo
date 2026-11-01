@@ -1896,7 +1896,8 @@ function liveGames(){
 function liveCall(x){
   const g = x.g, es = LV.espn[g.code], picks = [], notes = [];
   const rows = (x.rows || []).filter(r => /(GAME|MATCH|FIGHT|BOUT)$/.test(r[0]) && !/tie|draw/i.test(r[1]));
-  const pre = lab => { const m = g.markets.find(m => m.type === "winner" && m.label === lab); return m ? m.p : null; };
+  // chance before the start: ESPN's model at kickoff (the hourly Kalshi price is already an in-game price once the game is on)
+  const pre = lab => { if (!(es && es.homePre != null && g.facts)) return null; const t = g.facts.teams.find(t => teamIn(t, lab)); return t ? (t.home ? es.homePre : 1 - es.homePre) : null; };
   const sides = rows.map(r => ({lab: r[1], mid: r[2]/100, ask: r[3]/100, pre: pre(r[1])}));
   if (es && es.home != null && g.facts){
     for (const sd of sides){
@@ -2002,6 +2003,24 @@ function liveCardHTML(x, c){
   const lu = lateUpset(x, c), up = lu ? null : liveUpset(x, c);
   return `<article class="game" data-eid="${esc(String((g.facts && g.facts.espn || [])[1] || ""))}" style="--c:var(${SPORT_COLOR[g.sport] || "--s-other"});padding:12px 14px;margin-bottom:10px"><div class="gtitle">🔴 ${esc(g.title)}</div>${lu ? lateCardHTML(x, lu) : up ? upsetCardHTML(x, up) : ""}<div class="gsub"><b>${esc(g.leagueName)}</b>${es ? ` · ${esc(es.detail)}` : " · in progress"}${score ? ` · ${score}` : ""}</div>${call}${c.sides.length ? `<ul style="margin:6px 0 0;padding-left:18px">${sideRows}</ul>` : `<p class="muted">No live Kalshi price yet; the live robot checks every few minutes.</p>`}${c.notes.length ? `<p class="muted" style="margin:6px 0 0">${c.notes.map(esc).join(" ")}</p>` : ""}${link ? `<p style="margin:6px 0 0"><a href="${link}" target="_blank" rel="noopener">Open on Kalshi ↗</a></p>` : ""}</article>`;
 }
+// Live tab sections: NFL, college football, NBA, soccer... each with its own header and count
+function sectionOf(g){
+  const L = (g.leagueName || "") + " " + (g.facts && g.facts.league || "");
+  if (g.sport === "Football") return /NFL/.test(L) ? ["🏈 NFL", 1] : /college|NCAA/i.test(L) ? ["🏈 College football", 2] : ["🏈 Other football", 3];
+  if (g.sport === "Basketball") return /\bNBA\b/.test(L) ? ["🏀 NBA", 4] : /WNBA/.test(L) ? ["🏀 WNBA", 5] : /college|NCAA/i.test(L) ? [g.women ? "🏀 Women's college basketball" : "🏀 College basketball", 6] : ["🏀 Other basketball", 7];
+  if (g.sport === "Hockey") return /NHL/.test(L) ? ["🏒 NHL", 8] : ["🏒 Other hockey", 9];
+  if (g.sport === "Baseball") return /MLB/.test(L) ? ["⚾ MLB", 10] : ["⚾ Other baseball", 11];
+  if (g.sport === "Soccer") return ["⚽ Soccer", 12];
+  if (g.sport === "Tennis") return ["🎾 Tennis", 13];
+  if (g.sport === "MMA" || g.sport === "Boxing") return ["🥊 Fights", 14];
+  return [g.sport, 20];
+}
+function bySection(list, gOf, render, big){
+  const groups = new Map();
+  for (const it of list){ const [name, order] = sectionOf(gOf(it)); if (!groups.has(name)) groups.set(name, {order, items: []}); groups.get(name).items.push(it); }
+  return [...groups.entries()].sort((a, b) => a[1].order - b[1].order).map(([name, gr]) =>
+    `<div class="livesec" style="margin:${big ? "14px 0 6px" : "8px 0 4px"}"><p style="margin:0 0 6px;padding:6px 10px;border-radius:10px;background:var(--chip, rgba(127,127,127,.1));font-weight:800;${big ? "font-size:1.05em" : ""}">${name} <span style="opacity:.6;font-weight:600">(${gr.items.length})</span></p>${gr.items.map(render).join("")}</div>`).join("");
+}
 async function renderLive(force){
   const el = $("liveview");
   if (!LV.data || force || Date.now() - LV.loaded > 60000){ if (!LV.data) el.innerHTML = `<div class="empty">Loading live games…</div>`; await loadLive(); }
@@ -2020,10 +2039,10 @@ async function renderLive(force){
   el.innerHTML = `<div class="builder"><div class="blabel">🔴 Live betting</div><p class="filtsum">Games under way right now, every sport. Scores and ESPN's live win chance refresh every 30 seconds; Kalshi's live prices come from Primo's live robot${age != null ? ` (last checked ${age} min ago)` : ""}. Live prices move fast: check the price on Kalshi before you buy, and skip it if Kalshi now charges more than shown here.</p>
     <div class="chips scroll" style="margin-bottom:6px">${[["all", "All live games"], ["value", "🔥 Bet now (value)"], ["upset", "🚨 Upset chances"]].map(([v, l]) => `<button class="chip" type="button" data-liveview="${v}" aria-pressed="${LV.view === v}">${l} <span class="n">${v === "all" ? list.length : v === "value" ? calls.filter(([, c]) => c.picks.length).length : ups.length}</span></button>`).join("")}</div>
     <div class="chips scroll">${["all", ...sports].map(sp => `<button class="chip" type="button" data-livesport="${esc(sp)}" aria-pressed="${LV.sport === sp}">${sp === "all" ? "All sports" : esc(sp)} <span class="n">${sp === "all" ? list.length : list.filter(x => x.g.sport === sp).length}</span></button>`).join("")}</div>
-    ${late.length ? `<p class="whyh">🚨 Late-game upset alerts</p>${late.map(([x, , u]) => lateCardHTML(x, u)).join("")}` : ""}
+    ${late.length ? `<p class="whyh">🚨 Late-game upset alerts</p>${bySection(late, ([x]) => x.g, ([x, , u]) => lateCardHTML(x, u))}` : ""}
     ${best.length ? `<p class="whyh">🔥 Bet now (Primo's best live spots)</p><ul style="margin:4px 0 0;padding-left:18px">${best.map(([x, p]) => `<li><b>${esc(p.sd.lab)} to win</b> (${esc(x.g.title)}, ${esc(x.g.leagueName)}) — Kalshi ${Math.round(p.sd.ask*100)}¢ vs ESPN ${Math.round(p.sd.wp*100)}% · worth it up to ${Math.max(1, Math.round((p.sd.wp - .03)*100))}¢</li>`).join("")}</ul>` : `<p class="muted" style="margin:8px 0 0">No live edges right now. Primo flags a game when Kalshi's price is at least 5 points below ESPN's live win chance.</p>`}
     <button class="btn ghost sm" type="button" id="liverefresh" style="margin-top:8px">↻ Refresh now</button></div>
-    <div style="margin-top:12px">${shown.length ? shown.map(([x, c]) => liveCardHTML(x, c)).join("") : `<div class="empty">${LV.view === "upset" ? "No live upset chances right now. Primo looks for an underdog in a close game with the ball, more yards or shots, momentum, or that was favored before the game. Check back in a few minutes." : LV.view === "value" ? "No live value spots right now." : `No games are being played right now${LV.sport !== "all" ? " in this sport" : ""}. Check back when games start.`}</div>`}</div>`;
+    <div style="margin-top:12px">${shown.length ? bySection(shown, ([x]) => x.g, ([x, c]) => liveCardHTML(x, c), true) : `<div class="empty">${LV.view === "upset" ? "No live upset chances right now. Primo looks for an underdog in a close game with the ball, more yards or shots, momentum, or that was favored before the game. Check back in a few minutes." : LV.view === "value" ? "No live value spots right now." : `No games are being played right now${LV.sport !== "all" ? " in this sport" : ""}. Check back when games start.`}</div>`}</div>`;
   clearTimeout(LV.timer);
   if (LV.focus){   // opened from a phone alert: jump to that game's card
     const card = el.querySelector(`article[data-eid="${LV.focus}"]`);
