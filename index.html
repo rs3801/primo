@@ -2218,8 +2218,12 @@ function parseTicket(text){
   const out = {legs:[], risk:null, win:null};
   { const kp = /\$\s*([\d,]+(?:\.\d+)?)\s*pays\s*\$\s*([\d,]+(?:\.\d+)?)/i.exec(text.replace(/\n/g, " "));
     if (kp){ out.risk = +kp[1].replace(/,/g, ""); out.win = +kp[2].replace(/,/g, "") - out.risk; out.kalshiPays = true; text = text.replace(/\$\s*[\d,.]+\s*pays[\s\S]*?\$\s*[\d,.]+/i, ""); } }
+  // a Kalshi page shows the markets you're browsing above "Your picks": only what's under "Your picks" is the bet
+  { const yp = /\byour picks\b/i.exec(text); if (yp) text = text.slice(yp.index); }
   let ctx = null;
-  for (const raw of text.split(/\n+/)){
+  for (const raw0 of text.split(/\n+/)){
+    if (/\b\d\.\d\dx\b|\(\d+\s*-\s*\d+\)\s*\d/i.test(raw0)) continue;   // a browsing row like "BAL Ravens (4 - 3) 2.46x 39%"
+    const raw = raw0;
     const L = raw.replace(/^[^a-z0-9+-]+/i, "").replace(/½/g, ".5").replace(/[−–—]/g, "-").replace(/[|]/g, " ").replace(/\s+/g, " ").trim();
     if (!L) continue;
     { const hd = /^(.+?)\s+(?:at|vs\.?|v|@)\s+(.+?)$/i.exec(L);   // a game header on a Kalshi slip: the bets below it belong to this game
@@ -2419,9 +2423,21 @@ function kalshiInGame(leg){
   let best = null;
   for (const g of games){
     if (g.start && now - g.start > 5*3600000) continue;
-    const T = stFold(g.title + " " + g.markets.slice(0, 120).map(m => m.label).join(" "));   // some Kalshi games carry no team names in the title
-    const ok = x => { const w = stFold(x).split(" ").filter(y => y.length > 2); return w.length && w.some(y => T.includes(y)); };
+    const T = stFold(g.title + " " + g.markets.slice(0, 120).map(m => m.label).join(" ") + " " + (g.facts ? g.facts.teams.map(t => [t.name, t.short, t.nick, t.loc].join(" ")).join(" ") : ""));   // some Kalshi games carry no team names in the title
+    const ok = x => { const w = stFold(x).split(" ").filter(y => y.length > 2); return (w.length && w.some(y => T.includes(y))) || (g.facts && g.facts.teams.some(t => teamHit(t, TK.word(x), x) >= 1200)); };
     if (!ok(a) || !ok(b)) continue;
+    // "NE Patriots win by over 5.5 points": the spread for that team at that number
+    const sp = /^(.+?)\s+wins?\s+by\s+(?:over|more than)\s+([\d.]+)/i.exec(leg.who);
+    if (sp){
+      for (const m of g.markets){
+        if (isNaN(m.p) || m.noOf || !/SPREAD$/.test(m.series) || /(1H|2H|1Q|2Q|3Q|4Q)SPREAD$/.test(m.series)) continue;
+        const ms = /^(.+?) wins by (?:over|more than) ([\d.]+)/i.exec(m.label); if (!ms || +ms[2] !== +sp[2]) continue;
+        const t = g.facts && g.facts.teams.find(t => teamIn(t, ms[1]));
+        const same = t ? teamHit(t, TK.word(sp[1]), sp[1]) >= 1200 || teamIn(t, sp[1]) : stFold(sp[1]).split(" ").some(y => y.length > 2 && stFold(ms[1]).includes(y));
+        if (same && (!best || m.vol > best.m.vol)) best = {m, sc: 3};
+      }
+      if (best) return best.m;
+    }
     for (const m of g.markets){
       if (isNaN(m.p)) continue;
       const L = norm(m.label);
