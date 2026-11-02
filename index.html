@@ -2860,8 +2860,9 @@ function swapIdeas(r){
   { const mate = teammateIdea(r, cur); if (mate) ideas.mate = mate; }
   if (r.take && (r.take.v === "drop" || r.take.v === "risky")){
     const used = r.g;
-    const rep = replacements().find(o => o.m.g !== used && !(r.ticketGames || new Set()).has(o.m.g) && o.p >= cur.p + .1);
-    if (rep) ideas.replace = rep;
+    const taken = r.repTaken || new Set();   // each leg gets a different replacement game, so you can swap them all and still have a full combo
+    const rep = replacements().find(o => o.m.g !== used && !(r.ticketGames || new Set()).has(o.m.g) && !taken.has(o.m.g) && o.p >= cur.p + .1);
+    if (rep){ ideas.replace = rep; taken.add(rep.m.g); }
   }
   return Object.keys(ideas).length ? {cur, ideas} : null;
 }
@@ -3040,7 +3041,8 @@ function checkTicket(text){
   rs.forEach((r, i) => r.idx = i);
   for (const r of rs){ if (r.take && r.take.flip){ r.take.flipM = flipMarket(r); r.take.idx = r.idx; } }
   WORK.stake = stakeN; WORK.orig = rs.map(r => ({m: legMarket(r), text: r.leg.raw})); WORK.legs = WORK.orig.map(x => Object.assign({}, x));
-  for (const r of rs){ r.ticketGames = tg; r.inCombo = rs.length > 1 && !!r.leg.kalshi; try { r.swaps = swapIdeas(r); } catch (e) { r.swaps = null; } }
+  const repTaken = new Set();
+  for (const r of rs){ r.ticketGames = tg; r.repTaken = repTaken; r.inCombo = rs.length > 1 && !!r.leg.kalshi; try { r.swaps = swapIdeas(r); } catch (e) { r.swaps = null; } }
   const legHTML = rs.map((r, i) => `<article class="game" style="--c:var(--s-other);padding:12px 14px;margin-bottom:10px">
       <div class="gtitle">${i + 1}. ${esc(r.leg.raw)}</div>
       ${r.title ? `<div class="gsub"><b>${esc(r.title)}</b>${(r.when || (r.f && r.f.start)) ? ` · ${esc(new Date(r.when || r.f.start).toLocaleString([], {weekday:"short", hour:"numeric", minute:"2-digit"}))}` : ""}</div>` : ""}
