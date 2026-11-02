@@ -2507,7 +2507,10 @@ function gradeKalshi(leg, m, r){
   }
   if (m.move && Math.abs(m.move) >= 3) r.how.push(`Price moved ${m.move > 0 ? "up" : "down"} ${Math.abs(m.move)} points in the last day.`);
   const rs = g.research;
-  if (rs && rs.lean) r.notes.push(ffold(rs.lean) === ffold(m.label) || ffold(rs.lean).includes(ffold(m.label)) ? `✓ Primo's research also leans ${rs.lean}.` : `✗ Primo's research leans ${rs.lean}.`);
+  // who Primo's research picks only matters for bets on a team (not for the game's total points)
+  const gameTotal = /^(full game:\s*|1st half:\s*|2nd half:\s*|[1-4](st|nd|rd|th) quarter:\s*)?(will there be )?(over|under)\b/i.test(m.label) || /^both teams|^tie$|draw|overtime/i.test(m.label);
+  if (rs && rs.lean && !gameTotal){ const mine = ffold(m.label).includes(ffold(rs.lean)) || ffold(rs.lean).includes(ffold(m.label.split(/ wins| over| under|:/i)[0].trim())) || (g.facts && g.facts.teams.some(t => teamIn(t, rs.lean) && teamIn(t, m.label)));
+    r.notes.push(mine ? `✓ Primo's research also leans ${rs.lean}.` : `✗ Primo's research leans ${rs.lean}.`); }
   const l = likedBy(m); if (l) r.notes.push(`✓ Primo likes this bet: ${l.why || l.text || ""}`);
   for (const x of statsText(g)) r.notes.push(x);
   if (!rs) r.notes.push(`Primo hasn't written research on this ${g.sport === "Tennis" ? "match" : "game"} — this grade is Kalshi's price only.`);
