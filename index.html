@@ -2304,7 +2304,7 @@ function parseTicket(text){
   for (const raw0 of text.split(/\n+/)){
     if (/\b\d\.\d\dx\b|\(\d+\s*-\s*\d+\)\s*\d/i.test(raw0)) continue;   // a browsing row like "BAL Ravens (4 - 3) 2.46x 39%"
     const raw = raw0;
-    const L = raw.replace(/^[^a-z0-9+-]+/i, "").replace(/½/g, ".5").replace(/[−–—]/g, "-").replace(/[|]/g, " ").replace(/\s+/g, " ").trim();
+    const L = raw.replace(/^[^a-z0-9+-]+/i, "").replace(/\b(?:rushing|rush)\s*(?:\+|&|and)\s*(?:receiving|rec)\.?\s*(?:yards|yds)(?!\s+combined)/i, "rushing and receiving yards combined").replace(/½/g, ".5").replace(/[−–—]/g, "-").replace(/[|]/g, " ").replace(/\s+/g, " ").trim();
     if (!L) continue;
     { const hd = /^(.+?)\s+(?:at|vs\.?|v|@)\s+(.+?)$/i.exec(L);   // a game header on a Kalshi slip: the bets below it belong to this game
       if (hd && !/\d\s*%|[+-]\d{3}|\bover\b|\bunder\b|wins by|to win|[(:]/i.test(L)){ ctx = [hd[1].trim(), hd[2].trim()]; continue; } }
@@ -2851,7 +2851,8 @@ function swapWhy(r, o){
 }
 function swapIdeas(r){
   const cur = {p: r.chance, mult: legMult(r)}; if (cur.p == null || !cur.mult) return null;
-  const opts = sameGameOptions(r).filter(o => { const op = opOf(o.m); return !op || op.v !== "drop"; }), ideas = {};   // never suggest a bet Primo itself would drop
+  const others = (r.ticketMs || []).filter(m => m && m !== legMarket(r)), oKeys = new Set(others.map(m => m.key)), oFam = new Set(others.map(betFam).filter(Boolean));
+  const opts = sameGameOptions(r).filter(o => { const op = opOf(o.m); return (!op || op.v !== "drop") && !oKeys.has(o.m.key) && !oFam.has(betFam(o.m)); }), ideas = {};   // never suggest a bet Primo itself would drop
   const val = o => o.p * o.mult;   // average return per $1
   const safer = opts.filter(o => o.p >= cur.p + .08 && o.p <= Math.min(.9, cur.p + .32) && o.mult >= 1.12).sort((a, b) => b.mult - a.mult)[0];
   const same = opts.filter(o => Math.abs(o.p - cur.p) <= .06 && o.mult >= cur.mult * 1.06).sort((a, b) => b.mult - a.mult)[0];
@@ -2878,6 +2879,8 @@ function swapHTML(r, stake){
   if (s.ideas.replace) L.push(line("🔁", "Replace with a solid leg from another game", s.ideas.replace, s.ideas.replace.why));
   return `<div style="margin:8px 0;padding:10px 12px;border-radius:12px;background:rgba(46,160,67,.08)"><b>💡 Swap ideas</b> <span class="muted">(yours: ${TK.pct(s.cur.p)} chance, $${stake} wins about ${win(s.cur.mult)})</span><ul style="margin:4px 0 0;padding-left:18px">${L.join("")}</ul><span class="muted" style="font-size:.9em">Payouts use Kalshi's prices; a sportsbook's will be a little different.</span></div>`;
 }
+// a bet's "family": the same kind of bet in the same game (e.g. two game totals, or two receptions lines for one player) shouldn't be in one combo twice
+function betFam(m){ if (!m || !m.g) return null; const who = /:/.test(m.label || "") ? ffold(m.label.split(":")[0]) : ""; return (m.g.title || "") + "|" + (m.stitle || m.type || "") + "|" + who; }
 function plansHTML(rs, T, stake, mult){
   const ok = rs.filter(r => r.chance != null && legMult(r));
   if (!ok.length || ok.length < rs.length) return "";
@@ -2887,16 +2890,26 @@ function plansHTML(rs, T, stake, mult){
   const ticketGames = new Set(rs.map(r => r.g).filter(Boolean));
   // up to 3 swaps, the ones that help most; a replacement game is used only once and never one already on the ticket
   const plan = (pickFn, gain) => {
-    const cand = mine.map(x => [x, pickFn(x.r)]).filter(([, o]) => o).sort((a, b) => gain(b[0], b[1]) - gain(a[0], a[1]));
+    const cand = mine.map(x => [x, [].concat(pickFn(x.r) || []).filter(Boolean)]).filter(([, os]) => os.length).sort((a, b) => gain(b[0], b[1][0]) - gain(a[0], a[1][0]));
     const chosen = new Map(), usedG = new Set(ticketGames);
-    for (const [x, o] of cand){ if (chosen.size >= 3) break; if (o.m.g !== x.r.g){ if (usedG.has(o.m.g)) continue; usedG.add(o.m.g); } chosen.set(x, o); }
+    const fam = new Map(), keys = new Set();   // what the combo holds right now: never swap two legs into the same bet, or into a bet like one already there
+    for (const x of mine){ const f = betFam(x.m); if (f) fam.set(f, (fam.get(f) || 0) + 1); if (x.m) keys.add(x.m.key); }
+    for (const [x, os] of cand){ if (chosen.size >= 3) break;
+      const fx = betFam(x.m);
+      const o = os.find(o => !keys.has(o.m.key) && !(betFam(o.m) && (fam.get(betFam(o.m)) || 0) - (betFam(o.m) === fx ? 1 : 0) > 0) && (o.m.g === x.r.g || !usedG.has(o.m.g)));
+      if (!o) continue;
+      const fo = betFam(o.m);
+      if (o.m.g !== x.r.g) usedG.add(o.m.g);
+      if (fx) fam.set(fx, fam.get(fx) - 1); if (fo) fam.set(fo, (fam.get(fo) || 0) + 1);
+      if (x.m) keys.delete(x.m.key); keys.add(o.m.key);
+      chosen.set(x, o); }
     if (!chosen.size) return null;
     const pick2 = r => { const x = mine.find(y => y.r === r); return chosen.get(x); };
     return planOld(pick2);
   };
   const planOld = pickFn => { let changed = []; const legs = mine.map(x => { const o = pickFn(x.r); if (o){ changed.push({t: `${x.r.t ? (x.r.t.short || x.r.t.name) + (x.r.leg.kind === "ml" ? " to win" : "") : x.r.kname || x.r.leg.who || x.r.leg.raw} → ${o.m.pick} (${TK.pct(o.p)})`, i: x.r.idx, m: o.m}); return {p: o.p, mult: o.mult, m: o.m}; } return x; }); return changed.length ? {legs, changed} : null; };
   const plans = [
-    ["🛡️ Safer version", plan(r => r.swaps && (r.take && r.take.v !== "keep") && (r.swaps.ideas.safer || r.swaps.ideas.replace), (x, o) => o.p - x.p)],
+    ["🛡️ Safer version", plan(r => r.swaps && (r.take && r.take.v !== "keep") && [r.swaps.ideas.safer, r.swaps.ideas.replace], (x, o) => o.p - x.p)],
     ["💵 Same risk, more money", plan(r => r.swaps && r.swaps.ideas.same, (x, o) => o.mult / x.mult)],
     ["🚀 Bigger payout", plan(r => r.swaps && (r.take && (r.take.v === "keep" || r.take.v === "okay")) && r.swaps.ideas.bigger, (x, o) => o.p * o.mult - x.p * x.mult)],
   ].filter(([, p]) => p);
@@ -3041,8 +3054,8 @@ function checkTicket(text){
   rs.forEach((r, i) => r.idx = i);
   for (const r of rs){ if (r.take && r.take.flip){ r.take.flipM = flipMarket(r); r.take.idx = r.idx; } }
   WORK.stake = stakeN; WORK.orig = rs.map(r => ({m: legMarket(r), text: r.leg.raw})); WORK.legs = WORK.orig.map(x => Object.assign({}, x));
-  const repTaken = new Set();
-  for (const r of rs){ r.ticketGames = tg; r.repTaken = repTaken; r.inCombo = rs.length > 1 && !!r.leg.kalshi; try { r.swaps = swapIdeas(r); } catch (e) { r.swaps = null; } }
+  const repTaken = new Set(), tms = rs.map(legMarket);
+  for (const r of rs){ r.ticketMs = tms; r.ticketGames = tg; r.repTaken = repTaken; r.inCombo = rs.length > 1 && !!r.leg.kalshi; try { r.swaps = swapIdeas(r); } catch (e) { r.swaps = null; } }
   const legHTML = rs.map((r, i) => `<article class="game" style="--c:var(--s-other);padding:12px 14px;margin-bottom:10px">
       <div class="gtitle">${i + 1}. ${esc(r.leg.raw)}</div>
       ${r.title ? `<div class="gsub"><b>${esc(r.title)}</b>${(r.when || (r.f && r.f.start)) ? ` · ${esc(new Date(r.when || r.f.start).toLocaleString([], {weekday:"short", hour:"numeric", minute:"2-digit"}))}` : ""}</div>` : ""}
