@@ -2233,7 +2233,46 @@ const TK = {
 };
 const NOTLEG = /risk|ticket|parlay|description|balance|pending|main menu|total|wager|available|teaser|straight/i;
 const PROPW = /\b(yds|yards|yard|rec|receptions|pts|points|rebounds|reb|assists|ast|td|tds|touchdowns?|hits|strikeouts|ks|bases|shots|saves|sog|goals?|completions|attempts|threes|3pt)\b/i;
+// DraftKings Predictions trade slip: each pick is 2-3 lines ("24+" / "Luka Doncic Points" / "MIA Heat @ LA Lakers • Today 7:10 PM").
+// Rewrite it as Kalshi-style lines Primo already understands.
+function dkSlip(text){
+  if (!/trade slip|pick combo|anytime td scorer|you'?re buying|includes \$[\d.]+ in fees/i.test(text) || !/ @ .+[•·]/.test(text)) return null;
+  const L = text.split(/\n+/).map(x => x.replace(/^[^A-Za-z0-9+\-]+/, "").replace(/\s+/g, " ").trim()).filter(Boolean);
+  const out = []; let n = null, buy = null, pay = null;
+  const STAT = {points: "points", rebounds: "rebounds", assists: "assists", "rushing yards": "rushing yards", "receiving yards": "receiving yards", "passing yards": "passing yards", "pass yards": "passing yards", "rush yards": "rushing yards", "rec yards": "receiving yards", receptions: "receptions", "passing tds": "passing touchdowns", "pass tds": "passing touchdowns", "rush + rec yards": "rushing and receiving yards combined", "threes": "threes", "3-pointers made": "threes", "made threes": "threes", "steals": "steals", "blocks": "blocks", "goals": "goals", "shots on goal": "shots on goal", "saves": "saves", "strikeouts": "strikeouts", "hits": "hits", "total bases": "total bases"};
+  for (let i = 0; i < L.length; i++){
+    const g = /^(.+?) @ (.+?)\s*[•·]/.exec(L[i]); if (!g) continue;
+    const a = L[i-2] || "", b = L[i-1] || "", head = `${g[1]} at ${g[2]}`;
+    let leg = null, m;
+    if (/^to win$/i.test(b)) leg = `${a} to win`;
+    else if ((m = /^anytime td scorer$/i.exec(b))) leg = `${a}: 1+ touchdowns`;
+    else if (/^first td scorer$/i.test(b)) leg = `${a}: 1st Touchdown`;
+    else if (/^2\+ tds?$/i.test(b)) leg = `${a}: 2+ touchdowns`;
+    else if ((m = /^(\d+)\+$/.exec(a)) && b){   // "24+" / "Luka Doncic Points"
+      const st = Object.keys(STAT).sort((x, y) => y.length - x.length).find(k => b.toLowerCase().endsWith(" " + k));
+      leg = st ? `${b.slice(0, b.length - st.length).trim()}: ${m[1]}+ ${STAT[st]}` : `${b} ${a}`;
+    }
+    else if ((m = /^(over|under|o|u)\s*([\d.]+)$/i.exec(a))) leg = `${/^o/i.test(m[1]) ? "Over" : "Under"} ${m[2]} points${/1st half/i.test(b) ? " in 1H" : ""}`;
+    else if ((m = /^([+-]\d+(?:\.\d)?)$/.exec(a)) && b) leg = +m[1] < 0 ? `${b} wins by over ${-m[1]} points` : `${b} ${m[1]}`;
+    else if ((m = /^(.+?)\s+([+-]\d+(?:\.\d)?)$/.exec(b))) leg = +m[2] < 0 ? `${m[1]} wins by over ${-m[2]} points` : `${m[1]} ${m[2]}`;
+    else leg = `${a} ${b}`.trim();
+    out.push(head, leg + ` (${g[1]} vs ${g[2]})`);
+  }
+  for (const x of L){ let m;
+    if ((m = /^(\d+)\s*pick combo/i.exec(x))) n = +m[1];
+    if ((m = /you'?re buying\s*\$?([\d,.]+)/i.exec(x))) buy = +m[1].replace(/,/g, "");
+    if ((m = /^payout\s*\$?([\d,.]+)/i.exec(x))) pay = +m[1].replace(/,/g, "");
+  }
+  { const t = text.replace(/\n/g, " "); let m;
+    if (buy == null && (m = /you'?re buying\s*\$?\s*([\d,.]+)/i.exec(t))) buy = +m[1].replace(/,/g, "");
+    if (pay == null && (m = /payout\s*\$?\s*([\d,.]+)/i.exec(t))) pay = +m[1].replace(/,/g, ""); }
+  if (!out.length) return null;
+  if (n) out.unshift(`${n} market combo`);
+  if (buy && pay) out.push(`$${buy} pays $${pay}`);
+  return out.join("\n");
+}
 function parseTicket(text){
+  { const dk = dkSlip(text); if (dk){ text = dk; } }
   const out = {legs:[], risk:null, win:null};
   { const kp = /\$\s*([\d,]+(?:\.\d+)?)\s*pays\s*\$\s*([\d,]+(?:\.\d+)?)/i.exec(text.replace(/\n/g, " "));
     if (kp){ out.risk = +kp[1].replace(/,/g, ""); out.win = +kp[2].replace(/,/g, "") - out.risk; out.kalshiPays = true; text = text.replace(/\$\s*[\d,.]+\s*pays[\s\S]*?\$\s*[\d,.]+/i, ""); } }
@@ -2246,7 +2285,7 @@ function parseTicket(text){
     const L = raw.replace(/^[^a-z0-9+-]+/i, "").replace(/½/g, ".5").replace(/[−–—]/g, "-").replace(/[|]/g, " ").replace(/\s+/g, " ").trim();
     if (!L) continue;
     { const hd = /^(.+?)\s+(?:at|vs\.?|v|@)\s+(.+?)$/i.exec(L);   // a game header on a Kalshi slip: the bets below it belong to this game
-      if (hd && !/\d\s*%|[+-]\d{3}|\bover\b|\bunder\b|wins by|to win/i.test(L)){ ctx = [hd[1].trim(), hd[2].trim()]; continue; } }
+      if (hd && !/\d\s*%|[+-]\d{3}|\bover\b|\bunder\b|wins by|to win|[(:]/i.test(L)){ ctx = [hd[1].trim(), hd[2].trim()]; continue; } }
     let m;
     if ((m = /risk\s*:?\s*\$\s*([\d,]+(?:\.\d+)?)/i.exec(L)) || (m = /^\s*(?:bet|stake)\s*:?\s*\$?\s*([\d,]+(?:\.\d+)?)/i.exec(L))) out.risk = +m[1].replace(/,/g, "");
     { const mc = /(\d+)\s*market combo/i.exec(L); if (mc){ out.expected = +mc[1]; continue; } }
@@ -2436,6 +2475,12 @@ function gradeProp(leg, r, hit){
   const pl = leg.who.split(":")[0].trim(), tm = PTEAM.get(ffold(pl));
   r.desc = `Player bet: ${leg.who}${tm ? ` (${pl} plays for the ${tm})` : ""}`;
   r.chance = hit.m ? hit.m.p : leg.paid;
+  if (r.chance == null && hit.near.length){   // no exact line (e.g. DraftKings' 24+ when Kalshi has 25+): use the closest Kalshi line for the same stat
+    const want = /(\d+)\+\s*(.+)$/.exec(leg.who.split(":").slice(1).join(":").trim());
+    if (want){ const same = hit.near.map(x => [x, /(\d+)\+\s*(.+)$/.exec(x.label.split(":").slice(1).join(":").trim())]).filter(([x, w]) => w && ffold(w[2]) === ffold(want[2]));
+      same.sort((a, b) => Math.abs(+a[1][1] - +want[1]) - Math.abs(+b[1][1] - +want[1]));
+      if (same.length){ const [x, w] = same[0]; r.chance = x.p; r.notes.push(`Kalshi doesn't have exactly ${want[1]}+; Primo uses its closest line, ${w[1]}+ (${TK.pct(x.p)})${+w[1] > +want[1] ? ", so the real chance is a bit higher" : +w[1] < +want[1] ? ", so the real chance is a bit lower" : ""}.`); } }
+  }
   if (started(g)) r.warn.push("🔴 This game has already started, so this leg is locked in.");
   if (hit.m && leg.paid != null){ r.implied = leg.paid; r.edge = hit.m.p - leg.paid; r.price = Math.abs(r.edge) < .03 ? `Kalshi has it at ${TK.pct(hit.m.p)} right now (your slip shows ${TK.pct(leg.paid)}).` : r.edge > 0 ? `📈 Kalshi now ${TK.pct(hit.m.p)}, up from ${TK.pct(leg.paid)} on your slip.` : `📉 Kalshi now ${TK.pct(hit.m.p)}, down from ${TK.pct(leg.paid)} on your slip.`; }
   if (!hit.m) r.notes.push(`Primo doesn't track this exact line, so it uses the ${leg.paid != null ? TK.pct(leg.paid) + " on your slip" : "odds"} as the chance.`);
