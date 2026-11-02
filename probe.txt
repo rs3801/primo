@@ -1,2 +1,30 @@
-alerts: no NTFY_TOPIC set; UPSET WATCH: Vikings vs Lions | Vikings were only 44% to win before the game. Now 7-12 (4th quarter, 14:48). Vikings have the ball. ESPN live chance: 33%. LUCKY?: Vikings are being outplayed: yards per play 4.5 vs 5.5, total yards 177 vs 273, first downs 11 vs 16. The score may not last. CAREFUL: Total yards: Vikings 177 vs Lions 273; Passing yards: Vikings 111 vs Lions 142. Check Kalshi's live price. | https://rs3801.github.io/primo/#live-401873030 None
-alerts: 16 games checked, 1 sent
+== https://predictions.draftkings.com/ -> 403 https://predictions.draftkings.com/ len=326
+HTTP Error 403: Forbidden <HTML><HEAD> <TITLE>Access Denied</TITLE> </HEAD><BODY> <H1>Access Denied</H1>   You don't have permission to access "http&#58;&#47;&#47;predictions&#46;draftkings&#46;com&#47;" on this server.<P> Reference&#32;&#35;18&#46;b225c017&#46;1793657713&#46;bd288759 <P>https&#58;&#47;&#47;errors&#46;edgesu
+hosts: 
+js: 
+api-ish: 
+== https://predictions.draftkings.com/sports -> 403 https://predictions.draftkings.com/sports len=326
+HTTP Error 403: Forbidden <HTML><HEAD> <TITLE>Access Denied</TITLE> </HEAD><BODY> <H1>Access Denied</H1>   You don't have permission to access "http&#58;&#47;&#47;predictions&#46;draftkings&#46;com&#47;sports" on this server.<P> Reference&#32;&#35;18&#46;a725c017&#46;1793657713&#46;1a4b74a4 <P>https&#58;&#47;&#47;errors&#46;
+hosts: 
+js: 
+api-ish: 
+== https://www.draftkings.com/predictions -> 404 https://www.draftkings.com/predictions len=326
+HTTP Error 404: Not Found <!DOCTYPE html>             <html lang="en">               <head>                 <meta charSet="utf-8" />                 <meta name="viewport" content="width=device-width,initial-scale=1" />                   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Op
+hosts: 
+js: 
+api-ish: 
+== https://sportsbook.draftkings.com/ -> 200 https://sportsbook.draftkings.com/ len=1590873
+<!doctype html> <html lang="en">   <head>     <meta charset="utf-8">     <meta http-equiv="X-UA-Compatible" content="IE=edge">     <meta name="viewport" content="width=device-width, initial-scale=1">     <title>Sports Betting | Bet Online Legally with DraftKings Sportsbook</title>     <meta name="theme-color" content="#121212">        <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite","url":"https://sportsbook.draftkings.com/","name":"DraftKings Sportsbook","identifier":"DraftKings-SB"}</script>             <meta property="og:title" content="Featured  Betting
+hosts: http://dkng.co https://api.draftkings.com https://careers.draftkings.com https://casino.draftkings.com https://cdn.draftkings.com https://dknetwork.draftkings.com https://draftkings-js-prod.s3.amazonaws.com https://draftkings.com https://freetoplay.draftkings.com https://gaming-us-wv.draftkings.com https://gaming-us.draftkings.com https://gaming.draftkings.com https://myaccount.draftkings.com https://racing.draftkings.com https://rg.draftkings.com https://secure.draftkings.com https://sportsbook-nash.draftkings.com https://sportsbook-ws-us-wv.draftkings.com https://sportsbook.draftkings.com https://sportsbook.draftkingstest.com https://support.draftkings.com https://www.draftkings.com
+js: https://cdn.draftkings.com/rj/@draftkings/dk-data-layer/4.1.1/dkDataLayer.js https://api.draftkings.com/eventstreams/v1/sdk/webeventtracker.js https://api.draftkings.com/eventstreams/v1/sdk/webeventtrackershim.js /assets/vendor.77dae19079ebcc509d93.js /assets/client.b5a515503d215c35e0e7.js /assets/notifications.c3c693982180ff9259f1.js
+api-ish: 
+== https://sportsbook-nash.draftkings.com/api/sportscontent/dkusca/v1/leagues/88808 -> 403 https://sportsbook-nash.draftkings.com/api/sportscontent/dkusca/v1/leagues/88808 len=326
+HTTP Error 403: Forbidden <HTML><HEAD> <TITLE>Access Denied</TITLE> </HEAD><BODY> <H1>Access Denied</H1>   You don't have permission to access "http&#58;&#47;&#47;sportsbook&#45;nash&#46;draftkings&#46;com&#47;api&#47;sportscontent&#47;dkusca&#47;v1&#47;leagues&#47;88808" on this server.<P> Reference&#32;&#35;18&#46;a725c017
+hosts: 
+js: 
+api-ish: 
+== https://sportsbook-nash.draftkings.com/api/sportscontent/dkusnj/v1/leagues/88808 -> 403 https://sportsbook-nash.draftkings.com/api/sportscontent/dkusnj/v1/leagues/88808 len=326
+HTTP Error 403: Forbidden <HTML><HEAD> <TITLE>Access Denied</TITLE> </HEAD><BODY> <H1>Access Denied</H1>   You don't have permission to access "http&#58;&#47;&#47;sportsbook&#45;nash&#46;draftkings&#46;com&#47;api&#47;sportscontent&#47;dkusnj&#47;v1&#47;leagues&#47;88808" on this server.<P> Reference&#32;&#35;18&#46;a725c017
+hosts: 
+js: 
+api-ish: 
