@@ -540,7 +540,7 @@ for (const [sport, code, , rows, ends] of D.G){
     if (isWinnerSeries(st) && !/tie$|draw/i.test(label)){ g.winners.push(niceName(sport, label.replace(/^Reg Time:\s*/i,"").replace(/ wins$/i, ""))); g.league = stitle; }
   }
   if (!g.league) g.league = D.SER[rows[0][0]][1];
-  g.research = g.research || R.games[code] || null;
+  g.research = g.research || checkLean(R.games[code]) || null;
   // a schedule change found in research (e.g. a game moved to an earlier kickoff) beats Kalshi's posted time
   if (R.starts && R.starts[code]){ const s = new Date(R.starts[code]); if (!isNaN(s)) g.start = s; }
   // Kalshi's live-score feed: the real start time, and whether the match is already under way (best source, beats everything above)
@@ -1338,6 +1338,21 @@ function statsHTML(g){
 function statsText(g){ const d = statsData(g); return d.lines.map(l => `${l.who}: ${l.head}${l.rows.length ? " — " + l.rows.join("; ") : ""}`).concat(d.h2h ? [`Head-to-head: ${d.h2h}${d.h2hGames.length ? " — " + d.h2hGames.join("; ") : ""}`] : []).concat(d.none ? [d.none] : []); }
 
 /* ---------- 🚨 upset alerts: the favorite has several things working against it ---------- */
+// A "slight lean" that only follows the betting favorite, while most of the research facts point the other way, isn't a real lean:
+// Primo calls it a toss-up (and says which side the facts favor) instead of steering you off the underdog.
+function checkLean(rs){
+  const ffold = x => (x||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().trim();   // (the shared helper isn't ready this early)
+  if (!rs || !rs.lean || /strong/i.test(rs.level || "")) return rs;
+  const fs = ((rs.take || {}).factors || []).map(x => ffold(x.f || "")).filter(Boolean);
+  const me = ffold(rs.lean), mine = fs.filter(x => x === me).length, other = fs.filter(x => x !== me && x !== "even" && x !== "neither");
+  if (!other.length) return rs;
+  const cnt = {}; other.forEach(x => cnt[x] = (cnt[x] || 0) + 1);
+  const [side, n] = Object.entries(cnt).sort((a, b) => b[1] - a[1])[0];
+  if (n <= mine) return rs;
+  const name = ((rs.take || {}).factors || []).find(x => ffold(x.f || "") === side).f;
+  return Object.assign({}, rs, {lean: null, level: "Toss-up", factLean: name, origLean: rs.lean,
+    notes: [`Toss-up: ${rs.lean} is the betting favorite, but ${n} of Primo's ${fs.length} research facts favor ${name} (${mine} favor ${rs.lean}). Primo won't steer you away from ${name}.`].concat(rs.notes || [])});
+}
 function upsetFor(g){
   if (g._upset !== undefined) return g._upset;
   g._upset = null;
