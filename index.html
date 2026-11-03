@@ -835,6 +835,15 @@ function sharpAdjust(m, op){
     if (m.linePick){ op.pros = [`💰 Primo's line pick: Primo's chance ${Math.round(m.primoP*100)}% for a ${Math.round((isNaN(m.ask) ? m.p : m.ask)*100)}¢ price (${L.reasons.join("; ")}).`].concat(op.pros || []); const up = V_UP[op.v]; if (up){ op.v = up[0]; op.badge = up[1]; } op.say += " 💰 Primo's line pick for this game."; }
     else if (m.lineEV <= -.08 && Math.abs(L.adj) >= L.min){ op.cons = [`📏 Primo's homework puts this at ${Math.round(m.primoP*100)}%, less than its ${Math.round((isNaN(m.ask) ? m.p : m.ask)*100)}¢ price.`].concat(op.cons || []); }
   }
+  if (op && /^[^:]+:/.test(m.label) && m.type !== "winner"){   // player bets: is this player hot or slumping?
+    const who = m.label.split(":")[0].trim(), fw = ffold(who), pl = Object.entries(PL.players || {}).find(([n]) => ffold(n) === fw);
+    if (pl){
+      const sp = m.g.sport, hot = hotPlayers(pl[1].tm, sp).find(x => x.n === pl[0]), cold = coldPlayers(pl[1].tm, sp).find(x => x.n === pl[0]);
+      const under = /under|fewer|or less/i.test(m.label);
+      if (hot) (under ? (op.cons = op.cons || []) : (op.pros = op.pros || [])).unshift(`🔥 ${who} is hot: ${hot.txt}.`);
+      if (cold){ (under ? (op.pros = op.pros || []) : (op.cons = op.cons || [])).unshift(`🥶 ${who} is slumping: ${cold.txt}.`); if (!under){ const dn = V_DN[op.v]; if (dn){ op.v = dn[0]; op.badge = dn[1]; } } }
+    }
+  }
   if (op && m.type === "winner" && m.g.sport === "Tennis" && tennisRate(m.g)){
     const T = m.g._ten, isA = m.label === T.pr[0], pp = isA ? T.pA : 1 - T.pA, c = isNaN(m.ask) ? m.p : m.ask, w = isA ? T.wa : T.wb, wo = isA ? T.wb : T.wa;
     m.primoP = pp; m.lineEV = c > 0 ? pp / c - 1 : null;
@@ -1284,6 +1293,7 @@ function usageLines(g){   // who gets the ball, and what each defense has been g
   for (const t of f.teams){
     const U = teamUsage(t.name), T = t.short || t.name;
     if (g.sport === "Baseball" || g.sport === "Hockey"){ const sf = starterForm(g, t); if (sf && sf.txt) out.push(`<b>${sf.hot ? "🔥" : sf.cold ? "🥶" : "⚾"} ${esc(T)} starting ${g.sport === "Hockey" ? "goalie" : "pitcher"} ${esc(sf.n)}</b>: ${esc(sf.txt)}${sf.hot ? " (hot)" : sf.cold ? " (struggling)" : ""}.`); }
+    if (["Football", "Basketball", "Hockey", "Soccer", "Baseball"].includes(g.sport)){ const C = coldPlayers(t.name, g.sport); if (C.length) out.push(`<b>🥶 ${esc(T)} slumping players</b> (well below their usual lately): ${C.slice(0, 3).map(x => `${esc(x.n)}, ${esc(x.txt)}`).join("; ")}.`); }
     if (["Football", "Basketball", "Hockey", "Soccer", "Baseball"].includes(g.sport)){ const H = hotPlayers(t.name, g.sport); if (H.length) out.push(`<b>🔥 ${esc(T)} hot players</b> (well above their usual lately): ${H.slice(0, 3).map(x => `${esc(x.n)}, ${esc(x.txt)}`).join("; ")}.`); }
     if (U && U.rec.length) out.push(`<b>${esc(T)} — who the quarterback looks for</b> (share of ${U.useTgt ? "targets" : "catches"}, last ${U.n} games): ${U.rec.slice(0, 4).map(x => `${esc(x.v.name)} ${Math.round(x.tShare*100)}%`).join(", ")}.${U.run.length ? ` <b>Carries:</b> ${U.run.slice(0, 3).map(x => `${esc(x.v.name)} ${Math.round(x.cShare*100)}%`).join(", ")}.` : ""}`);
     const D = defense(t.name);
@@ -1457,11 +1467,18 @@ function upsetFor(g){
       if (dw > fw2) R.push(`${dogN} leads their meetings ${dw}-${fw2}`);
       { const T = tennisRate(g); if (T){ const w = dogN === T.pr[0] ? T.wa : T.wb; for (const x of w) if (/rising|beat|better on/.test(x)) R.push(`${dogN}: ${x}`); const pd2 = dogN === T.pr[0] ? T.pA : 1 - T.pA; if (pd2 - Dm.p >= .05) R.push(`Primo's ratings give ${dogN} ${Math.round(pd2*100)}%, more than Kalshi's ${Math.round(Dm.p*100)}%`); } }
       const rs = g.research; if (rs && rs.lean && ffold(rs.lean) === ffold(dogN)) R.push(`Primo's research picks ${dogN}`);
+    } else if (g.sport === "MMA" || g.sport === "Boxing"){   // fights: momentum (streaks, finishes, knockouts suffered, layoffs, age, reach)
+      const ws = g.markets.filter(m => m.type === "winner" && !isNaN(m.p) && !/tie|draw|:/i.test(m.label)).sort((a, b) => b.vol - a.vol).slice(0, 2);
+      if (ws.length < 2) return null;
+      const [Fm, Dm] = ws[0].p >= ws[1].p ? ws : [ws[1], ws[0]]; favP = Fm.p; mf = Fm; md = Dm; favN = Fm.label.replace(/ wins$/i, ""); dogN = Dm.label.replace(/ wins$/i, "");
+      if (favP < .55 || favP > .82) return null;
+      const FT = fightTake(Dm, g); if (!FT) return null;
+      for (const x of FT.pros) R.push(x.replace(/\.$/, ""));
     } else return null;
     if (md && (md.move || 0) >= 4) R.push(`Money is moving toward ${dogN} (up ${md.move} points in a day)`);
     else if (mf && (mf.move || 0) <= -4) R.push(`Money is moving away from ${favN} (down ${-mf.move} points in a day)`);
     if (R.length >= 3){
-      const onField = R.filter(r => /playing better|offense|defense|Quarterbacks|run the ball|research|Hot players|starting (pitcher|goalie)/.test(r)).length, dogP = 1 - favP;   // reasons from how they actually play, not just the schedule
+      const onField = R.filter(r => /playing better|offense|defense|Quarterbacks|run the ball|research|Hot players|starting (pitcher|goalie)|slumping/.test(r)).length, dogP = 1 - favP;   // reasons from how they actually play, not just the schedule
       g._upset = {fav: favN, dog: dogN, favP, dogP, reasons: R, strong: R.length >= 4 && dogP >= .25 || R.length >= 3 && onField >= 2 && dogP >= .33};
     }
   } catch (e) { g._upset = null; }
@@ -1487,7 +1504,7 @@ function hotPlayers(team, sport){
   const out = [];
   for (const [n, p] of Object.entries(PL.players || {})){
     if (p.tm !== team) continue;
-    const L = p.log; if (!L || L.length < 4) continue;
+    const L = freshLog(p); if (!L || L.length < 4) continue;
     const val = r => !r ? null : sport === "Football" ? (r[9] || 0) * .5 + (r[5] || 0) + (r[2] || 0) + 20 * ((r[3] || 0) + (r[6] || 0) + (r[10] || 0)) - 25 * (r[11] || 0)
                    : sport === "Basketball" ? (r[1] || 0) + .7 * (r[2] || 0) + (r[3] || 0) : sport === "Hockey" ? (r[0] || 0) + (r[1] || 0)
                    : sport === "Soccer" ? (r[0] || 0) + .6 * (r[1] || 0) + .15 * (r[2] || 0)
@@ -1507,6 +1524,41 @@ function hotPlayers(team, sport){
     out.push({n, txt, s: a2 / Math.max(1, a5)});
   }
   return out.sort((a, b) => b.s - a.s);
+}
+// a player's game log with games older than ~2.5 months blanked out (last season's games say little about now)
+function freshLog(p){
+  const T = (PL.teams || {})[p.tm], cut = Date.now() - 75 * 86400000;
+  if (!T || !T.g || T.g.length !== p.log.length) return p.log;
+  return p.log.map((r, i) => new Date(T.g[i].d).getTime() >= cut ? r : null);
+}
+// Cold players: good players whose last 2 games are well below what they did before (a slump), in every sport with box scores
+function coldPlayers(team, sport){
+  const out = [];
+  const val = r => !r ? null : sport === "Football" ? (r[9] || 0) * .5 + (r[5] || 0) + (r[2] || 0) + 20 * ((r[3] || 0) + (r[6] || 0) + (r[10] || 0)) - 25 * (r[11] || 0)
+                 : sport === "Basketball" ? (r[1] || 0) + .7 * (r[2] || 0) + (r[3] || 0) : sport === "Hockey" ? (r[0] == null ? null : (r[0] || 0) + (r[1] || 0))
+                 : sport === "Soccer" ? (r[0] || 0) + .6 * (r[1] || 0) + .15 * (r[2] || 0)
+                 : sport === "Baseball" ? (r[0] == null ? null : (r[1] || 0) + 2 * (r[4] || 0) + .5 * (r[3] || 0) + .5 * (r[5] || 0)) : null;
+  const need = {Football: 80, Basketball: 18, Hockey: 1, Soccer: .9, Baseball: 2.5}[sport]; if (!need) return out;
+  for (const [n, p] of Object.entries(PL.players || {})){
+    if (p.tm !== team) continue;
+    const L = freshLog(p); if (!L || L.length < 4) continue;
+    const v = L.map(val), last = v.slice(-2), prev = v.slice(0, -2).filter(x => x != null);
+    if (last.some(x => x == null) || prev.length < 2) continue;   // missed games (injury, rest) aren't a slump
+    const ap = prev.reduce((a, b) => a + b, 0) / prev.length, a2 = (last[0] + last[1]) / 2;
+    if (ap < need || a2 > ap * .6 || (sport !== "Soccer" && sport !== "Baseball" && Math.max(...last) > ap * .8)) continue;
+    const rows = L.slice(-2), before = L.slice(0, -2).filter(Boolean);
+    if (sport === "Soccer" && before.reduce((a, r) => a + (r[0] || 0) + (r[1] || 0), 0) < 3) continue;   // one goal is just soccer luck
+    if (sport === "Basketball" && before.reduce((a, r) => a + (r[1] || 0), 0) / Math.max(1, before.length) < 12) continue;   // only real scorers
+    const av = (R, i) => R.length ? Math.round(R.reduce((a, r) => a + (r[i] || 0), 0) / R.length) : 0, sm = (R, i) => R.reduce((a, r) => a + (r[i] || 0), 0);
+    let txt;
+    if (sport === "Football") txt = av(before, 8) >= 10 ? `${av(rows, 9)} passing yards a game, ${sm(rows, 10)} TD / ${sm(rows, 11)} INT in his last 2 (was ${av(before, 9)} a game)` : av(before, 5) >= av(before, 2) ? `${av(rows, 5)} rushing yards a game in his last 2 (was ${av(before, 5)})` : `${av(rows, 2)} receiving yards a game in his last 2 (was ${av(before, 2)})`;
+    else if (sport === "Basketball") txt = `${av(rows, 1)} points a game in his last 2 (was ${av(before, 1)})`;
+    else if (sport === "Baseball") txt = `${sm(rows, 1)} hits in his last 2 games (was hitting much better)`;
+    else if (sport === "Soccer") txt = `no goal or assist in his last 2 games (had ${sm(before, 0)} goals and ${sm(before, 1)} assists in the ${before.length} before)`;
+    else txt = `${sm(rows, 0) + sm(rows, 1)} points in his last 2 games (had ${sm(before, 0) + sm(before, 1)} in the ${before.length} before)`;
+    out.push({n, txt, s: ap});
+  }
+  return out.sort((a, b) => b.s - a.s);   // the biggest names first
 }
 // How the two teams have actually played lately (last 5 games from the box scores): scoring margin, offense, defense, quarterback
 function playEdge(sport, D, F, dogN, favN){
@@ -1538,6 +1590,8 @@ function playEdge(sport, D, F, dogN, favN){
   }
   if (["Football", "Basketball", "Hockey", "Soccer", "Baseball"].includes(sport)){
     const hD = hotPlayers(D.name, sport), hF = hotPlayers(F.name, sport);
+    const cF = coldPlayers(F.name, sport), cD = coldPlayers(D.name, sport);
+    if (cF.length && cF.length > cD.length) out.push(`${poss(favN)} slumping: ${cF.slice(0, 2).map(x => `${x.n} (${x.txt})`).join("; ")}`);
     if (hD.length >= 2 && hD.length - hF.length >= 1 || hD.length >= 1 && !hF.length)
       out.push(`Hot players: ${dogN} have ${hD.length} (${hD.slice(0, 2).map(x => `${x.n}: ${x.txt}`).join("; ")}) vs ${hF.length} for ${favN}`);
   }
@@ -1629,13 +1683,14 @@ function lineModel(g){
         const form = (mA - mB) / 2 + home, d = Math.max(-P.form[1], Math.min(P.form[1], P.form[0] * (form - mu0)));
         if (Math.abs(d) >= P.show){ adj += d; sig.push(d); rs.push(`recent scoring margins (${nA} ${mA >= 0 ? "+" : "−"}${Math.abs(P.u === "goals" ? Math.round(mA*10)/10 : Math.round(mA))} a game, ${nB} ${mB >= 0 ? "+" : "−"}${Math.abs(P.u === "goals" ? Math.round(mB*10)/10 : Math.round(mB))}) point to ${d > 0 ? nA : nB}`); }
       }
-      const hA = hotPlayers(tA.name, g.sport).length, hB = hotPlayers(tB.name, g.sport).length, dh = Math.max(-P.hot[1], Math.min(P.hot[1], P.hot[0] * (hA - hB)));
+      const hA = hotPlayers(tA.name, g.sport).length, hB = hotPlayers(tB.name, g.sport).length, cA = coldPlayers(tA.name, g.sport).length, cB = coldPlayers(tB.name, g.sport).length;
+      const dh = Math.max(-P.hot[1], Math.min(P.hot[1], P.hot[0] * ((hA - cA) - (hB - cB))));
       if (P.pitch){   // starting pitcher / goalie form
         const sA = starterForm(g, tA), sB = starterForm(g, tB), role = g.sport === "Hockey" ? "goalie" : "pitcher";
         const v = x => !x ? 0 : x.hot ? 1 : x.cold ? -1 : 0, dp = P.pitch * (v(sA) - v(sB));
         if (dp){ adj += dp; sig.push(dp); for (const [nm, x] of [[nA, sA], [nB, sB]]) if (v(x)) rs.push(`${nm} starting ${role} ${x.n} is ${x.hot ? "hot" : "struggling"} (${x.txt})`); }
       }
-      if (dh){ adj += dh; sig.push(dh); rs.push(`${dh > 0 ? nA : nB} have more hot players (${Math.max(hA, hB)} vs ${Math.min(hA, hB)})`); }
+      if (dh){ adj += dh; sig.push(dh); rs.push(`player form favors ${dh > 0 ? nA : nB} (hot players ${hA} vs ${hB}, slumping ${cA} vs ${cB})`); }
     }
     const r = g.research;
     if (r && r.lean){ const d = (teamIn(tA || {name: A}, r.lean) || same(r.lean, A) ? 1 : -1) * P.res; adj += d; sig.push(d); rs.push(`Primo's research leans ${d > 0 ? nA : nB}`); }
@@ -2692,6 +2747,9 @@ function fightTake(m, g){   // pros, cons and tale-of-the-tape lines for a fight
   if (lossesBy(me, /KO|TKO/) >= 2) cons.push(`${M} has been knocked out ${lossesBy(me, /KO|TKO/)} times in the last ${me.last.length} fights.`);
   const days = p => p.last[0] ? Math.round((Date.now() - new Date(p.last[0].d)) / 86400000) : null, dm = days(me);
   if (dm && dm > 500) cons.push(`${M} hasn't fought in ${Math.round(dm/30)} months (ring rust).`);
+  { const dO = days(op); if (dO && dO > 500 && !(dm && dm > 500)) pros.push(`${O} hasn't fought in ${Math.round(dO/30)} months (ring rust).`); }
+  if (!(sm && sm.n >= 3) && me.last.length >= 5 && wins(me) >= 4) pros.push(`${M} won ${wins(me)} of the last ${me.last.length}.`);
+  if (!(so && so.n >= 2 && so.r === "L") && op.last.length >= 5 && wins(op) <= 2) pros.push(`${O} won only ${wins(op)} of the last ${op.last.length}.`);
   return {pros, cons, lines};
 }
 function buildTakeK(r, m, g){   // Kalshi-only games (tennis, smaller leagues): odds, form, head-to-head, research, price moves
