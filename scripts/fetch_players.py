@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo
 ESPN = "https://site.api.espn.com/apis/site/v2/sports/"
 PT = ZoneInfo("America/Los_Angeles")
 LEAGUES = {"NFL": "football/nfl", "College football": "football/college-football", "NBA": "basketball/nba", "WNBA": "basketball/wnba",
-           "College basketball": "basketball/mens-college-basketball", "NHL": "hockey/nhl"}
+           "College basketball": "basketball/mens-college-basketball", "NHL": "hockey/nhl", "MLB": "baseball/mlb"}
 SOCCER = "soccer/all"   # every soccer league: one team schedule covers league, cup and Europe games
 N_GAMES = 5
 MAX_NEW_BOX = 520
@@ -15,7 +15,12 @@ MAX_NEW_BOX = 520
 FB = ["tgt", "rec", "recYds", "recTD", "car", "rushYds", "rushTD", "cmp", "att", "passYds", "passTD", "int", "longRec", "longRush"]
 BB = ["min", "pts", "reb", "ast", "3pm", "stl", "blk"]
 HK = ["g", "a", "sog", "sv", "toi"]
-SC = ["g", "a", "sot", "sh", "st", "sv"]   # soccer: goals, assists, shots on target, shots, started (1/0), saves
+SC = ["g", "a", "sot", "sh", "st", "sv"]
+# baseball: batting (at-bats, hits, runs, RBIs, home runs, walks, strikeouts), then pitching (innings, hits, earned runs, walks, strikeouts, home runs, pitches, started 1/0)
+BS = ["ab", "h", "r", "rbi", "hr", "bb", "k", "ip", "ph", "er", "pbb", "pk", "phr", "pc", "sp"]
+def innings(v):
+    try: w, f = str(v).split("."); return int(w) + int(f) / 3
+    except Exception: return num(v)   # soccer: goals, assists, shots on target, shots, started (1/0), saves
 CALLS = {"n": 0}
 
 def get(url, tries=2):
@@ -98,6 +103,14 @@ def box_of(d, sport):
                 elif sport == "Basketball":
                     tp = str(row.get("threePointFieldGoalsMade-threePointFieldGoalsAttempted", "")).split("-")
                     P[who] = [num(row.get("minutes")), num(row.get("points")), num(row.get("rebounds")), num(row.get("assists")), num(tp[0]) if tp and tp[0] else None, num(row.get("steals")), num(row.get("blocks"))]
+                elif sport == "Baseball":
+                    r = P.setdefault(who, [None] * len(BS)); typ = cat.get("type") or cname
+                    if typ == "batting":
+                        for i, k in enumerate(("atBats", "hits", "runs", "RBIs", "homeRuns", "walks", "strikeouts")): r[i] = num(row.get(k))
+                    elif typ == "pitching":
+                        r[7] = innings(row.get("fullInnings.partInnings")); r[8] = num(row.get("hits")); r[9] = num(row.get("earnedRuns")); r[10] = num(row.get("walks"))
+                        r[11] = num(row.get("strikeouts")); r[12] = num(row.get("homeRuns")); r[13] = num(row.get("pitches")); r[14] = 1 if a.get("starter") else 0
+                    if all(v is None for v in r): del P[who]
                 elif sport == "Hockey":
                     if cname == "goalies": P[who] = [None, None, None, num(row.get("saves")), mins(row.get("timeOnIce"))]
                     else: P[who] = [num(row.get("goals")), num(row.get("assists")), num(row.get("shotsTotal")), None, mins(row.get("timeOnIce"))]
@@ -160,16 +173,43 @@ def main():
             if sport == "Football" and not (s_(8) > 0 or s_(0) + s_(4) + s_(1) >= 4 or s_(2) + s_(5) >= 25): continue
             if sport == "Basketball" and s_(0) < 8 * len(rows): continue
             if sport == "Hockey" and rows and rows[0][3] is None and s_(4) < 8 * len(rows): continue
+            if sport == "Baseball" and not (s_(0) >= 6 or s_(7) >= 3): continue
             if sport == "Soccer" and (len(rows) < 2 or (s_(0) + s_(1) == 0 and s_(3) < 4 and not (s_(5) or 0))): continue
             out_players[p] = {"tm": name, "lg": league, "pos": pos, "log": [[(int(v) if v is not None and v == int(v) else v) for v in r] if r else 0 for r in log]}
         out_teams[name] = {"lg": league, "sp": sport, "g": games}
+    # starting pitchers and goalies: their own last few games (they don't play every game, so the team's last 5 isn't enough)
+    starters = {}; scache = load("data/starter_cache.json", {}); new_sc = 0
+    for g in FXd.get("games") or []:
+        if g.get("sport") not in ("Baseball", "Hockey") or g.get("state") not in (None, "pre"): continue
+        for tm, pr in (g.get("prob") or {}).items():
+            aid = pr.get("id"); key = g["sport"] + "|" + aid
+            c = scache.get(key)
+            if (not c or now - c.get("t", 0) > 12 * 3600) and new_sc < 80:
+                path = "baseball/mlb" if g["sport"] == "Baseball" else "hockey/nhl"
+                d = get("https://site.web.api.espn.com/apis/common/v3/sports/%s/athletes/%s/gamelog" % (path, aid)); new_sc += 1
+                if d:
+                    names = d.get("names") or []; ix = {n: i for i, n in enumerate(names)}; evs = d.get("events") or {}; rows = []
+                    for stp in d.get("seasonTypes") or []:
+                        for cat in stp.get("categories") or []:
+                            for e in cat.get("events") or []:
+                                st = e.get("stats") or []; dt = ((evs.get(e.get("eventId")) or {}).get("gameDate") or "")[:10]
+                                v = lambda k: st[ix[k]] if k in ix and ix[k] < len(st) else None
+                                if g["sport"] == "Baseball":
+                                    ip = innings(v("innings")) or 0
+                                    if ip >= 2.5 or (num(v("pitches")) or 0) >= 45: rows.append([dt, round(ip, 2), num(v("earnedRuns")), num(v("strikeouts")), num(v("walks")), num(v("hits"))])
+                                elif str(v("gameStarted")) == "1": rows.append([dt, num(v("goalsAgainst")), num(v("shotsAgainst")), num(v("saves"))])
+                    rows.sort(key=lambda r: r[0], reverse=True)
+                    c = scache[key] = {"t": now, "last": rows[:5]}
+            if c and c.get("last"): starters[pr["n"]] = {"tm": tm, "sp": g["sport"], "last": c["last"]}
+    json.dump({k: v for k, v in scache.items() if now - v.get("t", 0) < 7 * 86400}, open("data/starter_cache.json", "w"), separators=(",", ":"))
+    print("starters:", len(starters), "new game logs:", new_sc)
     # keep caches small
     keep_ids = {i for v in sched.values() for i in v.get("ids", [])}
     boxes = {k: v for k, v in boxes.items() if k in keep_ids or now - v.get("k", now) < 20 * 86400}
     sched = {k: v for k, v in sched.items() if now - v.get("t", 0) < 7 * 86400}
     json.dump(boxes, open("data/box_cache.json", "w"), separators=(",", ":"))
     json.dump(sched, open("data/sched_cache.json", "w"), separators=(",", ":"))
-    data = {"asof": datetime.datetime.now(PT).strftime("%b %d, %I:%M %p PT"), "keys": {"Football": FB, "Basketball": BB, "Hockey": HK, "Soccer": SC}, "teams": out_teams, "players": out_players}
+    data = {"asof": datetime.datetime.now(PT).strftime("%b %d, %I:%M %p PT"), "keys": {"Football": FB, "Basketball": BB, "Hockey": HK, "Soccer": SC, "Baseball": BS}, "starters": starters, "teams": out_teams, "players": out_players}
     with open("data/players.js", "w") as f:
         f.write("window.PRIMO_PLAYERS=" + json.dumps(data, separators=(",", ":"), ensure_ascii=False).replace("</", "<\\/") + ";\n")
     print("players:", len(out_players), "teams:", len(out_teams), "new box scores:", new_box, "schedules:", new_sched, "calls:", CALLS["n"], "size:", os.path.getsize("data/players.js"))

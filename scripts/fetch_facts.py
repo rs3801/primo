@@ -347,10 +347,13 @@ def main():
             g = {"sport": sport, "league": league, "start": ev.get("date", ""), "state": state, "teams": [team(c) for c in cs], "notes": []}
             od = odds_of(comp)
             if od: g["odds"] = od
-            for c in cs:   # MLB probable pitchers from ESPN
+            for c in cs:   # MLB probable pitchers (and NHL starting goalies) from ESPN
                 for p in c.get("probables") or []:
                     nm = (p.get("athlete") or {}).get("displayName")
-                    if nm: g["notes"].append("%s starting %s: %s" % (c.get("team", {}).get("displayName", ""), "goalie" if sport == "Hockey" else "pitcher", nm))
+                    if nm:
+                        g["notes"].append("%s starting %s: %s" % (c.get("team", {}).get("displayName", ""), "goalie" if sport == "Hockey" else "pitcher", nm))
+                        aid = (p.get("athlete") or {}).get("id")
+                        if aid: g.setdefault("prob", {})[c.get("team", {}).get("displayName", "")] = {"n": nm, "id": str(aid)}
             ser = (comp.get("series") or {}).get("summary")
             if ser: g["notes"].insert(0, ser)
             try: start = datetime.datetime.fromisoformat(g["start"].replace("Z", "+00:00"))
