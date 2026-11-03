@@ -1,39 +1,23 @@
-pitcher id 5080761
-== https://site.web.api.espn.com/apis/common/v3/sports/baseball/mlb/athletes/5080761/gamelog keys filters,labels,names,displayNames,events,seasonTypes,glossary
-labels ["IP", "H", "R", "ER", "HR", "BB", "K", "GB", "FB", "P", "TBF", "GSC", "Dec", "Rel", "ERA"] names ["innings", "hits", "runs", "earnedRuns", "homeRuns", "walks", "strikeouts", "groundBalls", "flyBalls", "pitches", "battersFaced", "avgGameScore", "wins-losses", "saves-blownSaves-holds", "ERA"]
-season type 2026 Postseason
-  cat Postseason event
-    {"eventId": "401908046", "stats": ["5.2", "2", "0", "0", "0", "1", "2", "6", "11", "86", "21", "66.0", "W(2-0)", "-", "1.89"]}
-    {"eventId": "401908042", "stats": ["5.0", "4", "1", "1", "0", "1", "3", "5", "9", "78", "18", "57.0", "W(1-0)", "-", "2.70"]}
-    {"eventId": "401908030", "stats": ["4.1", "5", "1", "1", "0", "3", "5", "5", "6", "94", "19", "51.0", "-", "-", "3.24"]}
-season type 2026 Regular Season
-  cat september event
-    {"eventId": "401817111", "stats": ["5.1", "2", "0", "0", "0", "2", "5", "3", "9", "68", "19", "67.0", "W(16-5)", "-", "1.80"]}
-    {"eventId": "401817016", "stats": ["3.0", "1", "0", "0", "0", "0", "4", "3", "3", "44", "10", "61.0", "-", "-", "1.86"]}
-    {"eventId": "401816948", "stats": ["5.0", "5", "0", "0", "0", "1", "7", "6", "6", "82", "20", "63.0", "W(15-5)", "-", "1.89"]}
-  cat august event
-    {"eventId": "401816699", "stats": ["6.0", "2", "2", "2", "0", "2", "6", "5", "8", "89", "21", "64.0", "W(14-5)", "-", "1.73"]}
-    {"eventId": "401816617", "stats": ["6.0", "4", "0", "0", "0", "2", "6", "6", "9", "96", "23", "68.0", "W(13-5)", "-", "1.68"]}
-    {"eventId": "401816545", "stats": ["6.0", "5", "1", "1", "0", "1", "6", "5", "12", "98", "24", "63.0", "W(12-5)", "-", "1.75"]}
-events sample [["401908046", {"id": "401908046", "links": [{"language": "en", "rel": ["summary", "desktop", "event"], "href": "https://www.espn.com/mlb/game/_/gameId/401908046/brewers-rays", "text": "Gamecast", "shortText": "Summary", "isExternal": false, "isPremium": false}, {"language": "en", "rel": ["summary", "sportscenter", "app", "event"], "href": "sportscenter://x-callback-url/showGame?sportName=baseball
-== https://site.web.api.espn.com/apis/common/v3/sports/baseball/mlb/athletes/5080761/gamelog?season=2026 keys filters,labels,names,displayNames,events,seasonTypes,glossary
-labels ["IP", "H", "R", "ER", "HR", "BB", "K", "GB", "FB", "P", "TBF", "GSC", "Dec", "Rel", "ERA"] names ["innings", "hits", "runs", "earnedRuns", "homeRuns", "walks", "strikeouts", "groundBalls", "flyBalls", "pitches", "battersFaced", "avgGameScore", "wins-losses", "saves-blownSaves-holds", "ERA"]
-season type 2026 Postseason
-  cat Postseason event
-    {"eventId": "401908046", "stats": ["5.2", "2", "0", "0", "0", "1", "2", "6", "11", "86", "21", "66.0", "W(2-0)", "-", "1.89"]}
-    {"eventId": "401908042", "stats": ["5.0", "4", "1", "1", "0", "1", "3", "5", "9", "78", "18", "57.0", "W(1-0)", "-", "2.70"]}
-    {"eventId": "401908030", "stats": ["4.1", "5", "1", "1", "0", "3", "5", "5", "6", "94", "19", "51.0", "-", "-", "3.24"]}
-season type 2026 Regular Season
-  cat september event
-    {"eventId": "401817111", "stats": ["5.1", "2", "0", "0", "0", "2", "5", "3", "9", "68", "19", "67.0", "W(16-5)", "-", "1.80"]}
-    {"eventId": "401817016", "stats": ["3.0", "1", "0", "0", "0", "0", "4", "3", "3", "44", "10", "61.0", "-", "-", "1.86"]}
-    {"eventId": "401816948", "stats": ["5.0", "5", "0", "0", "0", "1", "7", "6", "6", "82", "20", "63.0", "W(15-5)", "-", "1.89"]}
-  cat august event
-    {"eventId": "401816699", "stats": ["6.0", "2", "2", "2", "0", "2", "6", "5", "8", "89", "21", "64.0", "W(14-5)", "-", "1.73"]}
-    {"eventId": "401816617", "stats": ["6.0", "4", "0", "0", "0", "2", "6", "6", "9", "96", "23", "68.0", "W(13-5)", "-", "1.68"]}
-    {"eventId": "401816545", "stats": ["6.0", "5", "1", "1", "0", "1", "6", "5", "12", "98", "24", "63.0", "W(12-5)", "-", "1.75"]}
-events sample [["401908046", {"id": "401908046", "links": [{"language": "en", "rel": ["summary", "desktop", "event"], "href": "https://www.espn.com/mlb/game/_/gameId/401908046/brewers-rays", "text": "Gamecast", "shortText": "Summary", "isExternal": false, "isPremium": false}, {"language": "en", "rel": ["summary", "sportscenter", "app", "event"], "href": "sportscenter://x-callback-url/showGame?sportName=baseball
-goalie keys ["goalsAgainst", "shotsAgainst", "shootoutSaves", "shootoutShotsAgainst", "saves", "savePct", "evenStrengthSaves", "powerPlaySaves", "shortHandedSaves", "timeOnIce", "ytdGoals", "penaltyMinutes"]
-NHL labels ["GS", "TOI/G", "WINS", "L", "T", "OTL", "GA", "GAA", "SA", "SV", "SV%", "SO"] names ["gameStarted", "timeOnIcePerGame", "wins", "losses", "ties", "overtimeLosses", "goalsAgainst", "avgGoalsAgainst", "shotsAgainst", "saves", "savePct", "shutouts"]
-    {"eventId": "401892614", "stats": ["1", "62:32", "0", "0", "0", "1", "5", "4.80", "32", "27", ".844", "0"], "type": {"id": "1", "text": "Standard", "abbreviation": "STD", "type": "standard", "slug": "standard"}}
-    {"eventId": "401892462", "stats": ["1", "57:51", "0", "1", "0", "0", "3", "3.11", "18", "15", ".833", "0"], "type": {"id": "1", "text": "Standard", "abbreviation": "STD", "type": "standard", "slug": "standard"}}
+Tampa Bay Rays score 1.0
+  Yandy Diaz [3.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, null, null, null, null, null, null, null, null]
+  Jonathan Aranda [4.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, null, null, null, null, null, null, null, null]
+  Junior Caminero [4.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, null, null, null, null, null, null, null, null]
+  Liam Hicks [3.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, null, null, null, null, null, null, null, null]
+  Drew Rasmussen [null, null, null, null, null, null, null, 4.0, 2.0, 1.0, 0.0, 4.0, 0.0, 48.0, 1]
+  Kevin Kelly [null, null, null, null, null, null, null, 0.6666666666666666, 3.0, 1.0, 0.0, 1.0, 0.0, 17.0, 0]
+  Garrett Cleavinger [null, null, null, null, null, null, null, 0.3333333333333333, 2.0, 2.0, 0.0, 1.0, 0.0, 8.0, 0]
+Milwaukee Brewers score 4.0
+  Jackson Chourio [4.0, 1.0, 0.0, 0.0, 0.0, 0.0, 3.0, null, null, null, null, null, null, null, null]
+  Jake Bauers [4.0, 0.0, 0.0, 0.0, 0.0, 0.0, 2.0, null, null, null, null, null, null, null, null]
+  Christian Yelich [3.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, null, null, null, null, null, null, null, null]
+  William Contreras [4.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, null, null, null, null, null, null, null, null]
+  Jacob Misiorowski [null, null, null, null, null, null, null, 5.666666666666667, 2.0, 0.0, 1.0, 2.0, 0.0, 86.0, 1]
+  JoJo Romero [null, null, null, null, null, null, null, 0.6666666666666666, 0.0, 0.0, 0.0, 1.0, 0.0, 10.0, 0]
+  Abner Uribe [null, null, null, null, null, null, null, 0.6666666666666666, 0.0, 0.0, 0.0, 0.0, 0.0, 10.0, 0]
+events date sample {"401908046": "2026-10-29T00:00:00.000+00:00", "401908042": "2026-10-24T00:00:00.000+00:00", "401908030": "2026-10-12T00:00:00.000+00:00"}
+NHL probables Boston Bruins ["Jeremy Swayman"]
+NHL probables Vegas Golden Knights ["Carter Hart"]
+NHL probables Florida Panthers ["Jacob Markstrom"]
+NHL probables Detroit Red Wings ["Daniil Tarasov"]
+NHL probables Chicago Blackhawks ["Spencer Knight"]
+NHL probables Colorado Avalanche ["Mackenzie Blackwood"]
