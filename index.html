@@ -828,6 +828,11 @@ function newsAdjust(m, op){
 const V_UP = {drop: ["risky", "🤔 Risky"], risky: ["okay", "👍 Okay"], okay: ["keep", "✅ Keep"]}, V_DN = {keep: ["okay", "👍 Okay"], okay: ["risky", "🤔 Risky"]};
 function sharpAdjust(m, op){
   if (op) newsAdjust(m, op);
+  if (op && m.type === "winner"){   // Primo's upset pick: the underdog's win bet moves up a step, the favorite's down a step
+    const u = upsetFor(m.g), lab = ffold(m.label.replace(/ wins$/i, "")), is = n => { const x = ffold(n); return lab.includes(x) || x.includes(lab); };
+    if (u && u.strong && is(u.dog) && !is(u.fav)){ op.pros = [`🚨 Primo's upset pick: ${u.reasons.slice(0, 3).join("; ")}.`].concat(op.pros || []); const up = V_UP[op.v]; if (up){ op.v = up[0]; op.badge = up[1]; } op.say += ` 🚨 Upset pick: ${u.dog} are playing better than their price.`; }
+    else if (u && u.strong && is(u.fav) && !is(u.dog)){ op.cons = [`🚨 Upset risk: ${u.dog} have been playing better (${u.reasons.slice(0, 2).join("; ")}).`].concat(op.cons || []); const dn = V_DN[op.v]; if (dn){ op.v = dn[0]; op.badge = dn[1]; } }
+  }
   if (op && op.v === "drop" && likedBy(m)){ op.v = "risky"; op.badge = "🤔 Risky"; op.say = op.say.replace(/^Primo would leave this out\./, "A long shot Primo's research likes."); }
   if (op && op.cautioned){ const dn = V_DN[op.v]; if (dn){ op.v = dn[0]; op.badge = dn[1]; op.say = op.say.replace(/^Solid leg\./, "Decent, but careful."); } }   // a long shot Primo's research likes: risky, not a drop
   if (!op || !m.sharp || m.fair == null) return op;
@@ -1374,7 +1379,7 @@ function upsetFor(g){
       favN = F.short || F.name; dogN = D.short || D.name;
       const rc = x => (f.records || {})[x.name] || {}, fm = x => (f.form || {})[x.name] || [];
       const ra = wl(rc(D).all), rb = wl(rc(F).all);
-      if (ra && rb && ra.g >= 3 && rb.g >= 3 && ra.pct - rb.pct >= .15) R.push(`${dogN} have the better record (${rc(D).all} vs ${rc(F).all})`);
+      if (ra && rb && ra.g >= 3 && rb.g >= 3 && ra.pct - rb.pct >= .1) R.push(`${dogN} have the better record (${rc(D).all} vs ${rc(F).all})`);
       const wd = fm(D).filter(x => /^W/.test(x)).length, wf = fm(F).filter(x => /^W/.test(x)).length;
       if (fm(D).length >= 3 && fm(F).length >= 3 && wd - wf >= 2) R.push(`${dogN} are hotter: won ${wd} of their last ${fm(D).length}, ${favN} won ${wf} of ${fm(F).length}`);
       if (rankEdge(D, F) > 0) R.push(`${dogN} rank higher (${rankTxt(D, F)} vs ${rankTxt(F, D) || "unranked"})`);
@@ -1388,6 +1393,8 @@ function upsetFor(g){
       else if (outs(F).find(q => q.note && q.fromResearch)) { const q = outs(F).find(q => q.note && q.fromResearch); R.push(`${favN} are without ${q.player}: ${q.note}`); }
       else if (outs(F).length - outs(D).length >= 3) R.push(`${favN} have ${outs(F).length} players out (${outs(F).slice(0, 2).map(q => q.player).join(", ")}…), ${dogN} have ${outs(D).length}`);
       const rs = g.research; if (rs && rs.lean && teamIn(D, rs.lean)) R.push(`Primo's research picks ${dogN}`);
+      else if (rs && rs.factLean && teamIn(D, rs.factLean)) { const fs = (rs.take || {}).factors || []; R.push(`Most of Primo's research facts favor ${dogN} (${fs.filter(x => teamIn(D, x.f || "")).length} of ${fs.length})`); }
+      for (const x of playEdge(g.sport, D, F, dogN, favN)) R.push(x);
       const bookD = od.home != null ? (D.home ? od.home : od.away)/100 : null;
       if (bookD != null && md && bookD - md.p >= .04) R.push(`${dogN} are cheaper on Kalshi (${pc(md.p)}) than at the sportsbooks (${pc(bookD)})`);
     } else if (g.sport === "Tennis"){
@@ -1403,14 +1410,44 @@ function upsetFor(g){
     } else return null;
     if (md && (md.move || 0) >= 4) R.push(`Money is moving toward ${dogN} (up ${md.move} points in a day)`);
     else if (mf && (mf.move || 0) <= -4) R.push(`Money is moving away from ${favN} (down ${-mf.move} points in a day)`);
-    if (R.length >= 3) g._upset = {fav: favN, dog: dogN, favP, dogP: 1 - favP, reasons: R};
+    if (R.length >= 3){
+      const onField = R.filter(r => /playing better|offense|defense|Quarterbacks|run the ball|research/.test(r)).length, dogP = 1 - favP;   // reasons from how they actually play, not just the schedule
+      g._upset = {fav: favN, dog: dogN, favP, dogP, reasons: R, strong: R.length >= 4 && dogP >= .25 || R.length >= 3 && onField >= 2 && dogP >= .33};
+    }
   } catch (e) { g._upset = null; }
   return g._upset;
 }
+// How the two teams have actually played lately (last 5 games from the box scores): scoring margin, offense, defense, quarterback
+function playEdge(sport, D, F, dogN, favN){
+  const out = [], T = PL.teams || {}, td = T[D.name], tf = T[F.name];
+  if (!td || !tf || td.g.length < 3 || tf.g.length < 3) return out;
+  const avg = (t, fn) => { const v = t.g.map(fn).filter(x => x != null && !isNaN(x)); return v.length >= 3 ? v.reduce((a, b) => a + b, 0) / v.length : null; };
+  const poss = n => /s$/i.test(n) ? n + "'" : n + "'s";
+  const r0 = x => Math.round(x), sg = x => (x >= 0 ? "+" : "−") + Math.abs(x).toFixed(sport === "Hockey" ? 1 : 0);
+  const mD = avg(td, x => x.pf - x.pa), mF = avg(tf, x => x.pf - x.pa), need = {Football: 5, Basketball: 5, Hockey: .8}[sport] || 99;
+  if (mD != null && mF != null && mD - mF >= need) out.push(`${dogN} have been playing better: ${sg(mD)} points a game over their last ${td.g.length} vs ${favN} ${sg(mF)}`);
+  if (sport === "Football"){
+    const st = (t, side, k) => avg(t, x => (x[side] || {})[k]);
+    const yD = st(td, "f", "totalYards"), yF = st(tf, "f", "totalYards"), rD = st(td, "f", "rushingYards"), rF = st(tf, "f", "rushingYards");
+    const pD = st(td, "f", "netPassingYards"), pF = st(tf, "f", "netPassingYards"), aD = st(td, "a", "totalYards"), aF = st(tf, "a", "totalYards");
+    if (yD != null && yF != null && yD - yF >= 30){
+      const bits = []; if (rD != null && rF != null && rD - rF >= 20) bits.push(`${r0(rD)} rushing vs ${r0(rF)}`); if (pD != null && pF != null && pD - pF >= 20) bits.push(`${r0(pD)} passing vs ${r0(pF)}`);
+      out.push(`${poss(dogN)} offense is out-gaining ${poss(favN)}: ${r0(yD)} yards a game vs ${r0(yF)}${bits.length ? " (" + bits.join(", ") + ")" : ""}`); }
+    else if (rD != null && rF != null && rD - rF >= 35) out.push(`${dogN} run the ball much better: ${r0(rD)} rushing yards a game vs ${r0(rF)}`);
+    if (aD != null && aF != null && aF - aD >= 30) out.push(`${poss(dogN)} defense has been tougher: allowing ${r0(aD)} yards a game vs ${r0(aF)} for ${favN}`);
+    // quarterbacks: the passer with the most attempts on each side
+    const qb = t => { let best = null; for (const [n, p] of Object.entries(PL.players || {})){ if (p.tm !== t) continue; const rows = p.log.filter(Boolean), att = rows.reduce((a, r) => a + (r[8] || 0), 0); if (att >= 40 && (!best || att > best.att)) best = {n, att, yds: rows.reduce((a, r) => a + (r[9] || 0), 0) / rows.length, td: rows.reduce((a, r) => a + (r[10] || 0), 0), int: rows.reduce((a, r) => a + (r[11] || 0), 0), g: rows.length}; } return best; };
+    const qD = qb(D.name), qF = qb(F.name);
+    if (qD && qF && qD.yds - qF.yds >= 25 && (qD.td - qD.int) >= (qF.td - qF.int)) out.push(`Quarterbacks: ${qD.n} (${dogN}) ${r0(qD.yds)} yards a game, ${qD.td} TD / ${qD.int} INT lately vs ${qF.n} (${favN}) ${r0(qF.yds)} yards, ${qF.td} TD / ${qF.int} INT`);
+  }
+  return out.slice(0, 3);
+}
 function upsetHTML(g, mode){   // mode: "game" (card), "fav" (you're betting the favorite), "dog" (you're betting the underdog)
   const u = upsetFor(g); if (!u) return "";
+  const strong = u.strong;
+  const verdict = strong ? `<div style="margin:4px 0;font-weight:700">👉 Primo's upset pick: ${esc(u.dog)} have enough going for them that ${u.dogP >= .3 ? `taking ${esc(u.dog)} to win is a reasonable bet at this price` : `a small bet on ${esc(u.dog)} is worth a look`}.</div>` : "";
   const head = mode === "fav" ? `🚨 Upset alert: you're betting ${esc(u.fav)}, but Primo sees a real chance ${esc(u.dog)} wins` : mode === "dog" ? `🚨 Upset pick: Primo sees reasons ${esc(u.dog)} can beat ${esc(u.fav)}` : `🚨 Upset alert: ${esc(u.dog)} over ${esc(u.fav)}?`;
-  return `<div class="legnote clash" style="margin:8px 0"><b>${head}</b> ${esc(u.fav)} are favored (${Math.round(u.favP*100)}%), but:<ul style="margin:4px 0 0;padding-left:18px">${u.reasons.map(r => `<li>${esc(r)}</li>`).join("")}</ul><span style="font-size:.9em;opacity:.8">An upset alert means the underdog has a better shot than its price shows, not that it will win.</span></div>`;
+  return `<div class="legnote clash" style="margin:8px 0"><b>${head}</b> ${esc(u.fav)} are favored (${Math.round(u.favP*100)}%), but:<ul style="margin:4px 0 0;padding-left:18px">${u.reasons.map(r => `<li>${esc(r)}</li>`).join("")}</ul>${verdict}<span style="font-size:.9em;opacity:.8">An upset alert means the underdog has a better shot than its price shows, not that it will win.</span></div>`;
 }
 function whyHTML(g){
   const r = g.research;
