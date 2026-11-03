@@ -2649,11 +2649,13 @@ function parseTicket(text){
     if ((NOTLEG.test(L) && !/\d\s*%\s*[xX×✕]?\s*$/.test(L)) || /^\s*(?:bet|stake)\b/i.test(L)) continue;
     const rest = L.replace(/selection|money ?line|moneyline|point spread|spread|game|straight|wager|\bml\b|[\d:+\-.()#]/gi, "").trim();
     if (!/[a-z]{3}/i.test(rest)){ const prev = out.legs[out.legs.length - 1]; if (prev && /money ?line|\bml\b/i.test(L)) prev.kind = "ml"; continue; }
-    const leg = parseLeg(L);
+    const noM = /^no\s*[-–—:·]\s*(.+)$/i.exec(L);   // Kalshi slips show a "No" pick as "No - <the Yes question>"
+    const leg = parseLeg(noM ? noM[1] : L);
+    if (leg && noM){ leg.no = true; leg.raw = L; }
     if (!leg) continue;
     if (ctx) leg.ctx = ctx;
     const namesTeam = !/^(over|under|both teams|tie|draw|\d)/i.test(leg.who);
-    const key = ffold(leg.who).replace(/[^a-z0-9]/g, "") + "|" + leg.kind + "|" + leg.line + (namesTeam || !leg.ctx ? "" : "|" + ffold(leg.ctx.join(" ")));   // the same bet on two overlapping screenshots counts once
+    const key = ffold(leg.who).replace(/[^a-z0-9]/g, "") + "|" + leg.kind + "|" + leg.line + (leg.no ? "|no" : "") + (namesTeam || !leg.ctx ? "" : "|" + ffold(leg.ctx.join(" ")));   // the same bet on two overlapping screenshots counts once
     const i = out.legs.findIndex(x => x.key === key); leg.key = key;
     if (i >= 0){ if (leg.paid == null) leg.paid = out.legs[i].paid; if (leg.odds == null) leg.odds = out.legs[i].odds; if (out.legs[i].ctx) leg.ctx = out.legs[i].ctx; out.legs[i] = leg; } else out.legs.push(leg);
   }
@@ -2930,9 +2932,25 @@ function kalshiWinner(g, t){
   return ms.sort((a, b) => b.vol - a.vol)[0] || null;
 }
 function gradeLeg(leg){
+  if (leg.no){   // a "No" pick: find the Yes question, then grade the opposite side
+    const r0 = gradeLeg(Object.assign({}, leg, {no: false, paid: leg.paid != null ? 1 - leg.paid : null}));
+    if (!r0.km){ if (r0.chance != null) r0.chance = 1 - r0.chance; r0.leg = leg; return r0; }
+    const inv = r0.km.g.markets.find(x => x.noOf === r0.km);
+    if (inv){ const r = {leg, chance: null, how: [], notes: [], warn: []}; return gradeKalshi(leg, inv, r); }
+    const r = r0; r.leg = leg; r.chance = 1 - r0.chance; r.desc = `"No" on: ${r0.km.pick || r0.km.label}`; r.tag = r.chance >= .65 ? "Likely" : r.chance >= .52 ? "Leans yes" : r.chance >= .45 ? "Coin flip" : "Long shot";
+    if (leg.paid != null){ r.edge = r.chance - leg.paid; r.price = `Kalshi has the No at about ${TK.pct(r.chance)} right now (your ticket shows ${TK.pct(leg.paid)}).`; }
+    r.take = null; return r;
+  }
   const r = {leg, chance: null, how: [], notes: [], warn: []};
   if (leg.kalshi && /:/.test(leg.who)){ const ph = kalshiProp(leg); if (ph) return gradeProp(leg, r, ph); }
   if (leg.kalshi && leg.ctx){ const hit = kalshiInGame(leg); if (hit) return gradeKalshi(leg, hit, r); }
+  if (leg.kalshi && !leg.ctx && /\b(wins by|over|under)\b/i.test(leg.who || "")){   // no game name came through: look for this exact Kalshi bet in every game
+    const want = ffold(leg.who).replace(/[^a-z0-9.]/g, ""), now = Date.now();
+    const hits = [];
+    for (const g of games) for (const m of g.markets) if (!m.noOf && ffold(m.label).replace(/[^a-z0-9.]/g, "") === want) hits.push(m);
+    hits.sort((a, b) => Math.abs((a.g.start || 0) - now) - Math.abs((b.g.start || 0) - now));
+    if (hits.length && (hits.length === 1 || !/^(over|under)/i.test(leg.who))) return gradeKalshi(leg, hits[0], r);
+  }
   const both = leg.opp ? findTicketGame(leg.who, leg.opp) : null;
   const km0 = both && both.both ? null : kalshiFind(leg);
   if (km0 && (leg.kalshi || !findTicketGame(leg.who))) return gradeKalshi(leg, km0, r);
@@ -3376,7 +3394,14 @@ function checkTicket(text){
     return `<p class="filtsum" style="margin:8px 0">🔮 Primo found ${G.length === 1 ? "this game" : G.length + " games"} in your ${/\n/.test(text) ? "screenshot" : "message"}. Here's what it predicts:</p>` + G.map(predictHTML).join("");
   }
   if (!T.legs.length) return `<div class="empty">Primo couldn't find any bets in that. Put one bet per line with its odds, like <b>49ers -7 -110</b> or <b>Rays ML -149</b>.</div>`;
-  const rs = T.legs.map(gradeLeg);
+  const rs = [];
+  for (const leg of T.legs){
+    // Kalshi groups picks under each game; if the game name didn't come through, a total like "Over 31.5 points" belongs to the game above it
+    const prev = rs[rs.length - 1];
+    if (!leg.ctx && prev && prev.g && /^(over|under)\b/i.test(leg.who || leg.raw || "") && prev.g.facts) leg.ctx = prev.g.facts.teams.map(t => t.name);
+    else if (!leg.ctx && prev && prev.g && /^(over|under)\b/i.test(leg.who || leg.raw || "")) leg.ctx = prev.g.title.split(/\s+vs\s+/);
+    rs.push(gradeLeg(leg));
+  }
   const missingNote = T.expected && T.expected > T.legs.length ? `<p class="warn" style="margin:6px 0">⚠️ Your slip says ${T.expected} legs, but Primo only sees ${T.legs.length}. Add a screenshot of the rest so Primo can check all of them.</p>` : "";
   const all = rs.reduce((a, r) => a * (r.chance ?? 1), 1);
   const unpriced = rs.filter(r => r.chance == null).length;
