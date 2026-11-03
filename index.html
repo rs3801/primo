@@ -1707,7 +1707,7 @@ function lineModel(g){
       L.m.primoP = L.pp; L.m.lineEV = L.ev;
     }
     const ok = lines.filter(L => L.sane && L.ev != null && !isNaN(L.m.ask) && L.m.ask > .03 && L.m.ask < .97);
-    const pick = Math.abs(adj) >= P.min && agree >= 2 && !against ? ok.filter(L => L.pp >= .35 && L.pp <= .88 && L.ev >= .05).sort((a, b) => b.ev - a.ev)[0] : null;
+    const pick = Math.abs(adj) >= P.min && agree >= 2 && !against ? (c => { const top = c.sort((a, b) => b.ev - a.ev)[0]; return top ? c.filter(L => L.ev >= top.ev - .02).sort((a, b) => b.pp - a.pp)[0] : null; })(ok.filter(L => L.pp >= .35 && L.pp <= .88 && L.ev >= .05)) : null;   // about as good a deal but more likely to hit wins
     const safest = ok.filter(L => L.m.ask <= .93).sort((a, b) => b.pp - a.pp)[0];
     g._line = {A, B, nA, nB, mu0, mu, sd, adj, u: P.u, min: P.min, show: P.show, reasons: rs, pick: pick ? pick.m : null, safest: safest ? safest.m : null};
     if (pick) pick.m.linePick = true;
