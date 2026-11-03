@@ -1,10 +1,39 @@
-20261028 Milwaukee Brewers at Tampa Bay Rays 401908046
-team Milwaukee Brewers
-cat None type batting keys ["hits-atBats", "atBats", "runs", "hits", "RBIs", "homeRuns", "walks", "strikeouts", "pitches", "avg", "onBasePct", "slugAvg"] labels ["H-AB", "AB", "R", "H", "RBI", "HR", "BB", "K", "#P", "AVG", "OBP", "SLG"]
-   Jackson Chourio ["1-4", "4", "0", "1", "0", "0", "0", "3", "20", ".288", ".306", ".424"] pos LF starter True
-   Jake Bauers ["0-4", "4", "0", "0", "0", "0", "0", "2", "15", ".191", ".345", ".277"] pos 1B starter True
-cat None type pitching keys ["fullInnings.partInnings", "hits", "runs", "earnedRuns", "walks", "strikeouts", "homeRuns", "pitches-strikes", "ERA", "pitches"] labels ["IP", "H", "R", "ER", "BB", "K", "HR", "PC-ST", "ERA", "PC"]
-   Jacob Misiorowski ["5.2", "2", "0", "0", "1", "2", "0", "86-58", "1.89", "86"] pos SP starter True
-   JoJo Romero ["0.2", "0", "0", "0", "0", "1", "0", "10-8", "1.13", "10"] pos RP starter False
-team stats [["batting", null], ["pitching", null], ["fielding", null], ["records", null]]
-sched events 8 {"year": 2026, "type": 3, "name": "Postseason", "displayName": "2026"}
+pitcher id 5080761
+== https://site.web.api.espn.com/apis/common/v3/sports/baseball/mlb/athletes/5080761/gamelog keys filters,labels,names,displayNames,events,seasonTypes,glossary
+labels ["IP", "H", "R", "ER", "HR", "BB", "K", "GB", "FB", "P", "TBF", "GSC", "Dec", "Rel", "ERA"] names ["innings", "hits", "runs", "earnedRuns", "homeRuns", "walks", "strikeouts", "groundBalls", "flyBalls", "pitches", "battersFaced", "avgGameScore", "wins-losses", "saves-blownSaves-holds", "ERA"]
+season type 2026 Postseason
+  cat Postseason event
+    {"eventId": "401908046", "stats": ["5.2", "2", "0", "0", "0", "1", "2", "6", "11", "86", "21", "66.0", "W(2-0)", "-", "1.89"]}
+    {"eventId": "401908042", "stats": ["5.0", "4", "1", "1", "0", "1", "3", "5", "9", "78", "18", "57.0", "W(1-0)", "-", "2.70"]}
+    {"eventId": "401908030", "stats": ["4.1", "5", "1", "1", "0", "3", "5", "5", "6", "94", "19", "51.0", "-", "-", "3.24"]}
+season type 2026 Regular Season
+  cat september event
+    {"eventId": "401817111", "stats": ["5.1", "2", "0", "0", "0", "2", "5", "3", "9", "68", "19", "67.0", "W(16-5)", "-", "1.80"]}
+    {"eventId": "401817016", "stats": ["3.0", "1", "0", "0", "0", "0", "4", "3", "3", "44", "10", "61.0", "-", "-", "1.86"]}
+    {"eventId": "401816948", "stats": ["5.0", "5", "0", "0", "0", "1", "7", "6", "6", "82", "20", "63.0", "W(15-5)", "-", "1.89"]}
+  cat august event
+    {"eventId": "401816699", "stats": ["6.0", "2", "2", "2", "0", "2", "6", "5", "8", "89", "21", "64.0", "W(14-5)", "-", "1.73"]}
+    {"eventId": "401816617", "stats": ["6.0", "4", "0", "0", "0", "2", "6", "6", "9", "96", "23", "68.0", "W(13-5)", "-", "1.68"]}
+    {"eventId": "401816545", "stats": ["6.0", "5", "1", "1", "0", "1", "6", "5", "12", "98", "24", "63.0", "W(12-5)", "-", "1.75"]}
+events sample [["401908046", {"id": "401908046", "links": [{"language": "en", "rel": ["summary", "desktop", "event"], "href": "https://www.espn.com/mlb/game/_/gameId/401908046/brewers-rays", "text": "Gamecast", "shortText": "Summary", "isExternal": false, "isPremium": false}, {"language": "en", "rel": ["summary", "sportscenter", "app", "event"], "href": "sportscenter://x-callback-url/showGame?sportName=baseball
+== https://site.web.api.espn.com/apis/common/v3/sports/baseball/mlb/athletes/5080761/gamelog?season=2026 keys filters,labels,names,displayNames,events,seasonTypes,glossary
+labels ["IP", "H", "R", "ER", "HR", "BB", "K", "GB", "FB", "P", "TBF", "GSC", "Dec", "Rel", "ERA"] names ["innings", "hits", "runs", "earnedRuns", "homeRuns", "walks", "strikeouts", "groundBalls", "flyBalls", "pitches", "battersFaced", "avgGameScore", "wins-losses", "saves-blownSaves-holds", "ERA"]
+season type 2026 Postseason
+  cat Postseason event
+    {"eventId": "401908046", "stats": ["5.2", "2", "0", "0", "0", "1", "2", "6", "11", "86", "21", "66.0", "W(2-0)", "-", "1.89"]}
+    {"eventId": "401908042", "stats": ["5.0", "4", "1", "1", "0", "1", "3", "5", "9", "78", "18", "57.0", "W(1-0)", "-", "2.70"]}
+    {"eventId": "401908030", "stats": ["4.1", "5", "1", "1", "0", "3", "5", "5", "6", "94", "19", "51.0", "-", "-", "3.24"]}
+season type 2026 Regular Season
+  cat september event
+    {"eventId": "401817111", "stats": ["5.1", "2", "0", "0", "0", "2", "5", "3", "9", "68", "19", "67.0", "W(16-5)", "-", "1.80"]}
+    {"eventId": "401817016", "stats": ["3.0", "1", "0", "0", "0", "0", "4", "3", "3", "44", "10", "61.0", "-", "-", "1.86"]}
+    {"eventId": "401816948", "stats": ["5.0", "5", "0", "0", "0", "1", "7", "6", "6", "82", "20", "63.0", "W(15-5)", "-", "1.89"]}
+  cat august event
+    {"eventId": "401816699", "stats": ["6.0", "2", "2", "2", "0", "2", "6", "5", "8", "89", "21", "64.0", "W(14-5)", "-", "1.73"]}
+    {"eventId": "401816617", "stats": ["6.0", "4", "0", "0", "0", "2", "6", "6", "9", "96", "23", "68.0", "W(13-5)", "-", "1.68"]}
+    {"eventId": "401816545", "stats": ["6.0", "5", "1", "1", "0", "1", "6", "5", "12", "98", "24", "63.0", "W(12-5)", "-", "1.75"]}
+events sample [["401908046", {"id": "401908046", "links": [{"language": "en", "rel": ["summary", "desktop", "event"], "href": "https://www.espn.com/mlb/game/_/gameId/401908046/brewers-rays", "text": "Gamecast", "shortText": "Summary", "isExternal": false, "isPremium": false}, {"language": "en", "rel": ["summary", "sportscenter", "app", "event"], "href": "sportscenter://x-callback-url/showGame?sportName=baseball
+goalie keys ["goalsAgainst", "shotsAgainst", "shootoutSaves", "shootoutShotsAgainst", "saves", "savePct", "evenStrengthSaves", "powerPlaySaves", "shortHandedSaves", "timeOnIce", "ytdGoals", "penaltyMinutes"]
+NHL labels ["GS", "TOI/G", "WINS", "L", "T", "OTL", "GA", "GAA", "SA", "SV", "SV%", "SO"] names ["gameStarted", "timeOnIcePerGame", "wins", "losses", "ties", "overtimeLosses", "goalsAgainst", "avgGoalsAgainst", "shotsAgainst", "saves", "savePct", "shutouts"]
+    {"eventId": "401892614", "stats": ["1", "62:32", "0", "0", "0", "1", "5", "4.80", "32", "27", ".844", "0"], "type": {"id": "1", "text": "Standard", "abbreviation": "STD", "type": "standard", "slug": "standard"}}
+    {"eventId": "401892462", "stats": ["1", "57:51", "0", "1", "0", "0", "3", "3.11", "18", "15", ".833", "0"], "type": {"id": "1", "text": "Standard", "abbreviation": "STD", "type": "standard", "slug": "standard"}}
