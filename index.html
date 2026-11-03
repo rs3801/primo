@@ -1736,6 +1736,36 @@ function lineModel(g){
   } catch (e) { g._line = null; }
   return g._line;
 }
+// 📊 How close the favorite's games have been, and what each underdog line would have done in them
+function closeGamesHTML(g, L){
+  const f = g.facts; if (!f || !f.form) return "";
+  const tF = f.teams.find(t => teamIn(t, L.mu >= 0 ? L.A : L.B)), tD = f.teams.find(t => t !== tF); if (!tF || !tD) return "";
+  const res = (f.form[tF.name] || []).map(x => { const m = /^([WLT])\w*\s+(\d+)-(\d+)/.exec(x); return m ? (m[1] === "W" ? 1 : m[1] === "L" ? -1 : 0) * Math.abs(+m[2] - +m[3]) : null; }).filter(x => x != null);
+  if (res.length < 3) return "";
+  const nF = tF.short || tF.name, nD = tD.short || tD.name, u = L.u || "points";
+  const txt = res.map(x => x > 0 ? `won by ${x}` : x < 0 ? `lost by ${-x}` : "tied").join(", ");
+  const wins = res.filter(x => x > 0), close = wins.filter(x => x <= (u === "points" ? 3 : 1)).length;
+  // the underdog's + lines on Kalshi, plus the straight win
+  const pays = m => { const c = isNaN(m.ask) ? m.p : m.ask; return c > 0 ? TK.usd(10 / c) : "—"; };
+  const plus = g.markets.filter(m => m.noOf && /\+\s*[\d.]+$/.test(m.pick || "") && ffold(m.pick).startsWith(ffold(niceName(g.sport, L.mu >= 0 ? L.B : L.A))) && !isNaN(m.ask) && m.ask > .03 && m.ask < .97)
+    .map(m => ({m, n: +(/\+\s*([\d.]+)$/.exec(m.pick)[1])})).filter(x => x.n <= (u === "points" ? 17.5 : 2.5)).sort((a, b) => a.n - b.n);
+  const straight = g.markets.find(m => m.type === "winner" && !m.noOf && teamIn(tD, m.label));
+  const book = /^(\S+)\s+([+-]?\d+(?:\.\d)?)$/.exec((f.odds || {}).line || ""), bookN = book ? Math.abs(+book[2]) : null;
+  const pickPlus = [];
+  if (plus.length){   // a few useful lines: the smallest, the key numbers (3 and 7 in football), and the sportsbooks' spread
+    const targets = [plus[0].n].concat(g.sport === "Football" ? [3.5, 7.5] : [], bookN != null ? [bookN] : [plus[Math.floor(plus.length / 2)].n]);
+    for (const t of targets){ const near = plus.reduce((a, b) => Math.abs(b.n - t) < Math.abs(a.n - t) ? b : a); if (Math.abs(near.n - t) <= 1 && !pickPlus.includes(near)) pickPlus.push(near); }
+    pickPlus.sort((a, b) => a.n - b.n);
+  }
+  const rows = [];
+  if (straight && !isNaN(straight.p)) rows.push(`<tr><td>${esc(nD)} to win</td><td>${Math.round((straight.primoP ?? straight.p) * 100)}%</td><td>${pays(straight)}</td><td>needs an upset</td></tr>`);
+  for (const x of pickPlus){ const cov = res.filter(r => r < x.n).length; rows.push(`<tr><td>${esc(x.m.pick)}</td><td>${Math.round((x.m.primoP ?? x.m.p) * 100)}%</td><td>${pays(x.m)}</td><td>would have covered ${cov} of ${nF}'s last ${res.length}</td></tr>`); }
+  let note = `${esc(nF)}'s last ${res.length}: ${esc(txt)}.`;
+  if (wins.length >= 2 && close >= 2) note += ` <b>${close} of their ${wins.length} wins were by ${u === "points" ? "3 points" : "1 " + u.replace(/s$/, "")} or less</b>, so taking points on ${esc(nD)} is worth a look.`;
+  else if (wins.length >= 3 && Math.min(...wins) >= (u === "points" ? 10 : 2)) note += ` They've been winning big, so giving ${esc(nD)} only a few points is risky.`;
+  if (g.sport === "Football") note += ` In football, 3 and 7 are the most common winning margins: a +3.5 covers a field-goal loss, a +7.5 covers a touchdown loss.`;
+  return `<div style="margin-top:8px"><b>📊 How close ${esc(nF)}'s games have been</b><div>${note}</div>${rows.length ? `<table style="width:100%;margin-top:4px;font-size:.95em;border-collapse:collapse"><tr style="text-align:left"><th>${esc(nD)} bet</th><th>Chance</th><th>$10 pays</th><th></th></tr>${rows.join("")}</table>` : ""}</div>`;
+}
 function lineHTML(g){
   const L = lineModel(g); if (!L) return "";
   const pc = x => Math.round(x * 100) + "%", ev = x => (x >= 0 ? "+" : "−") + Math.abs(Math.round(x * 100)) + "%", cost = m => Math.round((isNaN(m.ask) ? m.p : m.ask) * 100) + "¢";
@@ -1755,7 +1785,7 @@ function lineHTML(g){
     if (b && b.lineEV > -.03) L.shownBest = true, body += row("👉", `If you bet ${esc(niceName(g.sport, fav))} anyway, the best deal`, b, "Primo still expects " + esc(niceName(g.sport, fav)) + " to win; this line gets you the most for the risk, but it's a fair price, not a bargain.");
   }
   if (!L.pick && !L.shownBest) body += `<div style="margin-top:4px">💰 No line here beats its price: ${Math.abs(L.adj) < L.min ? "Primo's homework agrees with the market" : "Kalshi already charges for what Primo sees"}. Use this game only to fill a combo.</div>`;
-  return `<div class="legnote" style="margin:8px 0;background:rgba(46,160,67,.08);border-radius:10px;padding:8px 10px"><b>📏 Which line to take</b><div>${head}</div>${body}</div>`;
+  return `<div class="legnote" style="margin:8px 0;background:rgba(46,160,67,.08);border-radius:10px;padding:8px 10px"><b>📏 Which line to take</b><div>${head}</div>${body}${closeGamesHTML(g, L)}</div>`;
 }
 function gameCall(m){
   const g = m.g, r = g.research, nm = s => niceName(g.sport, s.replace(/^Reg Time:\s*/i, ""));
