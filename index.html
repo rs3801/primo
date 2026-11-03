@@ -904,6 +904,8 @@ function candidatesFor(tierKey){
   if (t.liked){   // bets Primo's research likes (pre-game opinions, so no live games here)
     // then the bets Primo rates ✅ Keep with the best value
     for (let i = out.length - 1; i >= 0; i--) if (out[i].live) out.splice(i, 1);
+    // never a leg that costs clearly more than it's worth (Kalshi asks 4¢+ over the sportsbooks' fair price)
+    for (let i = out.length - 1; i >= 0; i--){ const m = out[i]; if (m.fair != null && !isNaN(m.ask) && m.ask - m.fair >= .04) out.splice(i, 1); }
     const liked = out.filter(m => likedBy(m) && m.p >= t.lo && m.p <= t.hi).sort((a,b) => b.p - a.p);
     const fill = out.filter(m => !liked.includes(m) && m.p >= .55 && m.p <= .9 && m.vol >= 25).sort((a,b) => smartScore(b) - smartScore(a)).slice(0, 700)
       .filter(m => { const op = opOf(m); return op && op.v === "keep"; }).sort((a,b) => primoScore(b) - primoScore(a));
@@ -2678,7 +2680,7 @@ function parseTicket(text){
   for (const raw0 of text.split(/\n+/)){
     if (/\b\d\.\d\dx\b|\(\d+\s*-\s*\d+\)\s*\d/i.test(raw0)) continue;   // a browsing row like "BAL Ravens (4 - 3) 2.46x 39%"
     const raw = raw0;
-    const L = raw.replace(/^[^a-z0-9+-]+/i, "").replace(/\b(?:rushing|rush)\s*(?:\+|&|and)\s*(?:receiving|rec)\.?\s*(?:yards|yds)(?!\s+combined)/i, "rushing and receiving yards combined").replace(/½/g, ".5").replace(/[−–—]/g, "-").replace(/[|]/g, " ").replace(/\s+/g, " ").trim();
+    let L = raw.replace(/^[^a-z0-9+-]+/i, "").replace(/\b(?:rushing|rush)\s*(?:\+|&|and)\s*(?:receiving|rec)\.?\s*(?:yards|yds)(?!\s+combined)/i, "rushing and receiving yards combined").replace(/½/g, ".5").replace(/[−–—]/g, "-").replace(/[|]/g, " ").replace(/\s+/g, " ").trim();
     if (!L) continue;
     { const hd = /^(.+?)\s+(?:at|vs\.?|v|@)\s+(.+?)$/i.exec(L);   // a game header on a Kalshi slip: the bets below it belong to this game
       if (hd && !/\d\s*%|[+-]\d{3}|\bover\b|\bunder\b|wins by|to win|[(:]/i.test(L)){ ctx = [hd[1].trim(), hd[2].trim()]; continue; } }
@@ -2690,6 +2692,7 @@ function parseTicket(text){
     if ((NOTLEG.test(L) && !/\d\s*%\s*[xX×✕]?\s*$/.test(L)) || /^\s*(?:bet|stake)\b/i.test(L)) continue;
     const rest = L.replace(/selection|money ?line|moneyline|point spread|spread|game|straight|wager|\bml\b|[\d:+\-.()#]/gi, "").trim();
     if (!/[a-z]{3}/i.test(rest)){ const prev = out.legs[out.legs.length - 1]; if (prev && /money ?line|\bml\b/i.test(L)) prev.kind = "ml"; continue; }
+    L = L.replace(/(\d{1,2}(?:\.\d)?\s*%)(?:\s+\d{1,2}(?:\.\d)?\s*%)+\s*$/, "$1");   // the price read twice ("50% 50%")
     const noM = /^no\s*[-–—:·]\s*(.+)$/i.exec(L);   // Kalshi slips show a "No" pick as "No - <the Yes question>"
     const leg = parseLeg(noM ? noM[1] : L);
     if (leg && noM){ leg.no = true; leg.raw = L; }
@@ -2991,6 +2994,7 @@ function gradeLeg(leg){
     for (const g of games) for (const m of g.markets) if (!m.noOf && ffold(m.label).replace(/[^a-z0-9.]/g, "") === want) hits.push(m);
     hits.sort((a, b) => Math.abs((a.g.start || 0) - now) - Math.abs((b.g.start || 0) - now));
     if (hits.length && (hits.length === 1 || !/^(over|under)/i.test(leg.who))) return gradeKalshi(leg, hits[0], r);
+    if (/wins by/i.test(leg.who)){ r.chance = leg.paid; r.warn.push("Primo couldn't find this exact spread on Kalshi right now, so it uses the price on your ticket."); r.desc = leg.who; r.tag = r.chance == null ? "" : r.chance >= .65 ? "Likely" : r.chance >= .52 ? "Leans yes" : r.chance >= .45 ? "Coin flip" : "Long shot"; return r; }
   }
   const both = leg.opp ? findTicketGame(leg.who, leg.opp) : null;
   const km0 = both && both.both ? null : kalshiFind(leg);
