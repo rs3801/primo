@@ -104,6 +104,7 @@ def main():
                     ("good", lambda r: r["flag"] == "good"), ("pricey", lambda r: r["flag"] == "pricey"),
                     ("keepgood", lambda r: r["verdict"] == "keep" and r["flag"] == "good"),
                     ("sharpedge", lambda r: r.get("src") == "sharp" and r.get("fair") is not None and r["fair"] - r["ask"] >= 3),
+                    ("linepick", lambda r: bool(r.get("lp"))),
                     ("sharpover", lambda r: r.get("src") == "sharp" and r.get("fair") is not None and r["fair"] - r["ask"] <= -4), ("all", lambda r: True)]:
         s = summ([r for r in graded if f(r)])
         if s: groups[name] = s
