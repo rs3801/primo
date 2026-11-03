@@ -166,8 +166,35 @@ def kalshi_tennis_pairs():
         if len(names) == 2: pairs.append(names)
     return pairs
 
+CLAY = re.compile(r"roland garros|french open|monte.?carlo|madrid|internazionali bnl|italian open|rome|barcelona|hamburg|gstaad|nordea|bastad|kitzb|generali|umag|bucharest|estoril|bmw open|munich|geneva|lyon|rabat|strasbourg|palermo|prague|iasi|warsaw|lausanne|budapest|bogota|rio open|buenos aires|santiago|houston|marrakech|charleston|parma|portoroz|rouen|montreux|cagliari|braunschweig|bastad|tolentino|brescia|roveret|sardegna|swedish open|croatia|austrian open|serbia|belgrade|cordoba|chile|argentina", re.I)
+GRASS = re.compile(r"wimbledon|queen|hsbc championships|halle|terra wortmann|hertogenbosch|libema|libéma|boss open|stuttgart open|eastbourne|mallorca|birmingham|nottingham|ilkley|berlin|bad homburg|newport|hall of fame", re.I)
+def surface(event): return "clay" if CLAY.search(event or "") else "grass" if GRASS.search(event or "") else "hard"
+
+def tennis_elo(matches):
+    """A rating for every player from the results archive (like chess ratings): beating a strong player gains more than beating a weak one.
+    One overall rating and one per surface. Returns ratings plus each player's rating history (to see who is rising)."""
+    E, ES, hist, n = {}, {}, {}, {}
+    for m in sorted(matches, key=lambda x: x[0]):
+        w, l = fold(m[1]), fold(m[2]); sf = surface(m[4])
+        if "retired" in (m[3] or "") and len((m[3] or "").split()) <= 2: continue   # an early retirement says little
+        ew, el = E.get(w, 1500.0), E.get(l, 1500.0)
+        pw = 1 / (1 + 10 ** ((el - ew) / 400))
+        kw = 250 / ((n.get(w, 0) + 5) ** .4); kl = 250 / ((n.get(l, 0) + 5) ** .4)   # new players move fast, established ones slowly
+        hist.setdefault(w, []).append([m[0], ew, el, "W", m[2]]); hist.setdefault(l, []).append([m[0], el, ew, "L", m[1]])
+        E[w] = ew + kw * (1 - pw); E[l] = el - kl * (1 - pw)
+        sw, sl = ES.get((w, sf), E[w]), ES.get((l, sf), E[l]); ps = 1 / (1 + 10 ** ((sl - sw) / 400))
+        ES[(w, sf)] = sw + kw * (1 - ps); ES[(l, sf)] = sl - kl * (1 - ps)
+        n[w] = n.get(w, 0) + 1; n[l] = n.get(l, 0) + 1
+    return E, ES, hist, n
+
 def tennis_stats():
     matches = tennis_archive()
+    E, ES, EH, EN = tennis_elo(matches)
+    tour = {}
+    for m in matches: tour[fold(m[1])] = m[5]; tour[fold(m[2])] = m[5]
+    erank = {}
+    for tr in ("ATP", "WTA"):   # rank inside each tour
+        order = sorted((k for k in E if EN.get(k, 0) >= 8 and tour.get(k) == tr), key=lambda k: -E[k]); erank.update({k: i + 1 for i, k in enumerate(order)})
     by = {}
     def key(n): return fold(n)
     for m in sorted(matches, key=lambda x: x[0], reverse=True):
@@ -191,6 +218,13 @@ def tennis_stats():
             rows = by[k][:10]
             w = sum(1 for m in rows if key(m[1]) == k)
             players[n] = {"rec": "%d-%d" % (w, len(rows) - w), "last": [[m[0], "W" if key(m[1]) == k else "L", names.get(key(m[2]) if key(m[1]) == k else key(m[1]), ""), m[3], m[4]] for m in rows[:5]]}
+            if k in E:
+                h = EH.get(k, [])[-10:]; sf = surface(rows[0][4]) if rows else "hard"
+                qual = [x for x in h if x[3] == "W" and x[2] > x[1] + 25]   # wins over players rated higher at the time
+                best = max((x for x in h if x[3] == "W"), key=lambda x: x[2], default=None)
+                players[n].update({"elo": round(E[k]), "rk": erank.get(k), "n": EN.get(k, 0), "sf": sf, "selo": round(ES.get((k, sf), E[k])),
+                                   "d5": round(E[k] - EH[k][-5][1]) if len(EH.get(k, [])) >= 5 else None, "qw": len(qual), "ql": len(h),
+                                   "best": [best[4], round(best[2])] if best else None})
         if ka and kb:
             ms = [m for m in by[ka] if {key(m[1]), key(m[2])} == {ka, kb}]
             if ms: h2h[a + "|" + b] = {"a": sum(1 for m in ms if key(m[1]) == ka), "b": sum(1 for m in ms if key(m[1]) == kb), "games": [[m[0], names[key(m[1])], m[3], m[4]] for m in ms[:5]]}
