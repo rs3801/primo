@@ -1686,6 +1686,17 @@ function lineModel(g){
       }
       const hA = hotPlayers(tA.name, g.sport).length, hB = hotPlayers(tB.name, g.sport).length, cA = coldPlayers(tA.name, g.sport).length, cB = coldPlayers(tB.name, g.sport).length;
       const dh = Math.max(-P.hot[1], Math.min(P.hot[1], P.hot[0] * ((hA - cA) - (hB - cB))));
+      { // home/road splits: a team that wins at home but struggles on the road (or the other way round)
+        const rec = (t, k) => { const r = ((f.records || {})[t.name] || {})[k]; const x = /^(\d+)-(\d+)(?:-(\d+))?$/.exec(r || ""); return x ? {w: +x[1], g: +x[1] + +x[2] + +(x[3] || 0), txt: r} : null; };
+        const away = tA.home ? tB : tB.home ? tA : null;
+        if (away){
+          const all = rec(away, "all"), rd = rec(away, "road");
+          if (all && rd && rd.g >= 3 && all.g >= 5 && all.w / all.g - rd.w / rd.g >= .2){
+            const d = (away === tA ? -1 : 1) * P.form[1] * .5, nmA = away === tA ? nA : nB;
+            adj += d; sig.push(d); rs.push(`${nmA} are only ${rd.txt} on the road (${all.txt} overall)`);
+          }
+        }
+      }
       if (P.pitch){   // starting pitcher / goalie form
         const sA = starterForm(g, tA), sB = starterForm(g, tB), role = g.sport === "Hockey" ? "goalie" : "pitcher";
         const v = x => !x ? 0 : x.hot ? 1 : x.cold ? -1 : 0, dp = P.pitch * (v(sA) - v(sB));
@@ -1725,7 +1736,7 @@ function lineHTML(g){
   let body = "";
   if (L.pick) body += row("💰", "Primo's line pick", L.pick, "Best mix of risk and payout for this game.");
   { const fav = L.mu >= 0 ? L.A : L.B, w = (lineModel(g), g.markets.find(m => m.type === "winner" && !m.noOf && m.label === fav));
-    if (w && w.primoP != null && w !== L.pick && w !== L.safest) body += row("🏆", "Straight win", w, "In between: more likely than the line pick, pays more than the safest line."); }
+    if (w && w.primoP != null && w !== L.pick && w !== L.safest) body += row("🏆", "Straight win", w, L.pick ? "In between: more likely than the line pick, pays more than the safest line." : "Pays more than the safest line, and hits more often than any bigger line."); }
   if (L.safest && L.safest !== L.pick) body += row("🛡️", "Safest line", L.safest, L.safest.primoP < .6 ? "The likeliest line on offer, and still close to a coin flip." : L.safest.lineEV < .02 ? "Hits most often, but pays so little that it barely earns anything." : "Hits most often.");
   if (!L.pick) body += `<div style="margin-top:4px">💰 No line here beats its price: ${Math.abs(L.adj) < L.min ? "Primo's homework agrees with the market" : "Kalshi already charges for what Primo sees"}. Use this game only to fill a combo.</div>`;
   return `<div class="legnote" style="margin:8px 0;background:rgba(46,160,67,.08);border-radius:10px;padding:8px 10px"><b>📏 Which line to take</b><div>${head}</div>${body}</div>`;
