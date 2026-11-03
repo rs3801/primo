@@ -1144,7 +1144,7 @@ for (const g of games){
 
 const BOOK_ALIAS = [   // how sportsbooks write some schools
   [/ mississippi (?!st |state )/g, " mississippi ole miss "], [/ miami \(?fl\)? | miami florida /g, " miami hurricanes "], [/ miami \(?oh\)? | miami ohio /g, " miami redhawks "],
-  [/ connecticut /g, " connecticut uconn "], [/ southern california /g, " usc "], [/ central florida /g, " ucf "], [/ southern methodist /g, " smu "], [/ brigham young /g, " byu "],
+  [/ connecticut /g, " connecticut uconn "], [/ massachusetts /g, " massachusetts umass "], [/ southern california /g, " usc "], [/ central florida /g, " ucf "], [/ southern methodist /g, " smu "], [/ brigham young /g, " byu "],
   [/ louisiana state /g, " lsu "], [/ pittsburgh /g, " pittsburgh pitt "], [/ nevada las vegas /g, " unlv "], [/ texas christian /g, " tcu "], [/ florida intl /g, " florida international "]];
 function aliasWords(T){ for (const [r, w] of BOOK_ALIAS) T = T.replace(r, w); return T; }
 /* ---------- sharp prices: Pinnacle, the sportsbook professional bettors use (its cut removed) ---------- */
@@ -1155,6 +1155,7 @@ function shName(k, pn){   // does Kalshi's name k mean the same team/player as P
   if (A === B || (A.length >= 4 && b.includes(a)) || (B.length >= 4 && a.includes(b))) return true;
   const ab = aliasWords(" " + A + " "), bb = aliasWords(" " + B + " ");
   if ((A.length >= 4 && bb.includes(" " + A + " ")) || (B.length >= 4 && ab.includes(" " + B + " "))) return true;
+  if (ab.replace(/\s+/g, " ").trim() === bb.replace(/\s+/g, " ").trim()) return true;   // both spell the same school ("Miami (OH)" / "Miami Ohio")
   const wa = A.split(" "), wb = B.split(" ");   // players: same last name and first initial ("Adithya SURESH" / "A. Suresh")
   return wa.length >= 2 && wb.length >= 2 && wa[wa.length-1].length >= 4 && wa[wa.length-1] === wb[wb.length-1] && wa[0][0] === wb[0][0];
 }
@@ -1264,6 +1265,7 @@ function usageLines(g){   // who gets the ball, and what each defense has been g
   const f = g.facts, out = []; if (!f || typeof teamUsage !== "function") return out;
   for (const t of f.teams){
     const U = teamUsage(t.name), T = t.short || t.name;
+    if (["Football", "Basketball", "Hockey"].includes(g.sport)){ const H = hotPlayers(t.name, g.sport); if (H.length) out.push(`<b>🔥 ${esc(T)} hot players</b> (well above their usual lately): ${H.slice(0, 3).map(x => `${esc(x.n)}, ${esc(x.txt)}`).join("; ")}.`); }
     if (U && U.rec.length) out.push(`<b>${esc(T)} — who the quarterback looks for</b> (share of ${U.useTgt ? "targets" : "catches"}, last ${U.n} games): ${U.rec.slice(0, 4).map(x => `${esc(x.v.name)} ${Math.round(x.tShare*100)}%`).join(", ")}.${U.run.length ? ` <b>Carries:</b> ${U.run.slice(0, 3).map(x => `${esc(x.v.name)} ${Math.round(x.cShare*100)}%`).join(", ")}.` : ""}`);
     const D = defense(t.name);
     if (D && D.rk.pts){ const bits = [];
@@ -1411,11 +1413,33 @@ function upsetFor(g){
     if (md && (md.move || 0) >= 4) R.push(`Money is moving toward ${dogN} (up ${md.move} points in a day)`);
     else if (mf && (mf.move || 0) <= -4) R.push(`Money is moving away from ${favN} (down ${-mf.move} points in a day)`);
     if (R.length >= 3){
-      const onField = R.filter(r => /playing better|offense|defense|Quarterbacks|run the ball|research/.test(r)).length, dogP = 1 - favP;   // reasons from how they actually play, not just the schedule
+      const onField = R.filter(r => /playing better|offense|defense|Quarterbacks|run the ball|research|Hot players/.test(r)).length, dogP = 1 - favP;   // reasons from how they actually play, not just the schedule
       g._upset = {fav: favN, dog: dogN, favP, dogP, reasons: R, strong: R.length >= 4 && dogP >= .25 || R.length >= 3 && onField >= 2 && dogP >= .33};
     }
   } catch (e) { g._upset = null; }
   return g._upset;
+}
+// Hot players: someone whose last 2 games are well above his own 5-game average (and big enough to matter)
+function hotPlayers(team, sport){
+  const out = [];
+  for (const [n, p] of Object.entries(PL.players || {})){
+    if (p.tm !== team) continue;
+    const L = p.log; if (!L || L.length < 4) continue;
+    const val = r => !r ? null : sport === "Football" ? (r[9] || 0) * .5 + (r[5] || 0) + (r[2] || 0) + 20 * ((r[3] || 0) + (r[6] || 0) + (r[10] || 0)) - 25 * (r[11] || 0)
+                   : sport === "Basketball" ? (r[1] || 0) + .7 * (r[2] || 0) + (r[3] || 0) : sport === "Hockey" ? (r[0] || 0) + (r[1] || 0) : null;
+    const v = L.map(val), last = v.slice(-2), all = v.filter(x => x != null);
+    if (last.some(x => x == null) || all.length < 4) continue;
+    const a5 = all.reduce((a, b) => a + b, 0) / all.length, a2 = (last[0] + last[1]) / 2;
+    const big = sport === "Football" ? a2 >= 90 : sport === "Basketball" ? a2 >= 20 : a2 >= 1.5;
+    if (!big || a2 < a5 * 1.2 || Math.min(...last) < a5 * .9) continue;
+    const r1 = L[L.length - 1], r2 = L[L.length - 2], av = i => Math.round(((r1[i] || 0) + (r2[i] || 0)) / 2), sm = i => (r1[i] || 0) + (r2[i] || 0);
+    let txt;
+    if (sport === "Football") txt = (r1[8] || 0) >= 10 ? `${av(9)} passing yards a game${av(5) >= 40 ? ` and ${av(5)} rushing` : ""}, ${sm(10) + sm(6)} TD in his last 2` : av(5) >= av(2) ? `${av(5)} rushing yards a game, ${sm(6) + sm(3)} TD in his last 2` : `${av(2)} receiving yards a game, ${sm(3)} TD in his last 2`;
+    else if (sport === "Basketball") txt = `${av(1)} points, ${av(2)} rebounds, ${av(3)} assists in his last 2`;
+    else txt = `${sm(0)} goals, ${sm(1)} assists in his last 2`;
+    out.push({n, txt, s: a2 / Math.max(1, a5)});
+  }
+  return out.sort((a, b) => b.s - a.s);
 }
 // How the two teams have actually played lately (last 5 games from the box scores): scoring margin, offense, defense, quarterback
 function playEdge(sport, D, F, dogN, favN){
@@ -1440,7 +1464,12 @@ function playEdge(sport, D, F, dogN, favN){
     const qD = qb(D.name), qF = qb(F.name);
     if (qD && qF && qD.yds - qF.yds >= 25 && (qD.td - qD.int) >= (qF.td - qF.int)) out.push(`Quarterbacks: ${qD.n} (${dogN}) ${r0(qD.yds)} yards a game, ${qD.td} TD / ${qD.int} INT lately vs ${qF.n} (${favN}) ${r0(qF.yds)} yards, ${qF.td} TD / ${qF.int} INT`);
   }
-  return out.slice(0, 3);
+  if (["Football", "Basketball", "Hockey"].includes(sport)){
+    const hD = hotPlayers(D.name, sport), hF = hotPlayers(F.name, sport);
+    if (hD.length >= 2 && hD.length - hF.length >= 1 || hD.length >= 1 && !hF.length)
+      out.push(`Hot players: ${dogN} have ${hD.length} (${hD.slice(0, 2).map(x => `${x.n}: ${x.txt}`).join("; ")}) vs ${hF.length} for ${favN}`);
+  }
+  return out.slice(0, 4);
 }
 function upsetHTML(g, mode){   // mode: "game" (card), "fav" (you're betting the favorite), "dog" (you're betting the underdog)
   const u = upsetFor(g); if (!u) return "";

@@ -8,7 +8,7 @@ P = "https://guest.api.arcadia.pinnacle.com/0.1"
 PT = ZoneInfo("America/Los_Angeles")
 SPORTS = {15: "Football", 4: "Basketball", 19: "Hockey", 3: "Baseball", 29: "Soccer", 33: "Tennis", 22: "MMA", 6: "Boxing"}
 PROP_LEAGUES = {"NFL", "NCAA", "NBA", "NHL", "MLB", "WNBA"}   # player props: only these (per-league calls include them)
-DAYS = 4
+DAYS = 6
 import re
 YOUTH = re.compile(r"\bU-?\d{2}\b|youth|reserve|amateur|junior|academy|\bII\b|corners|bookings", re.I)
 
