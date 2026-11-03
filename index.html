@@ -442,7 +442,7 @@ function explain(m){
     if (sp === "Soccer") return `${who} has to win in regular time (90 minutes plus stoppage time). A draw loses this bet.`;
     if (sp === "Tennis") return /\//.test(who) ? `${who} have to win the doubles match.` : `${who} has to win the match. If a player retires, Kalshi's rules for this market decide the result.`;
     if (sp === "MMA") return `${who} has to win the fight.`;
-    if (sp === "Football") return `${who} has to win the game. A tie loses this bet.`;
+    if (sp === "Football") return /NCAA|COLLEGE/i.test(m.series + " " + (m.g.leagueName || "")) ? `${who} has to win the game (overtime counts; college games can't end in a tie).` : `${who} has to win the game, overtime included. A tie (very rare in the NFL) loses this bet.`;
     if (sp === "Hockey") return `${who} has to win the game. Check Kalshi's rules for how overtime and shootouts count.`;
     return `${who} has to win the game.`;
   }
@@ -1293,6 +1293,7 @@ function usageLines(g){   // who gets the ball, and what each defense has been g
   for (const t of f.teams){
     const U = teamUsage(t.name), T = t.short || t.name;
     if (g.sport === "Baseball" || g.sport === "Hockey"){ const sf = starterForm(g, t); if (sf && sf.txt) out.push(`<b>${sf.hot ? "🔥" : sf.cold ? "🥶" : "⚾"} ${esc(T)} starting ${g.sport === "Hockey" ? "goalie" : "pitcher"} ${esc(sf.n)}</b>: ${esc(sf.txt)}${sf.hot ? " (hot)" : sf.cold ? " (struggling)" : ""}.`); }
+    if (["Football", "Basketball", "Hockey", "Soccer", "Baseball"].includes(g.sport) && (PL.teams || {})[t.name] && !hotPlayers(t.name, g.sport).length && !coldPlayers(t.name, g.sport).length) out.push(`<b>🔥🥶 ${esc(T)} player form:</b> Primo checked every player's last games. Nobody is unusually hot or slumping right now.`);
     if (["Football", "Basketball", "Hockey", "Soccer", "Baseball"].includes(g.sport)){ const C = coldPlayers(t.name, g.sport); if (C.length) out.push(`<b>🥶 ${esc(T)} slumping players</b> (well below their usual lately): ${C.slice(0, 3).map(x => `${esc(x.n)}, ${esc(x.txt)}`).join("; ")}.`); }
     if (["Football", "Basketball", "Hockey", "Soccer", "Baseball"].includes(g.sport)){ const H = hotPlayers(t.name, g.sport); if (H.length) out.push(`<b>🔥 ${esc(T)} hot players</b> (well above their usual lately): ${H.slice(0, 3).map(x => `${esc(x.n)}, ${esc(x.txt)}`).join("; ")}.`); }
     if (U && U.rec.length) out.push(`<b>${esc(T)} — who the quarterback looks for</b> (share of ${U.useTgt ? "targets" : "catches"}, last ${U.n} games): ${U.rec.slice(0, 4).map(x => `${esc(x.v.name)} ${Math.round(x.tShare*100)}%`).join(", ")}.${U.run.length ? ` <b>Carries:</b> ${U.run.slice(0, 3).map(x => `${esc(x.v.name)} ${Math.round(x.cShare*100)}%`).join(", ")}.` : ""}`);
@@ -1719,9 +1720,12 @@ function lineHTML(g){
   const r1 = x => L.u === "goals" ? (Math.round(x * 10) / 10).toFixed(1) + " goals" : Math.round(x);
   const mg = x => x >= (L.u === "goals" ? .05 : .5) ? `${esc(L.nA)} by about ${r1(x)}` : x <= -(L.u === "goals" ? .05 : .5) ? `${esc(L.nB)} by about ${r1(-x)}` : "a dead heat";
   const head = `The market expects ${mg(L.mu0)}.` + (Math.abs(L.adj) >= L.show ? ` Primo's homework says ${mg(L.mu)}: ${esc(L.reasons.join("; "))}.` : " Primo's homework doesn't move that.");
-  const row = (icon, t, m, note) => `<div style="margin-top:4px">${icon} <b>${t}:</b> ${esc(m.pick)} — Primo's chance ${pc(m.primoP)}, costs ${cost(m)} → ${ev(m.lineEV)} expected return. ${note}</div>`;
+  const pays = m => { const c = isNaN(m.ask) ? m.p : m.ask; return c > 0 ? TK.usd(10 / c) : "—"; };
+  const row = (icon, t, m, note) => `<div style="margin-top:4px">${icon} <b>${t}:</b> ${esc(m.pick)} — Primo's chance ${pc(m.primoP)}, costs ${cost(m)}, <b>$10 pays ${pays(m)}</b> if it hits → ${ev(m.lineEV)} expected return. ${note}</div>`;
   let body = "";
   if (L.pick) body += row("💰", "Primo's line pick", L.pick, "Best mix of risk and payout for this game.");
+  { const fav = L.mu >= 0 ? L.A : L.B, w = (lineModel(g), g.markets.find(m => m.type === "winner" && !m.noOf && m.label === fav));
+    if (w && w.primoP != null && w !== L.pick && w !== L.safest) body += row("🏆", "Straight win", w, "In between: more likely than the line pick, pays more than the safest line."); }
   if (L.safest && L.safest !== L.pick) body += row("🛡️", "Safest line", L.safest, L.safest.primoP < .6 ? "The likeliest line on offer, and still close to a coin flip." : L.safest.lineEV < .02 ? "Hits most often, but pays so little that it barely earns anything." : "Hits most often.");
   if (!L.pick) body += `<div style="margin-top:4px">💰 No line here beats its price: ${Math.abs(L.adj) < L.min ? "Primo's homework agrees with the market" : "Kalshi already charges for what Primo sees"}. Use this game only to fill a combo.</div>`;
   return `<div class="legnote" style="margin:8px 0;background:rgba(46,160,67,.08);border-radius:10px;padding:8px 10px"><b>📏 Which line to take</b><div>${head}</div>${body}</div>`;
