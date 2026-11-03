@@ -852,6 +852,17 @@ function sharpAdjust(m, op){
     else if (pp - c <= -.05){ op.cons = [`🎾 Tennis homework puts this at ${Math.round(pp*100)}%, less than its ${Math.round(c*100)}¢ price${wo.length ? ` (the other player: ${wo.join("; ")})` : ""}.`].concat(op.cons || []); }
     else if (w.length) op.pros = [`🎾 ${w.join("; ")}.`].concat(op.pros || []);
   }
+  if (op && (m.type === "winner" || m.type === "spread")){   // 🚨 upset alert (not strong enough for a pick): never call the underdog's side a Drop
+    const u = upsetFor(m.g);
+    if (u && !u.strong){
+      const side = ffold(m.pick || m.label), dog = ffold(u.dog), fav = ffold(u.fav);
+      const dogSide = side.startsWith(dog) && !side.startsWith(fav) && !/wins by|by over|by more/.test(side.slice(dog.length)) || (m.noOf && ffold(m.noOf.label).startsWith(fav));
+      if (dogSide){
+        op.pros = [`🚨 Upset alert: ${u.reasons.slice(0, 3).join("; ")}.`].concat(op.pros || []);
+        if (op.v === "drop"){ op.v = "risky"; op.badge = "🤔 Risky"; op.say = op.say.replace(/^Primo would leave this out\./, "A real underdog shot, not a sure thing."); }
+      }
+    }
+  }
   if (op && m.type === "winner"){   // Primo's upset pick: the underdog's win bet moves up a step, the favorite's down a step
     const u = upsetFor(m.g), lab = ffold(m.label.replace(/ wins$/i, "")), is = n => { const x = ffold(n); return lab.includes(x) || x.includes(lab); };
     if (u && u.strong && is(u.dog) && !is(u.fav)){ op.pros = [`🚨 Primo's upset pick: ${u.reasons.slice(0, 3).join("; ")}.`].concat(op.pros || []); const up = V_UP[op.v]; if (up){ op.v = up[0]; op.badge = up[1]; } op.say += ` 🚨 Upset pick: ${u.dog} are playing better than their price.`; }
@@ -2921,7 +2932,7 @@ function gradeKalshi(leg, m, r){
   if (!rs) r.notes.push(`Primo hasn't written research on this ${g.sport === "Tennis" ? "match" : "game"} — this grade is Kalshi's price only.`);
   for (const [team, rows] of g.injuries || []){ const out = rows.filter(p => /out|doubtful/i.test(p.status)).slice(0, 4); if (out.length) r.notes.push(`${team} missing: ${out.map(p => `${p.player} (${p.pos || "?"}, ${p.status.toLowerCase()}${p.injury ? " – " + p.injury.toLowerCase() : ""})`).join("; ")}.`); }
   r.tag = r.chance >= .65 ? "Likely" : r.chance >= .52 ? "Leans yes" : r.chance >= .45 ? "Coin flip" : "Long shot";
-  r.take = m.type === "winner" ? buildTakeK(r, m, g) : opinionFor(m); r.kname = m.type === "winner" ? m.label : m.pick;
+  r.take = m.type === "winner" ? (t => t && sharpAdjust(m, t))(buildTakeK(r, m, g)) : opOf(m); r.kname = m.type === "winner" ? m.label : m.pick;
   { const u = upsetFor(g); if (u && m.label === u.fav) r.warn.push(`🚨 Upset alert: Primo sees a real chance ${u.dog} wins: ${u.reasons.join("; ")}.`); else if (u && m.label === u.dog) r.notes.unshift(`🚨 Upset pick: ${u.reasons.join("; ")}.`); }
   return r;
 }
