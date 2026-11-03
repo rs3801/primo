@@ -1275,7 +1275,7 @@ function usageLines(g){   // who gets the ball, and what each defense has been g
   const f = g.facts, out = []; if (!f || typeof teamUsage !== "function") return out;
   for (const t of f.teams){
     const U = teamUsage(t.name), T = t.short || t.name;
-    if (["Football", "Basketball", "Hockey"].includes(g.sport)){ const H = hotPlayers(t.name, g.sport); if (H.length) out.push(`<b>🔥 ${esc(T)} hot players</b> (well above their usual lately): ${H.slice(0, 3).map(x => `${esc(x.n)}, ${esc(x.txt)}`).join("; ")}.`); }
+    if (["Football", "Basketball", "Hockey", "Soccer"].includes(g.sport)){ const H = hotPlayers(t.name, g.sport); if (H.length) out.push(`<b>🔥 ${esc(T)} hot players</b> (well above their usual lately): ${H.slice(0, 3).map(x => `${esc(x.n)}, ${esc(x.txt)}`).join("; ")}.`); }
     if (U && U.rec.length) out.push(`<b>${esc(T)} — who the quarterback looks for</b> (share of ${U.useTgt ? "targets" : "catches"}, last ${U.n} games): ${U.rec.slice(0, 4).map(x => `${esc(x.v.name)} ${Math.round(x.tShare*100)}%`).join(", ")}.${U.run.length ? ` <b>Carries:</b> ${U.run.slice(0, 3).map(x => `${esc(x.v.name)} ${Math.round(x.cShare*100)}%`).join(", ")}.` : ""}`);
     const D = defense(t.name);
     if (D && D.rk.pts){ const bits = [];
@@ -1436,16 +1436,18 @@ function hotPlayers(team, sport){
     if (p.tm !== team) continue;
     const L = p.log; if (!L || L.length < 4) continue;
     const val = r => !r ? null : sport === "Football" ? (r[9] || 0) * .5 + (r[5] || 0) + (r[2] || 0) + 20 * ((r[3] || 0) + (r[6] || 0) + (r[10] || 0)) - 25 * (r[11] || 0)
-                   : sport === "Basketball" ? (r[1] || 0) + .7 * (r[2] || 0) + (r[3] || 0) : sport === "Hockey" ? (r[0] || 0) + (r[1] || 0) : null;
+                   : sport === "Basketball" ? (r[1] || 0) + .7 * (r[2] || 0) + (r[3] || 0) : sport === "Hockey" ? (r[0] || 0) + (r[1] || 0)
+                   : sport === "Soccer" ? (r[0] || 0) + .6 * (r[1] || 0) + .15 * (r[2] || 0) : null;
     const v = L.map(val), last = v.slice(-2), all = v.filter(x => x != null);
     if (last.some(x => x == null) || all.length < 4) continue;
     const a5 = all.reduce((a, b) => a + b, 0) / all.length, a2 = (last[0] + last[1]) / 2;
-    const big = sport === "Football" ? a2 >= 90 : sport === "Basketball" ? a2 >= 20 : a2 >= 1.5;
-    if (!big || a2 < a5 * 1.2 || Math.min(...last) < a5 * .9) continue;
+    const big = sport === "Football" ? a2 >= 90 : sport === "Basketball" ? a2 >= 20 : sport === "Soccer" ? a2 >= .9 : a2 >= 1.5;
+    if (!big || a2 < a5 * 1.2 || (sport !== "Soccer" && Math.min(...last) < a5 * .9)) continue;
     const r1 = L[L.length - 1], r2 = L[L.length - 2], av = i => Math.round(((r1[i] || 0) + (r2[i] || 0)) / 2), sm = i => (r1[i] || 0) + (r2[i] || 0);
     let txt;
     if (sport === "Football") txt = (r1[8] || 0) >= 10 ? `${av(9)} passing yards a game${av(5) >= 40 ? ` and ${av(5)} rushing` : ""}, ${sm(10) + sm(6)} TD in his last 2` : av(5) >= av(2) ? `${av(5)} rushing yards a game, ${sm(6) + sm(3)} TD in his last 2` : `${av(2)} receiving yards a game, ${sm(3)} TD in his last 2`;
     else if (sport === "Basketball") txt = `${av(1)} points, ${av(2)} rebounds, ${av(3)} assists in his last 2`;
+    else if (sport === "Soccer") txt = `${sm(0)} goal${sm(0) === 1 ? "" : "s"}, ${sm(1)} assist${sm(1) === 1 ? "" : "s"} in his last 2 games`;
     else txt = `${sm(0)} goals, ${sm(1)} assists in his last 2`;
     out.push({n, txt, s: a2 / Math.max(1, a5)});
   }
@@ -1458,7 +1460,7 @@ function playEdge(sport, D, F, dogN, favN){
   const avg = (t, fn) => { const v = t.g.map(fn).filter(x => x != null && !isNaN(x)); return v.length >= 3 ? v.reduce((a, b) => a + b, 0) / v.length : null; };
   const poss = n => /s$/i.test(n) ? n + "'" : n + "'s";
   const r0 = x => Math.round(x), sg = x => (x >= 0 ? "+" : "−") + Math.abs(x).toFixed(sport === "Hockey" ? 1 : 0);
-  const mD = avg(td, x => x.pf - x.pa), mF = avg(tf, x => x.pf - x.pa), need = {Football: 5, Basketball: 5, Hockey: .8}[sport] || 99;
+  const mD = avg(td, x => x.pf - x.pa), mF = avg(tf, x => x.pf - x.pa), need = {Football: 5, Basketball: 5, Hockey: .8, Soccer: .6}[sport] || 99;
   if (mD != null && mF != null && mD - mF >= need) out.push(`${dogN} have been playing better: ${sg(mD)} points a game over their last ${td.g.length} vs ${favN} ${sg(mF)}`);
   if (sport === "Football"){
     const st = (t, side, k) => avg(t, x => (x[side] || {})[k]);
@@ -1474,7 +1476,7 @@ function playEdge(sport, D, F, dogN, favN){
     const qD = qb(D.name), qF = qb(F.name);
     if (qD && qF && qD.yds - qF.yds >= 25 && (qD.td - qD.int) >= (qF.td - qF.int)) out.push(`Quarterbacks: ${qD.n} (${dogN}) ${r0(qD.yds)} yards a game, ${qD.td} TD / ${qD.int} INT lately vs ${qF.n} (${favN}) ${r0(qF.yds)} yards, ${qF.td} TD / ${qF.int} INT`);
   }
-  if (["Football", "Basketball", "Hockey"].includes(sport)){
+  if (["Football", "Basketball", "Hockey", "Soccer"].includes(sport)){
     const hD = hotPlayers(D.name, sport), hF = hotPlayers(F.name, sport);
     if (hD.length >= 2 && hD.length - hF.length >= 1 || hD.length >= 1 && !hF.length)
       out.push(`Hot players: ${dogN} have ${hD.length} (${hD.slice(0, 2).map(x => `${x.n}: ${x.txt}`).join("; ")}) vs ${hF.length} for ${favN}`);
@@ -1524,7 +1526,8 @@ function lineModel(g){
     // per sport: points or goals, the home edge, how hard each piece of homework can move the expected margin
     const P = {Football: {u: "points", sd: [7, 22, .5], mu: [-45, 45, .25], home: 2, form: [.15, 1.5], hot: [.5, 1], res: 1, cap: 3, min: .75, show: .4},
                Basketball: {u: "points", sd: [7, 22, .5], mu: [-45, 45, .25], home: 2.5, form: [.15, 1.5], hot: [.5, 1], res: 1, cap: 2.5, min: .75, show: .4},
-               Hockey: {u: "goals", sd: [1.2, 3.5, .1], mu: [-5, 5, .05], home: .2, form: [.15, .35], hot: [.12, .25], res: .25, cap: .6, min: .2, show: .08}}[g.sport];
+               Hockey: {u: "goals", sd: [1.2, 3.5, .1], mu: [-5, 5, .05], home: .2, form: [.15, .35], hot: [.12, .25], res: .25, cap: .6, min: .2, show: .08},
+               Soccer: {u: "goals", sd: [.9, 3, .05], mu: [-4, 4, .05], home: .3, form: [.15, .3], hot: [.1, .2], res: .2, cap: .45, min: .15, show: .06, win: .5}}[g.sport];
     if (!P) return null;
     const wins = g.markets.filter(m => m.type === "winner" && !m.noOf && !/tie|draw|:/i.test(m.label) && /GAME$/.test(m.series));
     if (wins.length < 2) return null;
@@ -1535,8 +1538,8 @@ function lineModel(g){
     for (const m of g.markets){
       const src = m.noOf || m;
       let team, L;
-      if (src.type === "winner" && !m.noOf && /GAME$/.test(src.series) && (same(src.label, A) || same(src.label, B))){ team = src.label; L = 0; }
-      else { const w = /^(.+?) wins by over ([\d.]+) (?:points|goals)$/i.exec(src.label); if (!w || !/SPREAD$/.test(src.series) || /1H|2H|1Q|2Q|3Q|4Q/.test(src.series)) continue; team = w[1]; L = +w[2]; }
+      if (src.type === "winner" && !m.noOf && /GAME$/.test(src.series) && (same(src.label, A) || same(src.label, B))){ team = src.label; L = P.win || 0; }   // soccer: a win means winning by at least 1 goal (a draw loses)
+      else { const w = /^(.+?) wins by (?:over|more than) ([\d.]+) (?:points|goals)$/i.exec(src.label); if (!w || !/SPREAD$/.test(src.series) || /1H|2H|1Q|2Q|3Q|4Q/.test(src.series)) continue; team = w[1]; L = +w[2]; }
       const isA = same(team, A); if (!isA && !same(team, B)) continue;
       const x = isA ? L : -L;   // the original market pays if A's margin > x (for A) or A's margin < x (for B)
       if (!m.noOf && !isNaN(m.p)){ const q = isA ? fv(m) : 1 - fv(m); if (q > .04 && q < .96) pts.push([x, q]); }
@@ -1598,7 +1601,7 @@ function lineHTML(g){
   const row = (icon, t, m, note) => `<div style="margin-top:4px">${icon} <b>${t}:</b> ${esc(m.pick)} — Primo's chance ${pc(m.primoP)}, costs ${cost(m)} → ${ev(m.lineEV)} expected return. ${note}</div>`;
   let body = "";
   if (L.pick) body += row("💰", "Primo's line pick", L.pick, "Best mix of risk and payout for this game.");
-  if (L.safest && L.safest !== L.pick) body += row("🛡️", "Safest line", L.safest, L.safest.lineEV < .02 ? "Hits most often, but pays so little that it barely earns anything." : "Hits most often.");
+  if (L.safest && L.safest !== L.pick) body += row("🛡️", "Safest line", L.safest, L.safest.primoP < .6 ? "The likeliest line on offer, and still close to a coin flip." : L.safest.lineEV < .02 ? "Hits most often, but pays so little that it barely earns anything." : "Hits most often.");
   if (!L.pick) body += `<div style="margin-top:4px">💰 No line here beats its price: ${Math.abs(L.adj) < L.min ? "Primo's homework agrees with the market" : "Kalshi already charges for what Primo sees"}. Use this game only to fill a combo.</div>`;
   return `<div class="legnote" style="margin:8px 0;background:rgba(46,160,67,.08);border-radius:10px;padding:8px 10px"><b>📏 Which line to take</b><div>${head}</div>${body}</div>`;
 }
