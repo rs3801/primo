@@ -3,23 +3,25 @@ out = []
 def get(u):
     try:
         with urllib.request.urlopen(urllib.request.Request(u, headers={"User-Agent": "primo-family-app/1.0"}), timeout=30) as r: return json.load(r)
-    except Exception as e: out.append("ERR " + u + " " + str(e)); return {}
-K = "https://api.elections.kalshi.com/trade-api/v2/markets?limit=400&event_ticker="
-want = ["Chicago", "Caleb Williams: 2+ passing", "Caleb Williams: 225+ passing", "Colston Loveland: 40+", "Luther Burden III: 50+", "Rome Odunze: 40+", "D'Andre Swift: 1+ touchdown"]
-for s in ["KXNFLGAME", "KXNFLPASSTDS", "KXNFLPASSYDS", "KXNFLRECYDS", "KXNFLTD"]:
-    d = get(K + s + "-26NOV02CHISEA")
-    for m in d.get("markets", []):
-        lab = m.get("yes_sub_title") or m.get("subtitle") or ""
-        if any(lab.startswith(w) for w in want): out.append(f"{s} | {lab} | status={m.get('status')} result={m.get('result')} last={m.get('last_price')}")
-sb = get("https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=20261102")
-for e in sb.get("events", []):
-    if "Seahawks" in e.get("name", ""):
-        c = e["competitions"][0]; out.append("SCORE " + " / ".join(f"{x['team']['displayName']} {x['score']}" for x in c["competitors"]) + " " + c["status"]["type"]["description"])
-        s = get("https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event=" + e["id"])
-        for t in (s.get("boxscore") or {}).get("players", []):
-            if "Bears" not in t["team"]["displayName"]: continue
-            for cat in t["statistics"]:
-                for a in cat["athletes"]:
-                    n = a["athlete"]["displayName"]
-                    if any(x in n for x in ["Caleb Williams", "Loveland", "Burden", "Odunze", "Swift"]): out.append(f"{cat['name']} {n} " + " ".join(f"{k}={v}" for k, v in zip(cat.get("labels", []), a["stats"])))
+    except Exception as e: out.append("ERR " + u + " " + str(e)); return None
+E = "https://site.api.espn.com/apis/site/v2/sports/soccer/"
+for path in ["uefa.champions/teams/432/schedule", "all/teams/432/schedule", "tur.1/teams/432/schedule", "eng.1/teams/359/schedule", "ger.1/teams/134/schedule"]:
+    d = get(E + path)
+    if d:
+        evs = d.get("events") or []
+        out.append(f"== {path}: {len(evs)} events; done={sum(1 for e in evs if (e['competitions'][0]['status']['type'].get('completed')))}; leagues={sorted(set((e.get('league') or {}).get('abbreviation','?') if isinstance(e.get('league'),dict) else '?' for e in evs))}")
+        done = [e for e in evs if e['competitions'][0]['status']['type'].get('completed')]
+        if done: out.append("  last: " + done[-1]["date"] + " " + done[-1]["name"] + " id " + done[-1]["id"]); last = done[-1]["id"]
+# summary structure of last game
+d = get(E + "eng.1/summary?event=" + last) or get(E + "all/summary?event=" + last)
+if d:
+    out.append("summary keys: " + ",".join(d.keys()))
+    bx = d.get("boxscore") or {}
+    out.append("box keys " + ",".join(bx.keys()))
+    for t in bx.get("teams", [])[:1]: out.append("team stats: " + ", ".join(f"{s.get('name')}={s.get('displayValue')}" for s in t.get("statistics", [])[:30]))
+    ro = d.get("rosters") or []
+    out.append(f"rosters {len(ro)}")
+    for t in ro[:1]:
+        for p in (t.get("roster") or [])[:3]: out.append("player: " + json.dumps({k: p.get(k) for k in ("athlete", "position", "starter", "stats")})[:900])
+    out.append("header comps " + json.dumps(((d.get("header") or {}).get("competitions") or [{}])[0].get("competitors", [{}])[0])[:500])
 open("probe.txt", "w").write("\n".join(out))
