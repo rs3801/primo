@@ -835,6 +835,14 @@ function sharpAdjust(m, op){
     if (m.linePick){ op.pros = [`💰 Primo's line pick: Primo's chance ${Math.round(m.primoP*100)}% for a ${Math.round((isNaN(m.ask) ? m.p : m.ask)*100)}¢ price (${L.reasons.join("; ")}).`].concat(op.pros || []); const up = V_UP[op.v]; if (up){ op.v = up[0]; op.badge = up[1]; } op.say += " 💰 Primo's line pick for this game."; }
     else if (m.lineEV <= -.08 && Math.abs(L.adj) >= L.min){ op.cons = [`📏 Primo's homework puts this at ${Math.round(m.primoP*100)}%, less than its ${Math.round((isNaN(m.ask) ? m.p : m.ask)*100)}¢ price.`].concat(op.cons || []); }
   }
+  if (op && m.type === "winner" && m.g.sport === "Tennis" && tennisRate(m.g)){
+    const T = m.g._ten, isA = m.label === T.pr[0], pp = isA ? T.pA : 1 - T.pA, c = isNaN(m.ask) ? m.p : m.ask, w = isA ? T.wa : T.wb, wo = isA ? T.wb : T.wa;
+    m.primoP = pp; m.lineEV = c > 0 ? pp / c - 1 : null;
+    const good = w.some(x => /rising|beat|better on/.test(x)) && !w.some(x => /slipping/.test(x)), bad = wo.some(x => /rising|beat|better on/.test(x));
+    if (pp - c >= .04 && good && !bad){ m.linePick = true; op.pros = [`🎾 Tennis homework: ${w.join("; ")}. Primo's chance ${Math.round(pp*100)}% for ${Math.round(c*100)}¢.`].concat(op.pros || []); const up = V_UP[op.v]; if (up){ op.v = up[0]; op.badge = up[1]; } op.say += " 🎾 Primo's form pick."; }
+    else if (pp - c <= -.05){ op.cons = [`🎾 Tennis homework puts this at ${Math.round(pp*100)}%, less than its ${Math.round(c*100)}¢ price${wo.length ? ` (the other player: ${wo.join("; ")})` : ""}.`].concat(op.cons || []); }
+    else if (w.length) op.pros = [`🎾 ${w.join("; ")}.`].concat(op.pros || []);
+  }
   if (op && m.type === "winner"){   // Primo's upset pick: the underdog's win bet moves up a step, the favorite's down a step
     const u = upsetFor(m.g), lab = ffold(m.label.replace(/ wins$/i, "")), is = n => { const x = ffold(n); return lab.includes(x) || x.includes(lab); };
     if (u && u.strong && is(u.dog) && !is(u.fav)){ op.pros = [`🚨 Primo's upset pick: ${u.reasons.slice(0, 3).join("; ")}.`].concat(op.pros || []); const up = V_UP[op.v]; if (up){ op.v = up[0]; op.badge = up[1]; } op.say += ` 🚨 Upset pick: ${u.dog} are playing better than their price.`; }
@@ -1317,6 +1325,34 @@ function tennisPair(g){
   for (const m of g.markets) if (m.type === "winner" && !/:|over|under|wins by|set|game/i.test(m.label) && /\s/.test(m.label.trim()) && !names.includes(m.label)) names.push(m.label);
   return names.length === 2 ? names : null;
 }
+// 🎾 Tennis homework: Primo's own rating for every player (from ~6 months of ATP/WTA results), on this surface, who is rising,
+// and who has been beating better players. Returns Primo's chance for each player (nudged from Kalshi's price, never replacing it).
+function tennisRate(g){
+  if (g._ten !== undefined) return g._ten;
+  g._ten = null;
+  const pr = tennisPair(g); if (!pr) return null;
+  const P = TEN.players || {}, a = P[pr[0]], b = P[pr[1]];
+  if (!a || !b || a.elo == null || b.elo == null || (a.n || 0) < 12 || (b.n || 0) < 12) return null;   // too few tour matches = rating not trustworthy
+  const mk = n => g.markets.find(m => m.type === "winner" && m.label === n && !m.noOf);
+  const ma = mk(pr[0]), mb = mk(pr[1]); if (!ma || !mb || isNaN(ma.p) || isNaN(mb.p)) return null;
+  const sfc = a.sf || "hard", ea = (a.elo + (a.selo ?? a.elo)) / 2, eb = (b.elo + (b.selo ?? b.elo)) / 2;
+  const pE = 1 / (1 + Math.pow(10, (eb - ea) / 400));
+  const mkt = ma.fair != null ? ma.fair : ma.p / (ma.p + mb.p);
+  const pA = mkt + Math.max(-.08, Math.min(.08, .3 * (pE - mkt)));   // homework nudges Kalshi's price toward Primo's rating (at most 8 points)
+  const why = n => { const x = P[n], o = [];
+    if (x.d5 != null && x.d5 >= 40) o.push(`🔥 rising: up ${x.d5} rating points over the last 5 matches`); else if (x.d5 != null && x.d5 <= -40) o.push(`🥶 slipping: down ${-x.d5} rating points over the last 5 matches`);
+    if (x.qw >= 2) o.push(`beat ${x.qw} higher-rated players in the last ${x.ql}${x.best ? ` (best win: ${x.best[0]})` : ""}`);
+    if (x.selo != null && x.selo - x.elo >= 40) o.push(`better on ${sfc} than overall`); else if (x.selo != null && x.selo - x.elo <= -40) o.push(`weaker on ${sfc} than overall`);
+    return o; };
+  g._ten = {pr, a, b, sfc, pE, mkt, pA, ma, mb, wa: why(pr[0]), wb: why(pr[1])};
+  return g._ten;
+}
+function tennisHTML(g){
+  const T = tennisRate(g); if (!T) return "";
+  const pc = x => Math.round(x * 100) + "%", rk = x => x.rk ? ` (#${x.rk} on Primo's ratings)` : "";
+  const line = (n, x, w) => `<div style="margin-top:3px"><b>${esc(n)}</b>${rk(x)}: ${w.length ? esc(w.join("; ")) : "steady form"}.</div>`;
+  return `<div class="legnote" style="margin:8px 0;background:rgba(46,160,67,.08);border-radius:10px;padding:8px 10px"><b>🎾 Form check (${esc(T.sfc)} court)</b>${line(T.pr[0], T.a, T.wa)}${line(T.pr[1], T.b, T.wb)}<div style="margin-top:4px">Primo's ratings alone: ${pc(T.pE)}. <b>Primo's chance: ${esc(T.pr[0])} ${pc(T.pA)}, ${esc(T.pr[1])} ${pc(1 - T.pA)}</b> (Kalshi ${pc(T.mkt)} / ${pc(1 - T.mkt)}).</div></div>`;
+}
 const fmtD = d => { const x = new Date(d + "T12:00:00"); return isNaN(x) ? d : x.toLocaleDateString([], {month:"short", day:"numeric", year: x.getFullYear() === new Date().getFullYear() ? undefined : "numeric"}); };
 function statsData(g){
   const out = {lines: [], h2h: null, h2hGames: [], none: null};
@@ -1418,6 +1454,7 @@ function upsetFor(g){
       if (pf && pd && pf.last.length >= 4 && pd.last.length >= 4 && rate(pd) - rate(pf) >= .2) R.push(`${dogN} is in better form (${pd.rec} vs ${pf.rec} in recent tour matches)`);
       const h = (TEN.h2h || {})[pr.join("|")], dw = h ? (pr[0] === dogN ? h.a : h.b) : 0, fw2 = h ? (pr[0] === dogN ? h.b : h.a) : 0;
       if (dw > fw2) R.push(`${dogN} leads their meetings ${dw}-${fw2}`);
+      { const T = tennisRate(g); if (T){ const w = dogN === T.pr[0] ? T.wa : T.wb; for (const x of w) if (/rising|beat|better on/.test(x)) R.push(`${dogN}: ${x}`); const pd2 = dogN === T.pr[0] ? T.pA : 1 - T.pA; if (pd2 - Dm.p >= .05) R.push(`Primo's ratings give ${dogN} ${Math.round(pd2*100)}%, more than Kalshi's ${Math.round(Dm.p*100)}%`); } }
       const rs = g.research; if (rs && rs.lean && ffold(rs.lean) === ffold(dogN)) R.push(`Primo's research picks ${dogN}`);
     } else return null;
     if (md && (md.move || 0) >= 4) R.push(`Money is moving toward ${dogN} (up ${md.move} points in a day)`);
@@ -1639,7 +1676,7 @@ function gameCall(m){
   }
   const op = opinionFor(m);
   const up = (() => { const u = upsetFor(m.g); if (!u) return ""; if (m.type !== "winner") return upsetHTML(m.g, "game"); const me = m.g.facts ? m.g.facts.teams.find(x => teamIn(x, m.label)) : null; const nmMe = me ? (me.short || me.name) : m.label; return upsetHTML(m.g, nmMe === u.fav ? "fav" : nmMe === u.dog ? "dog" : "game"); })();
-  const lh = (m.type === "winner" || m.type === "spread") ? lineHTML(g) : "";
+  const lh = g.sport === "Tennis" ? (m.type === "winner" ? tennisHTML(g) : "") : (m.type === "winner" || m.type === "spread") ? lineHTML(g) : "";
   return `${up}<div class="gamecall"><div><b>The game:</b> ${odds}</div><div>${call}</div><div class="why2">${why}</div>${lh}${op ? takeHTMLx(op) : ""}</div>`;
 }
 
