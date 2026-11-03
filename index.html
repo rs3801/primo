@@ -1344,7 +1344,10 @@ function checkLean(rs){
   const ffold = x => (x||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().trim();   // (the shared helper isn't ready this early)
   if (!rs || !rs.lean || /strong/i.test(rs.level || "")) return rs;
   const fs = ((rs.take || {}).factors || []).map(x => ffold(x.f || "")).filter(Boolean);
-  const me = ffold(rs.lean), mine = fs.filter(x => x === me).length, other = fs.filter(x => x !== me && x !== "even" && x !== "neither");
+  const me = ffold(rs.lean), same = x => x === me || x.includes(me) || me.includes(x);   // "Seattle" and "Seattle Seahawks" are the same side
+  if (/^(draw|tie)$/.test(me)) return rs;
+  const neutral = x => /^(even|neither|both|none|draw|tie|n\/a)$/.test(x);
+  const mine = fs.filter(same).length, other = fs.filter(x => !same(x) && !neutral(x));
   if (!other.length) return rs;
   const cnt = {}; other.forEach(x => cnt[x] = (cnt[x] || 0) + 1);
   const [side, n] = Object.entries(cnt).sort((a, b) => b[1] - a[1])[0];
