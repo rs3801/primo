@@ -1738,7 +1738,12 @@ function lineHTML(g){
   { const fav = L.mu >= 0 ? L.A : L.B, w = (lineModel(g), g.markets.find(m => m.type === "winner" && !m.noOf && m.label === fav));
     if (w && w.primoP != null && w !== L.pick && w !== L.safest) body += row("🏆", "Straight win", w, L.pick ? "In between: more likely than the line pick, pays more than the safest line." : "Pays more than the safest line, and hits more often than any bigger line."); }
   if (L.safest && L.safest !== L.pick) body += row("🛡️", "Safest line", L.safest, L.safest.primoP < .6 ? "The likeliest line on offer, and still close to a coin flip." : L.safest.lineEV < .02 ? "Hits most often, but pays so little that it barely earns anything." : "Hits most often.");
-  if (!L.pick) body += `<div style="margin-top:4px">💰 No line here beats its price: ${Math.abs(L.adj) < L.min ? "Primo's homework agrees with the market" : "Kalshi already charges for what Primo sees"}. Use this game only to fill a combo.</div>`;
+  if (!L.pick){   // no bargain, but if you're betting this game anyway, which line is the best deal?
+    const fav = L.mu >= 0 ? L.A : L.B, mine = g.markets.filter(m => m.primoP != null && m.lineEV != null && !isNaN(m.ask) && m.ask > .03 && m.primoP >= .5 && m.primoP <= .9 && ffold((m.noOf ? "" : m.label)).startsWith(ffold(fav)));
+    const b = mine.sort((x, y) => y.lineEV - x.lineEV || y.primoP - x.primoP)[0];
+    if (b && b.lineEV > -.03) L.shownBest = true, body += row("👉", `If you bet ${esc(niceName(g.sport, fav))} anyway, the best deal`, b, "Primo still expects " + esc(niceName(g.sport, fav)) + " to win; this line gets you the most for the risk, but it's a fair price, not a bargain.");
+  }
+  if (!L.pick && !L.shownBest) body += `<div style="margin-top:4px">💰 No line here beats its price: ${Math.abs(L.adj) < L.min ? "Primo's homework agrees with the market" : "Kalshi already charges for what Primo sees"}. Use this game only to fill a combo.</div>`;
   return `<div class="legnote" style="margin:8px 0;background:rgba(46,160,67,.08);border-radius:10px;padding:8px 10px"><b>📏 Which line to take</b><div>${head}</div>${body}</div>`;
 }
 function gameCall(m){
