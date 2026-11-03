@@ -1,13 +1,18 @@
-KXNFLGAME | Chicago | status=finalized result=yes last=None
-KXNFLRECYDS | Luther Burden III: 50+ | status=finalized result=yes last=None
-KXNFLRECYDS | Colston Loveland: 40+ | status=finalized result=yes last=None
-KXNFLRECYDS | Rome Odunze: 40+ | status=finalized result=yes last=None
-SCORE Seattle Seahawks 17 / Chicago Bears 34 Final
-passing Caleb Williams C/ATT=24/34 YDS=247 AVG=7.3 TD=1 INT=0 SACKS=1-10 QBR=68.1 RTG=101.0
-rushing D'Andre Swift CAR=27 YDS=69 AVG=2.6 TD=3 LONG=7
-rushing Caleb Williams CAR=2 YDS=1 AVG=0.5 TD=0 LONG=2
-receiving Rome Odunze REC=4 YDS=87 AVG=21.8 TD=0 LONG=24 TGTS=6
-receiving Colston Loveland REC=7 YDS=65 AVG=9.3 TD=0 LONG=15 TGTS=9
-receiving Luther Burden III REC=7 YDS=56 AVG=8.0 TD=1 LONG=23 TGTS=9
-receiving D'Andre Swift REC=2 YDS=10 AVG=5.0 TD=0 LONG=8 TGTS=3
-fumbles Colston Loveland FUM=1 LOST=1 REC=0
+== uefa.champions/teams/432/schedule: 3 events; done=3; leagues=['UEFA Champions League']
+  last: 2026-09-09T19:00Z Galatasaray at Sporting CP id 401915447
+== all/teams/432/schedule: 19 events; done=19; leagues=['Club Friendly', 'Turkish Super Lig', 'UEFA Champions League']
+  last: 2026-07-17T18:00Z Galatasaray at Umraniyespor id 401888891
+== tur.1/teams/432/schedule: 10 events; done=10; leagues=['Turkish Super Lig']
+  last: 2026-08-14T18:30Z Çorum FK at Galatasaray id 401888391
+== eng.1/teams/359/schedule: 9 events; done=9; leagues=['Premier League']
+  last: 2026-08-21T19:00Z Coventry City at Arsenal id 401879301
+== ger.1/teams/134/schedule: 8 events; done=8; leagues=['Bundesliga']
+  last: 2026-08-28T18:30Z VfB Stuttgart at Bayern Munich id 401884817
+summary keys: boxscore,format,gameInfo,lastFiveGames,leaders,broadcasts,pickcenter,odds,hasOdds,rosters,news,header,article,videos,seasonseries,keyEvents,commentary,wallclockAvailable,meta,standings
+box keys teams
+team stats: foulsCommitted=10, yellowCards=1, redCards=0, offsides=3, wonCorners=9, saves=3, possessionPct=58.9, totalShots=21, shotsOnTarget=9, shotPct=0.4, penaltyKickGoals=0, penaltyKickShots=0, accuratePasses=448, totalPasses=548, passPct=0.8, accurateCrosses=2, totalCrosses=10, crossPct=0.2, totalLongBalls=61, accurateLongBalls=29, longballPct=0.5, blockedShots=6, effectiveTackles=5, totalTackles=6, tacklePct=0.8, interceptions=15, effectiveClearance=22, totalClearance=22
+rosters 2
+player: {"athlete": {"id": "84774", "uid": "s:600~a:84774", "guid": "fac16cb2-0ac3-1dc1-fe5a-9773720be8c1", "lastName": "Neuer", "fullName": "Manuel Neuer", "displayName": "Manuel Neuer", "shortName": "M. Neuer", "links": [{"language": "en-US", "rel": ["playercard", "desktop", "athlete"], "href": "https://www.espn.com/soccer/player/_/id/84774/manuel-neuer", "text": "Player Card", "shortText": "Player Card", "isExternal": false, "isPremium": false}], "jerseyImages": [{"href": "https://stitcher.espn.com/sports/soccer/leagues/ger.1/events/401884817/athletes/84774/jersey.png?darkMode=false", "rel": ["full", "default"], "width": 1440, "height": 1440}, {"href": "https://stitcher.espn.com/sports/soccer/leagues/ger.1/events/401884817/athletes/84774/jersey.png?darkMode=true", "rel": ["full", "dark"], "width": 1440, "height": 1440}]}, "position": {"name": "Goalkeeper", "displayName": "Goalkeeper", "abbrev
+player: {"athlete": {"id": "157688", "uid": "s:600~a:157688", "guid": "2ec1679c-c69a-16b8-e141-214a7902358c", "lastName": "Min-Jae", "fullName": "Kim Min-Jae", "displayName": "Kim Min-Jae", "shortName": "K. Min-Jae", "links": [{"language": "en-US", "rel": ["playercard", "desktop", "athlete"], "href": "https://www.espn.com/soccer/player/_/id/157688/kim-min-jae", "text": "Player Card", "shortText": "Player Card", "isExternal": false, "isPremium": false}], "jerseyImages": [{"href": "https://stitcher.espn.com/sports/soccer/leagues/ger.1/events/401884817/athletes/157688/jersey.png?darkMode=false", "rel": ["full", "default"], "width": 1440, "height": 1440}, {"href": "https://stitcher.espn.com/sports/soccer/leagues/ger.1/events/401884817/athletes/157688/jersey.png?darkMode=true", "rel": ["full", "dark"], "width": 1440, "height": 1440}]}, "position": {"name": "Center Left Defender", "displayName": "Cent
+player: {"athlete": {"id": "222793", "uid": "s:600~a:222793", "guid": "c3c378f1-f767-6cf5-1788-6b2d1e51a12a", "lastName": "Upamecano", "fullName": "Dayot Upamecano", "displayName": "Dayot Upamecano", "shortName": "D. Upamecano", "links": [{"language": "en-US", "rel": ["playercard", "desktop", "athlete"], "href": "https://www.espn.com/soccer/player/_/id/222793/dayot-upamecano", "text": "Player Card", "shortText": "Player Card", "isExternal": false, "isPremium": false}], "jerseyImages": [{"href": "https://stitcher.espn.com/sports/soccer/leagues/ger.1/events/401884817/athletes/222793/jersey.png?darkMode=false", "rel": ["full", "default"], "width": 1440, "height": 1440}, {"href": "https://stitcher.espn.com/sports/soccer/leagues/ger.1/events/401884817/athletes/222793/jersey.png?darkMode=true", "rel": ["full", "dark"], "width": 1440, "height": 1440}]}, "position": {"name": "Center Right Defender", "di
+header comps {"id": "132", "uid": "s:600~t:132", "order": 0, "homeAway": "home", "winner": true, "team": {"id": "132", "guid": "25b5e432-d3d2-939f-f73b-6e531a6fbd91", "uid": "s:600~t:132", "location": "Bayern Munich", "name": "Bayern Munich", "abbreviation": "MUN", "displayName": "Bayern Munich", "shortDisplayName": "Bayern", "color": "dc052d", "alternateColor": "1a1a1a", "logos": [{"href": "https://a.espncdn.com/i/teamlogos/soccer/500/132.png", "width": 500, "height": 500, "alt": "", "rel": ["full", "defaul
