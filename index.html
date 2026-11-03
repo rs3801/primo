@@ -519,6 +519,7 @@ const byKey = new Map();
 const gameByBase = new Map();
 for (const [sport, code, , rows, ends] of D.G){
   const date = gameDate(code); if (!date) continue;
+  if (rows.length && rows.every(r => /POLL$|RANK/.test(String((D.SER[r[0]] || [r[0]])[0])))) continue;   // rankings polls (e.g. the College Football Playoff rankings) aren't games
   // Kalshi sometimes lists one game under two codes that differ only in the start time (e.g. 26OCT121700LADMIL and 26OCT122000LADMIL); merge them
   // ...and sometimes with the two names swapped (26OCT31CALVARMBILLI and 26OCT31MBILLICALVAR): same letters, rotated
   const base = sport + "|" + (cm => { if (!cm) return code; const t = cm[3]; let best = t; for (let i = 1; i < t.length; i++){ const r = t.slice(i) + t.slice(0, i); if (r < best) best = r; } return cm[1] + best; })(/^(\d{2}[A-Z]{3}\d{2})(\d{4})?(.*)$/.exec(code));
@@ -874,7 +875,10 @@ function candidatesFor(tierKey){
       .filter(m => { const op = opOf(m); return op && op.v === "keep"; }).sort((a,b) => primoScore(b) - primoScore(a));
     const fill2 = out.filter(m => !liked.includes(m) && !fill.includes(m) && m.p >= .45 && m.p <= .92 && m.vol >= 10).sort((a,b) => smartScore(b) - smartScore(a)).slice(0, 700)
       .filter(m => { const op = opOf(m); return op && op.v === "okay"; }).sort((a,b) => primoScore(b) - primoScore(a));
-    return liked.concat(fill, fill2);   // research likes first, then ✅ Keep, then 👍 Okay so the combo can still reach the legs asked for
+    // last: ✅/👍 bets that trade less (small games), so a combo can still reach the legs asked for using more bets from the same games
+    const fill3 = out.filter(m => !liked.includes(m) && !fill.includes(m) && !fill2.includes(m) && m.p >= .4 && m.p <= .95)
+      .filter(m => { const op = opOf(m); return op && (op.v === "keep" || op.v === "okay"); }).sort((a,b) => primoScore(b) - primoScore(a));
+    return liked.concat(fill, fill2, fill3);   // research likes first, then ✅ Keep, then 👍 Okay so the combo can still reach the legs asked for
   }
   let inRange = out.filter(m => m.p >= t.lo && m.p <= t.hi && m.vol >= 10);
   const key = t.sort === "score" ? (a,b) => smartScore(b) - smartScore(a) || b.p - a.p : t.sort === "p" ? (a,b) => b.p - a.p || b.vol - a.vol : (a,b) => b.vol - a.vol;
