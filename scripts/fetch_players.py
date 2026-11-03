@@ -8,12 +8,14 @@ ESPN = "https://site.api.espn.com/apis/site/v2/sports/"
 PT = ZoneInfo("America/Los_Angeles")
 LEAGUES = {"NFL": "football/nfl", "College football": "football/college-football", "NBA": "basketball/nba", "WNBA": "basketball/wnba",
            "College basketball": "basketball/mens-college-basketball", "NHL": "hockey/nhl"}
+SOCCER = "soccer/all"   # every soccer league: one team schedule covers league, cup and Europe games
 N_GAMES = 5
-MAX_NEW_BOX = 260
+MAX_NEW_BOX = 520
 # per-game numbers kept for each player, by sport (order matters: the app reads them by position)
 FB = ["tgt", "rec", "recYds", "recTD", "car", "rushYds", "rushTD", "cmp", "att", "passYds", "passTD", "int", "longRec", "longRush"]
 BB = ["min", "pts", "reb", "ast", "3pm", "stl", "blk"]
 HK = ["g", "a", "sog", "sv", "toi"]
+SC = ["g", "a", "sot", "sh", "st", "sv"]   # soccer: goals, assists, shots on target, shots, started (1/0), saves
 CALLS = {"n": 0}
 
 def get(url, tries=2):
@@ -45,6 +47,22 @@ def box_of(d, sport):
     out = {"d": (hc.get("date") or "")[:10], "t": {}}
     for c in hc.get("competitors") or []:
         out["t"][(c.get("team") or {}).get("displayName", "")] = {"s": num(c.get("score")), "st": {}, "p": {}}
+    if sport == "Soccer":
+        for t in (d.get("boxscore") or {}).get("teams") or []:
+            nm = (t.get("team") or {}).get("displayName", "")
+            if nm not in out["t"]: continue
+            st = {s.get("name"): s.get("displayValue") for s in t.get("statistics") or []}
+            out["t"][nm]["st"] = {k: num(st[k]) for k in ("possessionPct", "totalShots", "shotsOnTarget") if k in st and num(st[k]) is not None}
+        for t in d.get("rosters") or []:
+            nm = (t.get("team") or {}).get("displayName", "")
+            if nm not in out["t"]: continue
+            for a in t.get("roster") or []:
+                who = (a.get("athlete") or {}).get("displayName"); st = {x.get("name"): x.get("value") for x in a.get("stats") or []}
+                if not who or not st.get("appearances"): continue
+                out["t"][nm]["p"][who] = [num(st.get("totalGoals")) or 0, num(st.get("goalAssists")) or 0, num(st.get("shotsOnTarget")) or 0, num(st.get("totalShots")) or 0, 1 if a.get("starter") else 0, num(st.get("saves"))]
+                pos = (a.get("position") or {}).get("abbreviation", "")
+                if pos: out.setdefault("pos", {})[who] = pos
+        return out
     bx = d.get("boxscore") or {}
     for t in bx.get("teams") or []:
         nm = (t.get("team") or {}).get("displayName", "")
@@ -92,7 +110,7 @@ def main():
     now = time.time(); utc = datetime.datetime.now(datetime.timezone.utc)
     teams = {}   # (league, team name) -> (path, id, sport)
     for g in FXd.get("games") or []:
-        path = LEAGUES.get(g.get("league"))
+        path = SOCCER if g.get("sport") == "Soccer" else LEAGUES.get(g.get("league"))
         if not path or g.get("state") not in (None, "pre"): continue
         try:
             if datetime.datetime.fromisoformat(g["start"].replace("Z", "+00:00")) > utc + datetime.timedelta(days=7 if g["sport"] == "Football" else 3): continue
@@ -111,6 +129,8 @@ def main():
                 ids = []
                 for e in d.get("events") or []:
                     c = (e.get("competitions") or [{}])[0]
+                    lg = e.get("league") if isinstance(e.get("league"), dict) else {}
+                    if "friendl" in ((lg.get("slug") or "") + (lg.get("name") or "")).lower(): continue   # pre-season friendlies say little
                     if ((c.get("status") or {}).get("type") or {}).get("completed"): ids.append([e.get("date", "")[:10], e.get("id")])
                 ids.sort()
                 sc = sched[k] = {"t": now, "ids": [i for _, i in ids[-N_GAMES:]]}
@@ -140,6 +160,7 @@ def main():
             if sport == "Football" and not (s_(8) > 0 or s_(0) + s_(4) + s_(1) >= 4 or s_(2) + s_(5) >= 25): continue
             if sport == "Basketball" and s_(0) < 8 * len(rows): continue
             if sport == "Hockey" and rows and rows[0][3] is None and s_(4) < 8 * len(rows): continue
+            if sport == "Soccer" and (len(rows) < 2 or (s_(0) + s_(1) == 0 and s_(3) < 4 and not (s_(5) or 0))): continue
             out_players[p] = {"tm": name, "lg": league, "pos": pos, "log": [[(int(v) if v is not None and v == int(v) else v) for v in r] if r else 0 for r in log]}
         out_teams[name] = {"lg": league, "sp": sport, "g": games}
     # keep caches small
@@ -148,7 +169,7 @@ def main():
     sched = {k: v for k, v in sched.items() if now - v.get("t", 0) < 7 * 86400}
     json.dump(boxes, open("data/box_cache.json", "w"), separators=(",", ":"))
     json.dump(sched, open("data/sched_cache.json", "w"), separators=(",", ":"))
-    data = {"asof": datetime.datetime.now(PT).strftime("%b %d, %I:%M %p PT"), "keys": {"Football": FB, "Basketball": BB, "Hockey": HK}, "teams": out_teams, "players": out_players}
+    data = {"asof": datetime.datetime.now(PT).strftime("%b %d, %I:%M %p PT"), "keys": {"Football": FB, "Basketball": BB, "Hockey": HK, "Soccer": SC}, "teams": out_teams, "players": out_players}
     with open("data/players.js", "w") as f:
         f.write("window.PRIMO_PLAYERS=" + json.dumps(data, separators=(",", ":"), ensure_ascii=False).replace("</", "<\\/") + ";\n")
     print("players:", len(out_players), "teams:", len(out_teams), "new box scores:", new_box, "schedules:", new_sched, "calls:", CALLS["n"], "size:", os.path.getsize("data/players.js"))
