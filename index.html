@@ -833,7 +833,7 @@ function sharpAdjust(m, op){
   if (op && (m.type === "winner" || m.type === "spread") && lineModel(m.g) && m.lineEV != null){
     const L = m.g._line;
     if (m.linePick){ op.pros = [`💰 Primo's line pick: Primo's chance ${Math.round(m.primoP*100)}% for a ${Math.round((isNaN(m.ask) ? m.p : m.ask)*100)}¢ price (${L.reasons.join("; ")}).`].concat(op.pros || []); const up = V_UP[op.v]; if (up){ op.v = up[0]; op.badge = up[1]; } op.say += " 💰 Primo's line pick for this game."; }
-    else if (m.lineEV <= -.08 && Math.abs(L.adj) >= .75){ op.cons = [`📏 Primo's homework puts this at ${Math.round(m.primoP*100)}%, less than its ${Math.round((isNaN(m.ask) ? m.p : m.ask)*100)}¢ price.`].concat(op.cons || []); }
+    else if (m.lineEV <= -.08 && Math.abs(L.adj) >= L.min){ op.cons = [`📏 Primo's homework puts this at ${Math.round(m.primoP*100)}%, less than its ${Math.round((isNaN(m.ask) ? m.p : m.ask)*100)}¢ price.`].concat(op.cons || []); }
   }
   if (op && m.type === "winner"){   // Primo's upset pick: the underdog's win bet moves up a step, the favorite's down a step
     const u = upsetFor(m.g), lab = ffold(m.label.replace(/ wins$/i, "")), is = n => { const x = ffold(n); return lab.includes(x) || x.includes(lab); };
@@ -1521,7 +1521,11 @@ function lineModel(g){
   if (g._line !== undefined) return g._line;
   g._line = null;
   try {
-    if (!["Football", "Basketball"].includes(g.sport)) return null;
+    // per sport: points or goals, the home edge, how hard each piece of homework can move the expected margin
+    const P = {Football: {u: "points", sd: [7, 22, .5], mu: [-45, 45, .25], home: 2, form: [.15, 1.5], hot: [.5, 1], res: 1, cap: 3, min: .75, show: .4},
+               Basketball: {u: "points", sd: [7, 22, .5], mu: [-45, 45, .25], home: 2.5, form: [.15, 1.5], hot: [.5, 1], res: 1, cap: 2.5, min: .75, show: .4},
+               Hockey: {u: "goals", sd: [1.2, 3.5, .1], mu: [-5, 5, .05], home: .2, form: [.15, .35], hot: [.12, .25], res: .25, cap: .6, min: .2, show: .08}}[g.sport];
+    if (!P) return null;
     const wins = g.markets.filter(m => m.type === "winner" && !m.noOf && !/tie|draw|:/i.test(m.label) && /GAME$/.test(m.series));
     if (wins.length < 2) return null;
     const A = wins[0].label, B = wins.find(m => m.label !== A).label, same = (x, y) => ffold(x) === ffold(y);
@@ -1532,7 +1536,7 @@ function lineModel(g){
       const src = m.noOf || m;
       let team, L;
       if (src.type === "winner" && !m.noOf && /GAME$/.test(src.series) && (same(src.label, A) || same(src.label, B))){ team = src.label; L = 0; }
-      else { const w = /^(.+?) wins by over ([\d.]+) points$/i.exec(src.label); if (!w || !/SPREAD$/.test(src.series) || /1H|2H|1Q|2Q|3Q|4Q/.test(src.series)) continue; team = w[1]; L = +w[2]; }
+      else { const w = /^(.+?) wins by over ([\d.]+) (?:points|goals)$/i.exec(src.label); if (!w || !/SPREAD$/.test(src.series) || /1H|2H|1Q|2Q|3Q|4Q/.test(src.series)) continue; team = w[1]; L = +w[2]; }
       const isA = same(team, A); if (!isA && !same(team, B)) continue;
       const x = isA ? L : -L;   // the original market pays if A's margin > x (for A) or A's margin < x (for B)
       if (!m.noOf && !isNaN(m.p)){ const q = isA ? fv(m) : 1 - fv(m); if (q > .04 && q < .96) pts.push([x, q]); }
@@ -1541,7 +1545,7 @@ function lineModel(g){
     if (pts.length < 3) return null;
     // fit the market's expected margin (and spread of outcomes) to its own ladder
     let best = null;
-    for (let sd = 7; sd <= 22; sd += .5) for (let mu = -45; mu <= 45; mu += .25){
+    for (let sd = P.sd[0]; sd <= P.sd[1]; sd += P.sd[2]) for (let mu = P.mu[0]; mu <= P.mu[1]; mu += P.mu[2]){
       let e = 0; for (const [x, q] of pts){ const d = ncdf((mu - x) / sd) - q; e += d * d; }
       if (!best || e < best.e) best = {e, mu, sd};
     }
@@ -1557,19 +1561,19 @@ function lineModel(g){
       const avg = t => { const v = cur(t); return v.length >= 3 ? v.reduce((s, x) => s + (x.pf - x.pa), 0) / v.length : null; };
       const mA = avg(a), mB = avg(b);
       if (mA != null && mB != null){
-        const home = (g.sport === "Football" ? 2 : 2.5) * (tA.home ? 1 : tB.home ? -1 : 0);
-        const form = (mA - mB) / 2 + home, d = Math.max(-1.5, Math.min(1.5, .15 * (form - mu0)));
-        if (Math.abs(d) >= .4){ adj += d; sig.push(d); rs.push(`recent scoring margins (${nA} ${mA >= 0 ? "+" : "−"}${Math.abs(Math.round(mA))} a game, ${nB} ${mB >= 0 ? "+" : "−"}${Math.abs(Math.round(mB))}) point to ${d > 0 ? nA : nB}`); }
+        const home = P.home * (tA.home ? 1 : tB.home ? -1 : 0);
+        const form = (mA - mB) / 2 + home, d = Math.max(-P.form[1], Math.min(P.form[1], P.form[0] * (form - mu0)));
+        if (Math.abs(d) >= P.show){ adj += d; sig.push(d); rs.push(`recent scoring margins (${nA} ${mA >= 0 ? "+" : "−"}${Math.abs(P.u === "goals" ? Math.round(mA*10)/10 : Math.round(mA))} a game, ${nB} ${mB >= 0 ? "+" : "−"}${Math.abs(P.u === "goals" ? Math.round(mB*10)/10 : Math.round(mB))}) point to ${d > 0 ? nA : nB}`); }
       }
-      const hA = hotPlayers(tA.name, g.sport).length, hB = hotPlayers(tB.name, g.sport).length, dh = Math.max(-1, Math.min(1, .5 * (hA - hB)));
+      const hA = hotPlayers(tA.name, g.sport).length, hB = hotPlayers(tB.name, g.sport).length, dh = Math.max(-P.hot[1], Math.min(P.hot[1], P.hot[0] * (hA - hB)));
       if (dh){ adj += dh; sig.push(dh); rs.push(`${dh > 0 ? nA : nB} have more hot players (${Math.max(hA, hB)} vs ${Math.min(hA, hB)})`); }
     }
     const r = g.research;
-    if (r && r.lean){ const d = teamIn(tA || {name: A}, r.lean) || same(r.lean, A) ? 1 : -1; adj += d; sig.push(d); rs.push(`Primo's research leans ${d > 0 ? nA : nB}`); }
-    else if (r && r.factLean){ const d = teamIn(tA || {name: A}, r.factLean) ? .5 : -.5; adj += d; sig.push(d); rs.push(`most research facts favor ${d > 0 ? nA : nB}`); }
-    const cap = g.sport === "Football" ? 3 : 2.5; adj = Math.max(-cap, Math.min(cap, adj));
+    if (r && r.lean){ const d = (teamIn(tA || {name: A}, r.lean) || same(r.lean, A) ? 1 : -1) * P.res; adj += d; sig.push(d); rs.push(`Primo's research leans ${d > 0 ? nA : nB}`); }
+    else if (r && r.factLean){ const d = (teamIn(tA || {name: A}, r.factLean) ? .5 : -.5) * P.res; adj += d; sig.push(d); rs.push(`most research facts favor ${d > 0 ? nA : nB}`); }
+    const cap = P.cap; adj = Math.max(-cap, Math.min(cap, adj));
     // a line pick needs at least two pieces of homework pointing the same way (one signal alone is too easy to be wrong)
-    const agree = sig.filter(x => Math.sign(x) === Math.sign(adj)).length, against = sig.some(x => Math.abs(x) >= 1 && Math.sign(x) !== Math.sign(adj));   // research leaning the other way blocks a pick
+    const agree = sig.filter(x => Math.sign(x) === Math.sign(adj)).length, against = sig.some(x => Math.abs(x) >= P.res && Math.sign(x) !== Math.sign(adj));   // research leaning the other way blocks a pick
     const mu = mu0 + adj;
     for (const L of lines){
       const pA = ncdf((mu - L.x) / sd); L.pp = L.aboveA ? pA : 1 - pA;
@@ -1578,9 +1582,9 @@ function lineModel(g){
       L.m.primoP = L.pp; L.m.lineEV = L.ev;
     }
     const ok = lines.filter(L => L.sane && L.ev != null && !isNaN(L.m.ask) && L.m.ask > .03 && L.m.ask < .97);
-    const pick = Math.abs(adj) >= .75 && agree >= 2 && !against ? ok.filter(L => L.pp >= .35 && L.pp <= .88 && L.ev >= .05).sort((a, b) => b.ev - a.ev)[0] : null;
+    const pick = Math.abs(adj) >= P.min && agree >= 2 && !against ? ok.filter(L => L.pp >= .35 && L.pp <= .88 && L.ev >= .05).sort((a, b) => b.ev - a.ev)[0] : null;
     const safest = ok.filter(L => L.m.ask <= .93).sort((a, b) => b.pp - a.pp)[0];
-    g._line = {A, B, nA, nB, mu0, mu, sd, adj, reasons: rs, pick: pick ? pick.m : null, safest: safest ? safest.m : null};
+    g._line = {A, B, nA, nB, mu0, mu, sd, adj, u: P.u, min: P.min, show: P.show, reasons: rs, pick: pick ? pick.m : null, safest: safest ? safest.m : null};
     if (pick) pick.m.linePick = true;
   } catch (e) { g._line = null; }
   return g._line;
@@ -1588,13 +1592,14 @@ function lineModel(g){
 function lineHTML(g){
   const L = lineModel(g); if (!L) return "";
   const pc = x => Math.round(x * 100) + "%", ev = x => (x >= 0 ? "+" : "−") + Math.abs(Math.round(x * 100)) + "%", cost = m => Math.round((isNaN(m.ask) ? m.p : m.ask) * 100) + "¢";
-  const mg = x => x >= .5 ? `${esc(L.nA)} by about ${Math.round(x)}` : x <= -.5 ? `${esc(L.nB)} by about ${Math.round(-x)}` : "a dead heat";
-  const head = `The market expects ${mg(L.mu0)}.` + (Math.abs(L.adj) >= .5 ? ` Primo's homework says ${mg(L.mu)}: ${esc(L.reasons.join("; "))}.` : " Primo's homework doesn't move that.");
+  const r1 = x => L.u === "goals" ? (Math.round(x * 10) / 10).toFixed(1) + " goals" : Math.round(x);
+  const mg = x => x >= (L.u === "goals" ? .05 : .5) ? `${esc(L.nA)} by about ${r1(x)}` : x <= -(L.u === "goals" ? .05 : .5) ? `${esc(L.nB)} by about ${r1(-x)}` : "a dead heat";
+  const head = `The market expects ${mg(L.mu0)}.` + (Math.abs(L.adj) >= L.show ? ` Primo's homework says ${mg(L.mu)}: ${esc(L.reasons.join("; "))}.` : " Primo's homework doesn't move that.");
   const row = (icon, t, m, note) => `<div style="margin-top:4px">${icon} <b>${t}:</b> ${esc(m.pick)} — Primo's chance ${pc(m.primoP)}, costs ${cost(m)} → ${ev(m.lineEV)} expected return. ${note}</div>`;
   let body = "";
   if (L.pick) body += row("💰", "Primo's line pick", L.pick, "Best mix of risk and payout for this game.");
   if (L.safest && L.safest !== L.pick) body += row("🛡️", "Safest line", L.safest, L.safest.lineEV < .02 ? "Hits most often, but pays so little that it barely earns anything." : "Hits most often.");
-  if (!L.pick) body += `<div style="margin-top:4px">💰 No line here beats its price: ${Math.abs(L.adj) < .75 ? "Primo's homework agrees with the market" : "Kalshi already charges for what Primo sees"}. Use this game only to fill a combo.</div>`;
+  if (!L.pick) body += `<div style="margin-top:4px">💰 No line here beats its price: ${Math.abs(L.adj) < L.min ? "Primo's homework agrees with the market" : "Kalshi already charges for what Primo sees"}. Use this game only to fill a combo.</div>`;
   return `<div class="legnote" style="margin:8px 0;background:rgba(46,160,67,.08);border-radius:10px;padding:8px 10px"><b>📏 Which line to take</b><div>${head}</div>${body}</div>`;
 }
 function gameCall(m){
