@@ -836,7 +836,7 @@ function sharpAdjust(m, op){
     else if (m.lineEV <= -.08 && Math.abs(L.adj) >= L.min){ op.cons = [`📏 Primo's homework puts this at ${Math.round(m.primoP*100)}%, less than its ${Math.round((isNaN(m.ask) ? m.p : m.ask)*100)}¢ price.`].concat(op.cons || []); }
   }
   if (op && /^[^:]+:/.test(m.label) && m.type !== "winner"){   // player bets: is this player hot or slumping?
-    const who = m.label.split(":")[0].trim(), fw = ffold(who), pl = Object.entries(PL.players || {}).find(([n]) => ffold(n) === fw);
+    const who = m.label.split(":")[0].trim(), pl = playerByName(who);
     if (pl){
       const sp = m.g.sport, hot = hotPlayers(pl[1].tm, sp).find(x => x.n === pl[0]), cold = coldPlayers(pl[1].tm, sp).find(x => x.n === pl[0]);
       const under = /under|fewer|or less/i.test(m.label);
@@ -1155,10 +1155,11 @@ for (const [team, rows] of Object.entries((R && R.injuries) || {})){
 const INJ = new Map();   // folded player name -> {team, ...}
 for (const [team, rows] of Object.entries(FX.injuries || {})) for (const r of rows) INJ.set(ffold(r.player), Object.assign({team}, r));
 for (const f of FX.games || []) if (f.sport === "Hockey") f.notes = (f.notes || []).map(n => n.replace("starting pitcher", "starting goalie"));
-const stFold = x => ffold(x).replace(/\bst\.?(?=\s|$)/g, "state").replace(/\s+/g, " ").trim();   // "NC St." = "NC State"
+const _stF = new Map();
+const stFold = x => { const k = x || ""; let v = _stF.get(k); if (v === undefined){ v = ffold(k).replace(/\bst\.?(?=\s|$)/g, "state").replace(/\s+/g, " ").trim(); if (_stF.size < 200000) _stF.set(k, v); } return v; };   // "NC St." = "NC State" (remembered: it's called a lot)
 function teamIn(t, title){ const T = stFold(title); return [t.name, t.short, t.nick, t.loc, (t.name||"").replace(/\b(FC|CF|AFC|SC)\b/g,"").trim()].filter(x => x && x.length > 2).some(x => T.includes(stFold(x))); }
 for (const g of games){
-  const near = x => x.sport === g.sport && x.teams.length === 2 && (!g.start || Math.abs(new Date(x.start) - g.start) < 14*3600000);
+  const near = x => x.sport === g.sport && x.teams.length === 2 && (!g.start || Math.abs((x._t ??= new Date(x.start).getTime()) - g.start) < 14*3600000);
   let f = (FX.games || []).find(x => near(x) && x.teams.every(t => teamIn(t, g.title)));
   if (!f){   // Kalshi's game name can be vague ("College Football Total Points", "RUT vs GNW"): look for a team named in the bets themselves
     const hay = g.markets.slice(0, 60).map(m => m.label.split(/ over | under |:| wins/i)[0]).join(" | ");
@@ -1515,9 +1516,9 @@ function starterForm(g, team){
 }
 // Hot players: someone whose last 2 games are well above his own 5-game average (and big enough to matter)
 function hotPlayers(team, sport){
-  const out = [];
-  for (const [n, p] of Object.entries(PL.players || {})){
-    if (p.tm !== team) continue;
+  const hk = "h|" + team + "|" + sport; if (_form.has(hk)) return _form.get(hk);
+  const out = []; _form.set(hk, out);
+  for (const [n, p] of teamPlayers(team)){
     const L = freshLog(p); if (!L || L.length < 4) continue;
     const val = r => !r ? null : sport === "Football" ? (r[9] || 0) * .5 + (r[5] || 0) + (r[2] || 0) + 20 * ((r[3] || 0) + (r[6] || 0) + (r[10] || 0)) - 25 * (r[11] || 0)
                    : sport === "Basketball" ? (r[1] || 0) + .7 * (r[2] || 0) + (r[3] || 0) : sport === "Hockey" ? (r[0] || 0) + (r[1] || 0)
@@ -1539,6 +1540,14 @@ function hotPlayers(team, sport){
   }
   return out.sort((a, b) => b.s - a.s);
 }
+// speed: every player grouped by team once, and hot/cold lists worked out once per team
+let _byTeam = null; const _form = new Map();
+function teamPlayers(team){
+  if (!_byTeam){ _byTeam = new Map(); for (const e of Object.entries(PL.players || {})){ const t = e[1].tm; if (!_byTeam.has(t)) _byTeam.set(t, []); _byTeam.get(t).push(e); } }
+  return _byTeam.get(team) || [];
+}
+let _byName = null;
+function playerByName(n){ if (!_byName){ _byName = new Map(); for (const e of Object.entries(PL.players || {})) _byName.set(ffold(e[0]), e); } return _byName.get(ffold(n)) || null; }
 // a player's game log with games older than ~2.5 months blanked out (last season's games say little about now)
 function freshLog(p){
   const T = (PL.teams || {})[p.tm], cut = Date.now() - 75 * 86400000;
@@ -1547,14 +1556,14 @@ function freshLog(p){
 }
 // Cold players: good players whose last 2 games are well below what they did before (a slump), in every sport with box scores
 function coldPlayers(team, sport){
-  const out = [];
+  const ck = "c|" + team + "|" + sport; if (_form.has(ck)) return _form.get(ck);
+  const out = []; _form.set(ck, out);
   const val = r => !r ? null : sport === "Football" ? (r[9] || 0) * .5 + (r[5] || 0) + (r[2] || 0) + 20 * ((r[3] || 0) + (r[6] || 0) + (r[10] || 0)) - 25 * (r[11] || 0)
                  : sport === "Basketball" ? (r[1] || 0) + .7 * (r[2] || 0) + (r[3] || 0) : sport === "Hockey" ? (r[0] == null ? null : (r[0] || 0) + (r[1] || 0))
                  : sport === "Soccer" ? (r[0] || 0) + .6 * (r[1] || 0) + .15 * (r[2] || 0)
                  : sport === "Baseball" ? (r[0] == null ? null : (r[1] || 0) + 2 * (r[4] || 0) + .5 * (r[3] || 0) + .5 * (r[5] || 0)) : null;
   const need = {Football: 80, Basketball: 18, Hockey: 1, Soccer: .9, Baseball: 2.5}[sport]; if (!need) return out;
-  for (const [n, p] of Object.entries(PL.players || {})){
-    if (p.tm !== team) continue;
+  for (const [n, p] of teamPlayers(team)){
     const L = freshLog(p); if (!L || L.length < 4) continue;
     const v = L.map(val), last = v.slice(-2), prev = v.slice(0, -2).filter(x => x != null);
     if (last.some(x => x == null) || prev.length < 2) continue;   // missed games (injury, rest) aren't a slump
@@ -1593,7 +1602,7 @@ function playEdge(sport, D, F, dogN, favN){
     else if (rD != null && rF != null && rD - rF >= 35) out.push(`${dogN} run the ball much better: ${r0(rD)} rushing yards a game vs ${r0(rF)}`);
     if (aD != null && aF != null && aF - aD >= 30) out.push(`${poss(dogN)} defense has been tougher: allowing ${r0(aD)} yards a game vs ${r0(aF)} for ${favN}`);
     // quarterbacks: the passer with the most attempts on each side
-    const qb = t => { let best = null; for (const [n, p] of Object.entries(PL.players || {})){ if (p.tm !== t) continue; const rows = p.log.filter(Boolean), att = rows.reduce((a, r) => a + (r[8] || 0), 0); if (att >= 40 && (!best || att > best.att)) best = {n, att, yds: rows.reduce((a, r) => a + (r[9] || 0), 0) / rows.length, td: rows.reduce((a, r) => a + (r[10] || 0), 0), int: rows.reduce((a, r) => a + (r[11] || 0), 0), g: rows.length}; } return best; };
+    const qb = t => { let best = null; for (const [n, p] of teamPlayers(t)){ const rows = p.log.filter(Boolean), att = rows.reduce((a, r) => a + (r[8] || 0), 0); if (att >= 40 && (!best || att > best.att)) best = {n, att, yds: rows.reduce((a, r) => a + (r[9] || 0), 0) / rows.length, td: rows.reduce((a, r) => a + (r[10] || 0), 0), int: rows.reduce((a, r) => a + (r[11] || 0), 0), g: rows.length}; } return best; };
     const qD = qb(D.name), qF = qb(F.name);
     if (qD && qF && qD.yds - qF.yds >= 25 && (qD.td - qD.int) >= (qF.td - qF.int)) out.push(`Quarterbacks: ${qD.n} (${dogN}) ${r0(qD.yds)} yards a game, ${qD.td} TD / ${qD.int} INT lately vs ${qF.n} (${favN}) ${r0(qF.yds)} yards, ${qF.td} TD / ${qF.int} INT`);
   }
