@@ -2748,7 +2748,7 @@ function teamHit(t, T, RAW){
   let best = 0;
   for (const [nm, w] of names){ if (!nm || nm.length < 3) continue; const n = TK.word(nm); if (n.trim().length >= 3 && T.includes(n)) best = Math.max(best, w*1000 + n.length*10); }
   if (t.abbr && t.abbr.length >= 2 && new RegExp("(^|[^A-Za-z])" + t.abbr + "([^A-Za-z]|$)").test(RAW)) best += 1500;
-  const ALT = {LV:"Las Vegas", LA:"Los Angeles", NY:"New York", NOLA:"New Orleans", TB:"Tampa Bay", KC:"Kansas City", GB:"Green Bay", NE:"New England", SF:"San Francisco"};
+  const ALT = {JAC:"Jacksonville", JAX:"Jacksonville", LV:"Las Vegas", LA:"Los Angeles", NY:"New York", NOLA:"New Orleans", TB:"Tampa Bay", KC:"Kansas City", GB:"Green Bay", NE:"New England", SF:"San Francisco"};
   for (const [k, v] of Object.entries(ALT)) if (new RegExp("(^|[^A-Za-z])" + k + "([^A-Za-z]|$)").test(RAW) && ffold(t.loc || "").startsWith(ffold(v))) best += 1200;
   return best;
 }
@@ -2919,7 +2919,8 @@ function kalshiInGame(leg){
   for (const g of games){
     if (g.start && now - g.start > 5*3600000) continue;
     const T = stFold(g.title + " " + g.markets.slice(0, 120).map(m => m.label).join(" ") + " " + (g.facts ? g.facts.teams.map(t => [t.name, t.short, t.nick, t.loc].join(" ")).join(" ") : ""));   // some Kalshi games carry no team names in the title
-    const ok = x => { const w = stFold(x).split(" ").filter(y => y.length > 2); return (w.length && w.some(y => T.includes(y))) || (g.facts && g.facts.teams.some(t => teamHit(t, TK.word(x), x) >= 1200)); };
+    const TW = " " + T.replace(/[^a-z0-9.]+/g, " ") + " ";   // whole words only ("bal" must not match "basketball")
+    const ok = x => { const w = stFold(x).split(" ").filter(y => y.length > 2); return (w.length && w.some(y => TW.includes(" " + y + " "))) || (g.facts && g.facts.teams.some(t => teamHit(t, TK.word(x), x) >= 1200)); };
     if (!ok(a) || !ok(b)) continue;
     // "Over 10.5 points in 1H" / "WAS Commanders over 10.5 points": match by half/quarter, over/under, number and team
     const tk = x => { const t = ffold(x).replace(/\s+/g, " "); const n = /\b(over|under)\s+([\d.]+)/.exec(t); if (!n || !/points|runs|goals/.test(t) || /wins? by/.test(t)) return null;
