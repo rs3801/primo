@@ -2987,7 +2987,7 @@ function kalshiWinner(g, t){
 function gradeLeg(leg){
   if (leg.no){   // a "No" pick: find the Yes question, then grade the opposite side
     const r0 = gradeLeg(Object.assign({}, leg, {no: false, paid: leg.paid != null ? 1 - leg.paid : null}));
-    if (!r0.km){ if (r0.chance != null) r0.chance = 1 - r0.chance; r0.leg = leg; return r0; }
+    if (!r0.km){ if (r0.chance != null) r0.chance = 1 - r0.chance; r0.leg = leg; r0.desc = `"No" on: ${leg.who}`; r0.tag = r0.chance == null ? "" : r0.chance >= .65 ? "Likely" : r0.chance >= .52 ? "Leans yes" : r0.chance >= .45 ? "Coin flip" : "Long shot"; return r0; }
     const inv = r0.km.g.markets.find(x => x.noOf === r0.km);
     if (inv){ const r = {leg, chance: null, how: [], notes: [], warn: []}; return gradeKalshi(leg, inv, r); }
     const r = r0; r.leg = leg; r.chance = 1 - r0.chance; r.desc = `"No" on: ${r0.km.pick || r0.km.label}`; r.tag = r.chance >= .65 ? "Likely" : r.chance >= .52 ? "Leans yes" : r.chance >= .45 ? "Coin flip" : "Long shot";
