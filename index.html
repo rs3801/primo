@@ -829,6 +829,11 @@ function newsAdjust(m, op){
 // the sharp price check: Pinnacle's fair chance vs what a Yes costs on Kalshi. A real edge moves the verdict up a step, overpaying moves it down.
 const V_UP = {drop: ["risky", "🤔 Risky"], risky: ["okay", "👍 Okay"], okay: ["keep", "✅ Keep"]}, V_DN = {keep: ["okay", "👍 Okay"], okay: ["risky", "🤔 Risky"]};
 function sharpAdjust(m, op){
+  const out = sharpAdjust0(m, op);
+  if (out && out.v !== "drop" && out.flip) out.flip = null;   // no "flip it" advice once Primo no longer drops this side
+  return out;
+}
+function sharpAdjust0(m, op){
   if (op) newsAdjust(m, op);
   if (op && (m.type === "winner" || m.type === "spread") && lineModel(m.g) && m.lineEV != null){
     const L = m.g._line;
@@ -854,18 +859,19 @@ function sharpAdjust(m, op){
   }
   if (op && (m.type === "winner" || m.type === "spread")){   // 🚨 upset alert (not strong enough for a pick): never call the underdog's side a Drop
     const u = upsetFor(m.g);
-    if (u && !u.strong){
-      const side = ffold(m.pick || m.label), dog = ffold(u.dog), fav = ffold(u.fav);
-      const dogSide = side.startsWith(dog) && !side.startsWith(fav) && !/wins by|by over|by more/.test(side.slice(dog.length)) || (m.noOf && ffold(m.noOf.label).startsWith(fav));
+    if (u && !(u.strong && m.type === "winner")){
+      const T = n => m.g.facts && m.g.facts.teams.find(y => (y.short || y.name) === n), lead = (txt, n) => { const t = T(n); const head = ffold(txt).split(/ wins| \+| -|:| over| under/)[0]; return t ? teamIn(t, head) : head.startsWith(ffold(n)); };
+      const txt = m.pick || m.label;
+      const dogSide = lead(txt, u.dog) && !lead(txt, u.fav) && !/wins by|by over|by more/i.test(txt) || (m.noOf && lead(m.noOf.label, u.fav));
       if (dogSide){
-        op.pros = [`🚨 Upset alert: ${u.reasons.slice(0, 3).join("; ")}.`].concat(op.pros || []);
+        op.pros = [`🚨 ${u.strong ? "Primo's upset pick" : "Upset alert"}: ${u.reasons.slice(0, 3).join("; ")}.`].concat(op.pros || []);
         if (op.v === "drop"){ op.v = "risky"; op.badge = "🤔 Risky"; op.say = op.say.replace(/^Primo would leave this out\./, "A real underdog shot, not a sure thing."); }
       }
     }
   }
   if (op && m.type === "winner"){   // Primo's upset pick: the underdog's win bet moves up a step, the favorite's down a step
-    const u = upsetFor(m.g), lab = ffold(m.label.replace(/ wins$/i, "")), is = n => { const x = ffold(n); return lab.includes(x) || x.includes(lab); };
-    if (u && u.strong && is(u.dog) && !is(u.fav)){ op.pros = [`🚨 Primo's upset pick: ${u.reasons.slice(0, 3).join("; ")}.`].concat(op.pros || []); const up = V_UP[op.v]; if (up){ op.v = up[0]; op.badge = up[1]; } op.say += ` 🚨 Upset pick: ${u.dog} are playing better than their price.`; }
+    const u = upsetFor(m.g), lab = ffold(m.label.replace(/ wins$/i, "")), is = n => { const t = m.g.facts && m.g.facts.teams.find(y => (y.short || y.name) === n); if (t) return teamIn(t, m.label); const x = ffold(n); return lab.includes(x) || x.includes(lab); };
+    if (u && u.strong && is(u.dog) && !is(u.fav)){ op.say = op.say.replace(/^Primo would leave this out\./, "An underdog with real reasons to win."); op.pros = [`🚨 Primo's upset pick: ${u.reasons.slice(0, 3).join("; ")}.`].concat(op.pros || []); const up = V_UP[op.v]; if (up){ op.v = up[0]; op.badge = up[1]; } op.say += ` 🚨 Upset pick: ${u.dog} are playing better than their price.`; }
     else if (u && u.strong && is(u.fav) && !is(u.dog)){ op.cons = [`🚨 Upset risk: ${u.dog} have been playing better (${u.reasons.slice(0, 2).join("; ")}).`].concat(op.cons || []); const dn = V_DN[op.v]; if (dn){ op.v = dn[0]; op.badge = dn[1]; } }
   }
   if (op && op.v === "drop" && likedBy(m)){ op.v = "risky"; op.badge = "🤔 Risky"; op.say = op.say.replace(/^Primo would leave this out\./, "A long shot Primo's research likes."); }
@@ -2951,6 +2957,7 @@ function kalshiInGame(leg){
 }
 function gradeKalshi(leg, m, r){
   const g = m.g; r.g = g; r.f = g.facts || null; r.km = m;
+  if (g.facts && m.type === "winner" && !r.t){ const t = g.facts.teams.find(x => teamIn(x, m.label)); if (t){ r.t = t; r.opp = g.facts.teams.find(x => x !== t); } }
   if (g.facts && m.type !== "winner"){ const t = g.facts.teams.find(x => teamIn(x, m.label.split(/ wins by| over| under|:/i)[0])); if (t){ r.side = t; r.sideOpp = g.facts.teams.find(x => x !== t); } }
   r.title = `${g.title} · ${g.sport}, ${g.leagueName}`;
   r.when = g.start;
@@ -2971,11 +2978,14 @@ function gradeKalshi(leg, m, r){
     r.notes.push(mine ? `✓ Primo's research also leans ${rs.lean}.` : `✗ Primo's research leans ${rs.lean}.`); }
   const l = likedBy(m); if (l) r.notes.push(`✓ Primo likes this bet: ${l.why || l.text || ""}`);
   for (const x of statsText(g)) r.notes.push(x);
-  if (!rs) r.notes.push(`Primo hasn't written research on this ${g.sport === "Tennis" ? "match" : "game"} — this grade is Kalshi's price only.`);
+  if (!rs) r.notes.push(g.facts ? `Primo hasn't written research on this ${g.sport === "Tennis" ? "match" : "game"}, so this grade uses the stats: records, form, how both teams have played, hot players and upset checks.` : `Primo hasn't written research on this ${g.sport === "Tennis" ? "match" : "game"} — this grade is Kalshi's price only.`);
   for (const [team, rows] of g.injuries || []){ const out = rows.filter(p => /out|doubtful/i.test(p.status)).slice(0, 4); if (out.length) r.notes.push(`${team} missing: ${out.map(p => `${p.player} (${p.pos || "?"}, ${p.status.toLowerCase()}${p.injury ? " – " + p.injury.toLowerCase() : ""})`).join("; ")}.`); }
   r.tag = r.chance >= .65 ? "Likely" : r.chance >= .52 ? "Leans yes" : r.chance >= .45 ? "Coin flip" : "Long shot";
-  r.take = m.type === "winner" ? (t => t && sharpAdjust(m, t))(buildTakeK(r, m, g)) : opOf(m); r.kname = m.type === "winner" ? m.label : m.pick;
-  { const u = upsetFor(g); if (u && m.label === u.fav) r.warn.push(`🚨 Upset alert: Primo sees a real chance ${u.dog} wins: ${u.reasons.join("; ")}.`); else if (u && m.label === u.dog) r.notes.unshift(`🚨 Upset pick: ${u.reasons.join("; ")}.`); }
+  r.take = m.type === "winner" && !g.facts ? (t => t && sharpAdjust(m, t))(buildTakeK(r, m, g)) : opOf(m); r.kname = m.type === "winner" ? m.label : m.pick;
+  { const u = upsetFor(g), side = n => { const t = g.facts && g.facts.teams.find(x => (x.short || x.name) === n); return t ? teamIn(t, m.label) : ffold(m.label).includes(ffold(n)); };
+    const team = m.type === "winner" || /wins by|[+-]\d/.test(m.pick || m.label);
+    if (u && team && side(u.fav) && !side(u.dog)) r.warn.push(`🚨 Upset alert: Primo sees a real chance ${u.dog} wins: ${u.reasons.join("; ")}.`);
+    else if (u && team && side(u.dog)) r.notes.unshift(`🚨 ${u.strong ? "Primo's upset pick" : "Upset alert"}: ${u.reasons.join("; ")}.`); }
   return r;
 }
 function kalshiGame(f){ return games.find(g => g.facts === f) || null; }
