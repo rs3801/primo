@@ -866,6 +866,8 @@ function sharpAdjust0(m, op){
       if (dogSide){
         op.pros = [`🚨 ${u.strong ? "Primo's upset pick" : "Upset alert"}: ${u.reasons.slice(0, 3).join("; ")}.`].concat(op.pros || []);
         if (op.v === "drop"){ op.v = "risky"; op.badge = "🤔 Risky"; op.say = op.say.replace(/^Primo would leave this out\./, "A real underdog shot, not a sure thing."); }
+        // points on an underdog Primo likes, with a big enough cushion that it's likely anyway: at least Okay (Keep for an upset pick)
+        if (m.type === "spread" && m.p >= .6 && (op.v === "risky" || op.v === "drop")){ const strongP = u.strong && m.p >= .65; op.v = strongP ? "keep" : "okay"; op.badge = strongP ? "✅ Keep" : "👍 Okay"; op.say = op.say.replace(/^(A real underdog shot, not a sure thing|Close to a coin flip|Primo would leave this out)\./, strongP ? "Solid leg: an underdog Primo likes, with points to spare." : "Decent: an underdog with a real shot, plus a points cushion."); }
       }
     }
   }
