@@ -2276,7 +2276,7 @@ function filterSummary(){
 /* ---------- views ---------- */
 function renderBuild(){
   $("filtsum").textContent = filterSummary();
-  if (!built){ $("results").innerHTML = `<div class="empty">Pick how many legs, set the filters, then tap <b>Build combos</b>. Pick 1 for a single bet (one game, one pick), or more for a combo. Primo will make a Primo's picks combo (bets its research likes) plus Safe, Middle and High risk combos, one leg per game when there are enough games, and mixes in more bets from the same game when there aren't.</div>`; return; }
+  if (!built){ $("results").innerHTML = `<div class="empty">Pick how many legs, set the filters, then tap <b>Build combos</b>. Pick 1 for a single bet (one game, one pick), or more for a combo. Primo will make a Primo's picks combo (bets its research likes), a 🎰 Long shot (many likely player bets for a huge payout) plus Safe, Middle and High risk combos, one leg per game when there are enough games, and mixes in more bets from the same game when there aren't.</div>`; return; }
   let html = state.legs === 1 ? `<p class="filtsum" style="grid-column:1/-1;margin:14px 0 0">Single bet: each box below is one pick at a different risk level. Choose the one you like; you only need one.</p>` : "";
   for (const [k,t] of Object.entries(TIERS)){
     const legs = built[k].legs;
@@ -2576,7 +2576,7 @@ $("stamp").innerHTML = "Prices as of " + esc(D.asof) + (SH.asof ? "<br>Pinnacle 
 (function(){ const P = window.PRIMO_REPORT; if (!P) return;
   const el = document.createElement("details"); el.className = "scorecard"; el.style.cssText = "margin:0 0 12px;padding:10px 12px;border-radius:12px;background:var(--card,#fff);box-shadow:0 1px 3px rgba(0,0,0,.08);font-size:14px";
   const G = P.groups || {}, all = G.all;
-  const NAMES = {keep:"👍 Keep", okay:"👌 Okay", risky:"⚠️ Risky", drop:"❌ Drop", good:"✅ Good value", pricey:"💸 Pricey", keepgood:"👍 Keep + ✅ Good value", sharpedge:"💰 Real edge (Pinnacle)", sharpover:"💸 Overpriced (Pinnacle)", linepick:"📏 Primo's line pick"};
+  const NAMES = {keep:"👍 Keep", okay:"👌 Okay", risky:"⚠️ Risky", drop:"❌ Drop", good:"✅ Good value", pricey:"💸 Pricey", keepgood:"👍 Keep + ✅ Good value", sharpedge:"💰 Real edge (Pinnacle)", sharpover:"💸 Overpriced (Pinnacle)", linepick:"📏 Primo's line pick", longshot:"🎰 Long-shot legs"};
   const row = (lab, s) => `<tr><td>${lab}</td><td>${s.n}</td><td><b>${s.hit}%</b></td><td>${s.expected}%</td><td style="color:${s.per10 >= 0 ? "#1a7f37" : "#c62828"}"><b>${s.per10 >= 0 ? "+" : "−"}$${Math.abs(s.per10).toFixed(2)}</b></td></tr>`;
   const table = rows => `<table style="width:100%;border-collapse:collapse;margin-top:6px;font-size:13px"><tr style="text-align:left;opacity:.7"><th>Bet</th><th>Bets</th><th>Won</th><th>Kalshi expected</th><th>Per $10</th></tr>${rows}</table>`;
   const head = all ? `<b>📊 Primo's report card:</b> ${all.n} bets graded over ${P.days} day${P.days === 1 ? "" : "s"}${G.keep ? `. "Keep" bets won ${G.keep.hit}% (Kalshi expected ${G.keep.expected}%)` : ""}.` : `<b>📊 Primo's report card:</b> collecting. ${P.waiting} bets recorded, waiting for their games to finish.`;
@@ -3802,14 +3802,16 @@ Rules: write every bet in plain words ("Guardians score 3 or more runs, win or l
 /* ---------- report card robot: what Primo thinks of every bet shortly before its game starts ---------- */
 window.__primoSnapshot = function(hours){
   const now = Date.now(), lim = (hours || 3) * 3600000, out = [];
+  let LS = new Set(); try { LS = new Set(longShotPool()); } catch (e) {}   // 🎰 long-shot legs get graded too
   for (const g of games){
     if (!g.start || started(g) || g.start.getTime() - now > lim) continue;
     const ms = g.markets.filter(m => !isNaN(m.p) && !isNaN(m.ask) && m.p >= .08 && m.p <= .95 && (m.vol >= 25 || m.noOf)).sort((a, b) => b.vol - a.vol).slice(0, 50);
+    for (const m of LS) if (m.g === g && !ms.includes(m)) ms.push(m);
     for (const m of ms){
       const op = opOf(m), src = m.noOf || m;
       const vT = m.valueTh || (m.valueEst ? 5 : 3);
       lineModel(g);
-      out.push({lp: !!m.linePick, pp: m.primoP == null ? null : Math.round(m.primoP*1000)/10, series: src.series, code: src.code, label: src.label, inverse: !!m.noOf, pick: m.pick || m.label, game: g.title || "", sport: g.sport, league: g.leagueName || "", type: m.type,
+      out.push({ls: LS.has(m), lp: !!m.linePick, pp: m.primoP == null ? null : Math.round(m.primoP*1000)/10, series: src.series, code: src.code, label: src.label, inverse: !!m.noOf, pick: m.pick || m.label, game: g.title || "", sport: g.sport, league: g.leagueName || "", type: m.type,
         start: g.start.toISOString(), p: Math.round(m.p*100), ask: Math.round(m.ask*100), value: m.value == null ? null : m.value,
         src: m.sharp ? "sharp" : m.book != null ? "book" : m.valueEst ? "est" : "none", fair: m.fair == null ? null : Math.round(m.fair*1000)/10, flag: m.value == null ? "none" : m.value >= vT ? "good" : m.value <= -(vT + 1) ? "pricey" : "fair", verdict: op ? op.v : "none"});
     }
