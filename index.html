@@ -337,6 +337,7 @@ const TIERS = {
   best:   {name:"Best value", lo:.60, hi:.90, sort:"score", blurb:"Primo's smartest mix: likely bets (60–90%) that are cheaper on Kalshi than the sportsbooks' fair price (winners, spreads and totals), rated well by Primo, or that the money is moving toward. Each combo shows its expected return."},
   safe:   {name:"Safe",   lo:.80, hi:.97, sort:"p",   blurb:"Biggest favorites. Smallest payout, best chance."},
   middle: {name:"Middle", lo:.58, hi:.82, sort:"score", blurb:"Solid favorites with a few closer calls, edges first."},
+  longshot: {name:"🎰 Long shot", custom:true, blurb:"A lottery ticket built from Primo's homework: player bets (Yes and No) where each player's recent games beat Kalshi's price, plus line picks. Many legs, huge payout, small chance. Bet only a few dollars."},
   high:   {name:"High risk", lo:.30, hi:.60, sort:"score", blurb:"Close games and underdogs for a big payout, picking the ones with an edge first (cheaper than the sportsbooks, liked by Primo, or money moving in). Expect most of these to miss."}
 };
 
@@ -391,6 +392,7 @@ function periodOf(text){
 }
 // what has to happen for this bet to pay, in one plain sentence
 function explain(m){
+  if (m.noOf && /^[^:]+:/.test(m.noOf.label)){ const [who, what] = m.noOf.label.split(/:\s*/); return `${who} must NOT reach ${what} in this game. On Kalshi, buy "No" on "${m.noOf.label}".`; }
   if (m.noOf) return `${niceName(m.g.sport, m.opp)} has to win, or lose by ${Math.floor(m.line)} ${m.unit} or fewer. On Kalshi, buy "No" on "${m.noOf.label}".`;
   const sp = m.g.sport, L = m.label.replace(/\?$/, "").replace(/^Reg Time:\s*/i, ""), T = m.stitle, both = T + " " + L;
   const name = s => niceName(sp, s.trim());
@@ -954,6 +956,56 @@ function betKind(m){
   return m.series;
 }
 const playerOf = m => { const w = (/^([^:]+):/.exec(m.label) || [])[1]; return w ? w.trim().toLowerCase() : ""; };
+// 🎰 Long shot: every player bet (Yes, and the No side) where the player's own recent games say it hits more often than Kalshi's price
+function propNo(m, est, ins){
+  const k = m.key + "|NO"; if (byKey.has(k)) return byKey.get(k);
+  const bid = 2 * m.p - m.ask; if (!(bid > .02)) return null;
+  const x = Object.assign({}, m, {label: "No · " + m.label, pick: "No · " + (m.pick || m.label), p: 1 - m.p, ask: Math.min(.99, 1 - bid), noOf: m, key: k, move: -(m.move || 0), fair: null, value: null, _op: undefined});
+  const pp = 1 - est, c = x.ask;
+  x.primoP = pp;
+  x._op = {v: pp >= .7 ? "keep" : "okay", badge: pp >= .7 ? "✅ Keep" : "👍 Okay", say: `Primo's homework puts the No at about ${Math.round(pp*100)}%, Kalshi asks ${Math.round(c*100)}¢.`,
+           pros: [`📊 ${m.label.split(":")[0]} has been under this line: Primo puts the No at about ${Math.round(pp*100)}% (Kalshi ${Math.round(c*100)}¢).`].concat((ins.cons || []).filter(t => !/^📊/.test(t))), cons: (ins.pros || []).filter(t => !/^📊/.test(t)).slice(0, 2)};
+  byKey.set(k, x); return x;
+}
+function longShotPool(){
+  const out = [], now = Date.now();
+  for (const g of games){
+    if (!gameOK(g) || started(g) || !g.start || g.start - now > 48 * 3600000) continue;
+    for (const m of g.markets){
+      if (m.noOf || isNaN(m.p) || isNaN(m.ask) || m.ask <= .03 || m.ask >= .97 || m.ask - m.p > .06) continue;
+      { const pi = playerInjury(m); if (pi && (pi.status === "Out" || pi.status === "Doubtful")) continue; if (notStarting(m)) continue; }
+      if (/^[^:]+:/.test(m.label) && m.type !== "winner"){
+        const ins = propInsight(m); if (!ins || ins.est == null || ins.n < 5) continue;
+        // like the winning tickets people post: every leg is LIKELY on its own (Kalshi 50%+), and the player's games say a bit more
+        // (5 games is a small sample, so Primo only trusts half of the difference)
+        const est = m.p + .5 * (ins.est - m.p);
+        if (m.ask >= .5 && m.ask <= .92 && est - m.ask >= .03){ m.primoP = est; out.push({m, pp: est, e: est - m.ask}); }
+        else if (1 - m.p >= .5){ const x = propNo(m, est, ins); if (x && x.ask >= .5 && x.ask <= .92 && x.primoP - x.ask >= .03) out.push({m: x, pp: x.primoP, e: x.primoP - x.ask}); }
+      } else if (m.type === "winner" || m.type === "spread" || /TOTAL/i.test(m.series)){
+        lineModel(g); const op = opOf(m); if (!op || !/keep|okay/.test(op.v) || leanClash(m)) continue;
+        const pp = m.linePick && m.primoP != null ? m.primoP : m.fair != null ? m.fair : null; if (pp == null) continue;
+        if (m.ask >= .5 && m.ask <= .92 && pp - m.ask >= .03) out.push({m, pp, e: pp - m.ask});
+      }
+    }
+  }
+  out.sort((a, b) => (b.e + .25 * b.pp) - (a.e + .25 * a.pp));   // a good price first, but likely legs win ties
+  return out.map(x => x.m);
+}
+function pickLongShot(pool, n){
+  const legs = [], perGame = new Map(), seen = new Set(), sided = new Set();
+  const statKey = m => { const b = m.noOf || m; const pl = playerOf(b); if (!pl) return null; const pp = propParse(b); return pl + "|" + (pp ? (pp.stat || pp.dd) : b.series); };
+  for (const pass of [4, 6]){   // first at most 4 legs from one game, then up to 6 if more legs are needed
+    for (const m of pool){
+      if (legs.length >= n) break;
+      if (legs.includes(m) || (perGame.get(m.g) || 0) >= pass) continue;
+      const sk = statKey(m); if (sk && seen.has(sk)) continue;
+      const base = (m.noOf || m).key; if (legs.some(x => (x.noOf || x).key === base)) continue;
+      if ((m.type === "winner" || m.type === "spread") && !sk){ if (sided.has(m.g)) continue; sided.add(m.g); }
+      legs.push(m); perGame.set(m.g, (perGame.get(m.g) || 0) + 1); if (sk) seen.add(sk);
+    }
+  }
+  return legs;
+}
 function pickLegs(pool, n){
   // pass 1: round-robin across sports so mixed combos really mix; one leg per game
   const bySport = new Map();
@@ -1035,6 +1087,7 @@ async function build(){
   state.legs = n; $("legs").value = n;
   built = {};
   for (const k of Object.keys(TIERS)){
+    if (TIERS[k].custom){ const pool = n > 1 ? longShotPool().filter(comboOK) : []; built[k] = {pool, legs: pickLongShot(pool, n >= 8 ? n : 10)}; continue; }
     const pool = candidatesFor(k);
     if (n > 1) pool.splice(0, pool.length, ...pool.filter(comboOK));   // combos: only bets Kalshi lets you combine
     built[k] = { pool, legs: pickLegs(pool.slice(), n) };
@@ -1195,11 +1248,19 @@ const BOOK_ALIAS = [   // how sportsbooks write some schools
   [/ mississippi (?!st |state )/g, " mississippi ole miss "], [/ miami \(?fl\)? | miami florida /g, " miami hurricanes "], [/ miami \(?oh\)? | miami ohio /g, " miami redhawks "],
   [/ connecticut /g, " connecticut uconn "], [/ massachusetts /g, " massachusetts umass "], [/ southern california /g, " usc "], [/ central florida /g, " ucf "], [/ southern methodist /g, " smu "], [/ brigham young /g, " byu "],
   [/ louisiana state /g, " lsu "], [/ pittsburgh /g, " pittsburgh pitt "], [/ nevada las vegas /g, " unlv "], [/ texas christian /g, " tcu "], [/ florida intl /g, " florida international "]];
-function aliasWords(T){ for (const [r, w] of BOOK_ALIAS) T = T.replace(r, w); return T; }
+const _alias = new Map();
+function aliasWords(T){ const k = T; let v = _alias.get(k); if (v !== undefined) return v; for (const [r, w] of BOOK_ALIAS) T = T.replace(r, w); if (_alias.size < 100000) _alias.set(k, T); return T; }
 /* ---------- sharp prices: Pinnacle, the sportsbook professional bettors use (its cut removed) ---------- */
 const SH = window.PRIMO_SHARP || {games: []};
-const shNorm = x => " " + stFold(x).replace(/[^a-z0-9 ]/g, " ").replace(/\b(fc|cf|sc|afc|club|cd|ca|ac|de|the|deportivo|university|univ)\b/g, " ").replace(/\s+/g, " ").trim() + " ";
-function shName(k, pn){   // does Kalshi's name k mean the same team/player as Pinnacle's pn?
+const _shN = new Map();
+const shNorm = x => { let v = _shN.get(x); if (v === undefined){ v = shNorm0(x); if (_shN.size < 100000) _shN.set(x, v); } return v; };
+const shNorm0 = x => " " + stFold(x).replace(/[^a-z0-9 ]/g, " ").replace(/\b(fc|cf|sc|afc|club|cd|ca|ac|de|the|deportivo|university|univ)\b/g, " ").replace(/\s+/g, " ").trim() + " ";
+const _shName = new Map();
+function shName(k, pn){ const key = k + "\u0001" + pn; let v = _shName.get(key); if (v === undefined){ v = shName0(k, pn); if (_shName.size < 300000) _shName.set(key, v); } return v; }
+const _tok = new Map();
+const shTok = x => { let v = _tok.get(x); if (!v){ const n = shNorm(x); v = new Set((n + " " + aliasWords(n)).split(" ").filter(w => w.length >= 2)); _tok.set(x, v); } return v; };
+function shName0(k, pn){   // does Kalshi's name k mean the same team/player as Pinnacle's pn?
+  { const ta = shTok(k), tb = shTok(pn); let hit = false; for (const w of ta) if (tb.has(w)){ hit = true; break; } if (!hit) return false; }   // quick check: no word in common = not the same name
   const a = shNorm(k), b = shNorm(pn), A = a.trim(), B = b.trim(); if (!A || !B) return false;
   if (A === B || (A.length >= 4 && b.includes(a)) || (B.length >= 4 && a.includes(b))) return true;
   const ab = aliasWords(" " + A + " "), bb = aliasWords(" " + B + " ");
@@ -1232,10 +1293,13 @@ function shProp(x, lab){
   }
   return null;
 }
+const SH_IDX = new Map();
+for (const x of SH.games) for (const w of new Set([...shTok(x.h), ...shTok(x.a)])){ if (!SH_IDX.has(w)) SH_IDX.set(w, []); SH_IDX.get(w).push(x); }
 for (const g of games){
   if (!g.start || !SH.games.length) continue;
   const names = [...new Set(g.markets.filter(m => m.type === "winner" && !/^(tie|draw)$/i.test(m.label) && !/:|wins by/i.test(m.label)).map(m => m.label).concat((g.title || "").split(/ vs | at /)))].filter(x => x && x.length > 1 && !/ game$/i.test(x));
-  const x = SH.games.filter(x => x.s === g.sport && Math.abs(new Date(x.t + ":00Z") - g.start) < 14*3600000 && (/women|wnba|wta|\bw\b/i.test(x.l) === !!g.women || g.sport === "Tennis") &&
+  const cand = new Set(); for (const n of names) for (const w of shTok(n)){ const l = SH_IDX.get(w); if (l) for (const y of l) cand.add(y); }   // only Pinnacle games sharing a word with this game's teams
+  const x = [...cand].filter(x => x.s === g.sport && Math.abs((x._t ??= new Date(x.t + ":00Z").getTime()) - g.start) < 14*3600000 && (/women|wnba|wta|\bw\b/i.test(x.l) === !!g.women || g.sport === "Tennis") &&
     names.some(n => shName(n, x.h)) && names.some(n => shName(n, x.a))).sort((a, b) => Math.abs(new Date(a.t + ":00Z") - g.start) - Math.abs(new Date(b.t + ":00Z") - g.start))[0];
   if (!x) continue;
   g.sharp = x;
@@ -1980,7 +2044,9 @@ function teamUsage(team){
   return {useTgt, rec, run, n: N};
 }
 // how much a team's defense has given up lately, and where that ranks in its league
-function defense(team){
+const _def = new Map();
+function defense(team){ if (!_def.has(team)) _def.set(team, defense0(team)); return _def.get(team); }
+function defense0(team){
   const T = PL.teams[team]; if (!T || !T.g.length) return null;
   const al = k => { const v = T.g.map(x => (x.a || {})[k]).filter(x => x != null); return v.length ? avg(v) : null; };
   const d = {pass: al("netPassingYards"), rush: al("rushingYards"), pts: avg(T.g.map(x => x.pa).filter(x => x != null)), shots: al("shotsTotal"), n: T.g.length};
@@ -2123,6 +2189,7 @@ function legHTML(m, i, tier, legs){
   return `<li class="leg" style="--c:var(${color})"><div class="legmain"><div class="legpick">${m.live && m.g.liveNow ? "🔴 " : ""}${esc(m.pick)}</div>${liveTag}${worthHTML(m)}<div class="legsub">${esc(m.g.title)} · ${esc(fmtShort(m.g.date))}${m.g.start?" · "+esc(fmtTime(m.g.start)):""} · <span class="sp">${esc(m.g.sport)}</span>${m.g.women?" · Women":""}</div><div class="legsub legleague">League: <b>${esc(m.g.leagueName)}</b></div>${(pt => pt ? `<div class="legsub legleague">Player: <b>${esc(pt[0])}</b> plays for <b>${esc(pt[1])}</b></div>` : "")(playerTeam(m))}<div class="legsub">On Kalshi: <b>${esc(m.stitle)}</b>${m.type!=="winner"?` · pick “${esc(m.label)}”`:""} · <a href="${kalshiLink(m)}" target="_blank" rel="noopener">Open this game ↗</a></div><div class="legnote mean"><b>To win:</b> ${esc(explain(m))}</div>${comboOK(m)?"":`<div class="legnote mean"><b>Single bet only:</b> Kalshi doesn't let this bet go in a combo. Bet it by itself on Kalshi.</div>`}${gameCall(m)}${legWhy(m, tier, legs)}</div><div class="legright"><div class="pct">${pctTxt(m.p)}</div><div class="legact">${actions}</div></div></li>`;
 }
 function meaning(m){
+  if (m.noOf && /^[^:]+:/.test(m.noOf.label)){ const [who, what] = m.noOf.label.split(/:\s*/); return `${who} must NOT reach ${what}. On Kalshi, buy "No" on "${m.noOf.label}".`; }
   const t = m.stitle.toUpperCase();
   let s = "";
   if (m.type === "winner" && m.g.sport === "Soccer" && !/^tie$/i.test(m.label)) s = "Soccer: a tie (draw) counts as a loss for this pick.";
@@ -2217,6 +2284,10 @@ function renderBuild(){
     const single = state.legs === 1;
     html += `<section class="tier tier-${k}"><header class="thead"><div><h3>${t.name}${single ? " · single bet" : ""}</h3><p>${t.blurb}</p></div><button class="btn sm" type="button" data-use="${k}"${legs.length?"":" disabled"}>${single ? "Use this bet" : "Use this combo"}</button></header>`;
     html += legs.length ? totalsHTML(legs) : "";
+    if (t.custom && legs.length){
+      const kp = legs.reduce((a, m) => a * m.p, 1), pp = legs.reduce((a, m) => a * (m.primoP ?? m.p), 1), cost = comboCost(legs), one = x => Math.max(1, Math.round(1 / x)).toLocaleString();
+      html += `<p class="warn" style="color:var(--ink)">🎰 Kalshi's chance all ${legs.length} hit: about <b>1 in ${one(kp)}</b>. If Primo's homework is right on every leg: about <b>1 in ${one(pp)}</b>${pp > kp * 1.15 ? " (each leg beat its price; homework is never perfect, so expect something in between)" : ""}. <b>$5 pays about ${TK.usd(5 / cost)}</b> if all hit. This is a lottery ticket: bet only what you're happy to lose, and expect it to miss most of the time.</p>`;
+    }
     const poolGames = new Set(built[k].pool.map(m => m.g)).size, sportsTxt = [...new Set(built[k].pool.map(m => m.g.sport))].join(" and ").toLowerCase() || "these";
     const allGames = Math.max(...Object.values(built).map(b => new Set(b.pool.map(m => m.g)).size)), fights = built[k].pool.length && built[k].pool.every(m => m.g.sport === "Boxing" || m.g.sport === "MMA"), GW = fights ? "fights" : "games";
     if (short && !single && t.liked && poolGames < allGames && poolGames <= legs.length) html += `<p class="warn">Primo only rates bets in ${poolGames} of the ${allGames} ${GW} ✅ Keep or 👍 Okay right now, so Primo's picks has ${legs.length} leg${legs.length>1?"s":""}. The other combos below use every ${fights ? "fight" : "game"}${allGames < state.legs ? `, but Kalshi only allows ${allGames} ${GW} with these filters in a combo${fights ? " (only the winner bet, one fighter per fight)" : ""}. Add another sport to reach ${state.legs} legs` : ""}.</p>`;
