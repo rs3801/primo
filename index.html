@@ -2822,12 +2822,14 @@ function parseTicket(text){
 }
 function parseLeg(L){
   { L = L.replace(/(%)\s*[xX×✕✖*]?\s*$/, "$1");
-    const pm = /(\d{1,2}(?:\.\d)?)\s*%\s*$/.exec(L), vm = /\(([^)]*?\bvs\.?\s[^)]*)\)?/i.exec(L);
+    let pm = /(\d{1,2}(?:\.\d)?)\s*%\s*$/.exec(L); const vm = /\(([^)]*?\bvs\.?\s[^)]*)\)?/i.exec(L);
+    // Kalshi shows "--" instead of a % when a pick has no price right now (game started or line pulled): still a leg
+    if (!pm){ const dm = /\s+(?:--|—|–|-{1,2})\s*$/.exec(L); if (dm && /:\s*\d+\+|wins by|to win|^no\s*·|\bover\s+[\d.]|\bunder\s+[\d.]/i.test(L)) pm = {index: dm.index, 1: null, dash: true}; }
     if (pm || vm){
       const who = L.slice(0, vm ? vm.index : pm.index).replace(/\s+to win\s*$/i, "").replace(/^[^a-z0-9]+/i, "").trim();
       const vs = vm ? vm[1].replace(/[.…]+\s*$/, "").trim() : "";
       const opp = /^vs\.?\s/i.test(vs) ? vs.replace(/^vs\.?\s+/i, "") : vs.split(/\s+vs\.?\s+/i).map(x => x.trim()).find(x => x && ffold(x) !== ffold(who)) || "";
-      if (/[a-z]{3}/i.test(who)) return {raw: L.replace(/\s*\d{1,2}(?:\.\d)?\s*%\s*$/, "").trim(), odds: null, kind: "ml", line: null, prop: false, who, opp, paid: pm ? +pm[1]/100 : null, kalshi: true};
+      if (/[a-z]{3}/i.test(who)) return {raw: L.replace(/\s*\d{1,2}(?:\.\d)?\s*%\s*$/, "").replace(/\s+(?:--|—|–|-{1,2})\s*$/, "").trim(), odds: null, kind: "ml", line: null, prop: false, who, opp, paid: pm && pm[1] != null ? +pm[1]/100 : null, kalshi: true};
     }
   }
   const om = /([+-]\d{3,4})(?!.*[+-]\d{3,4})/.exec(L);
@@ -3100,7 +3102,9 @@ function gradeLeg(leg){
   if (leg.no){   // a "No" pick: find the Yes question, then grade the opposite side
     const r0 = gradeLeg(Object.assign({}, leg, {no: false, paid: leg.paid != null ? 1 - leg.paid : null}));
     if (!r0.km){ if (r0.chance != null) r0.chance = 1 - r0.chance; r0.leg = leg; r0.desc = `"No" on: ${leg.who}`; r0.tag = r0.chance == null ? "" : r0.chance >= .65 ? "Likely" : r0.chance >= .52 ? "Leans yes" : r0.chance >= .45 ? "Coin flip" : "Long shot"; return r0; }
-    const inv = r0.km.g.markets.find(x => x.noOf === r0.km);
+    let inv = r0.km.g.markets.find(x => x.noOf === r0.km);
+    if (!inv && /^[^:]+:/.test(r0.km.label) && r0.km.type !== "winner"){ const ins = propInsight(r0.km); const est = ins && ins.est != null ? r0.km.p + .5 * (ins.est - r0.km.p) : r0.km.p; inv = propNo(r0.km, est, ins || {}); }   // a "No" on a player bet
+    if (!inv && /TOTAL/i.test(r0.km.series) && r0.km.fair != null) inv = totalNo(r0.km);   // an under
     if (inv){ const r = {leg, chance: null, how: [], notes: [], warn: []}; return gradeKalshi(leg, inv, r); }
     const r = r0; r.leg = leg; r.chance = 1 - r0.chance; r.desc = `"No" on: ${r0.km.pick || r0.km.label}`; r.tag = r.chance >= .65 ? "Likely" : r.chance >= .52 ? "Leans yes" : r.chance >= .45 ? "Coin flip" : "Long shot";
     if (leg.paid != null){ r.edge = r.chance - leg.paid; r.price = `Kalshi has the No at about ${TK.pct(r.chance)} right now (your ticket shows ${TK.pct(leg.paid)}).`; }
