@@ -1147,6 +1147,7 @@ let toastT;
 function toast(t){ const el = $("toast"); el.textContent = t; el.hidden = false; clearTimeout(toastT); toastT = setTimeout(()=>{ el.hidden = true; }, 2200); }
 
 document.addEventListener("click", e => {
+  const dk = e.target.closest("[data-dkcopy]"); if (dk){ const t = dk.dataset.dkcopy; try { navigator.clipboard && navigator.clipboard.writeText(t); } catch(_){} toast(`Copied “${t}”. On DraftKings, tap search and paste it.`); return; }
   const a = e.target.closest("[data-add]"); if (a){ addToSlip(a.dataset.add); return; }
   const r = e.target.closest("[data-remove]"); if (r){ removeFromSlip(r.dataset.remove); return; }
   const s = e.target.closest("[data-swap]"); if (s){ const [t,i] = s.dataset.swap.split(":"); swapLeg(t, +i); return; }
@@ -1178,6 +1179,12 @@ const fmtShort = d => d.toLocaleDateString([], {weekday:"short", month:"short", 
 // Link to the game's main page on Kalshi (its winner market); Kalshi's website has no page of its own for many side markets (innings, props), and the game page lists them
 const kalshiLink = m => { const w = (m.type === "winner" ? m : null) || m.g.markets.find(x => isWinnerSeries(x.series) && !/EXACT/.test(x.series)) || m;
   return `https://kalshi.com/markets/${w.series.toLowerCase()}/x/${(w.series + "-" + (w.code || w.g.code)).toLowerCase()}`; };
+// Where an "Open" link goes: Kalshi's game page, or (DraftKings chosen) DraftKings Predictions. DraftKings has no public link per bet, so tapping copies the bet's name to paste into its search
+const DK_URL = "https://predictions.draftkings.com/en/";
+const dkSearch = m => /:\s*\d/.test(m.label||"") ? String(m.label).split(":")[0].trim() : m.g.title;
+const betLink = (m, txt) => state.book === "dk"
+  ? `<a href="${DK_URL}" target="_blank" rel="noopener" data-dkcopy="${esc(dkSearch(m))}">${txt === "Open on Kalshi ↗" ? "Find on DraftKings ↗" : txt === "Open this game ↗" ? "Find this game on DraftKings ↗" : txt.replace("Kalshi","DraftKings")}</a>`
+  : `<a href="${kalshiLink(m)}" target="_blank" rel="noopener">${txt}</a>`;
 function relDay(d){
   const diff = Math.round((dayStart(d) - dayStart(new Date()))/86400000);
   return diff === 0 ? "Today" : diff === 1 ? "Tomorrow" : "";
@@ -1186,7 +1193,7 @@ function rowHTML(m){
   const pct = isNaN(m.p) ? "—" : Math.round(m.p*100) + "%";
   const cost = isNaN(m.ask) ? "" : `Yes costs ${Math.round(m.ask*100)}¢`;
   const inSlip = slip.includes(m.key);
-  return `<div class="row"><div><div class="lbl">${esc(niceName(m.g.sport, m.label))}</div><div class="q">${esc(explain(m))}</div><div class="q">${cost}${cost?" · ":""}<a href="${kalshiLink(m)}" target="_blank" rel="noopener">Open on Kalshi ↗</a></div></div><div class="pct">${pct}</div><button class="add${inSlip?" on":""}" type="button" data-add="${esc(m.key)}" aria-label="Add ${esc(m.pick)} to My combo">${inSlip?"✓":"+"}</button><div class="bar"><i style="width:${isNaN(m.p)?0:Math.round(m.p*100)}%"></i></div></div>`;
+  return `<div class="row"><div><div class="lbl">${esc(niceName(m.g.sport, m.label))}</div><div class="q">${esc(explain(m))}</div><div class="q">${cost}${cost?" · ":""}${betLink(m,"Open on Kalshi ↗")}</div></div><div class="pct">${pct}</div><button class="add${inSlip?" on":""}" type="button" data-add="${esc(m.key)}" aria-label="Add ${esc(m.pick)} to My combo">${inSlip?"✓":"+"}</button><div class="bar"><i style="width:${isNaN(m.p)?0:Math.round(m.p*100)}%"></i></div></div>`;
 }
 function secHTML(type, label, ms, open){
   ms = ms.slice().sort((a,b) => type === "winner" ? (b.p||0)-(a.p||0) : b.vol - a.vol);
@@ -2201,7 +2208,7 @@ function legHTML(m, i, tier, legs){
     ? `<button class="mini" type="button" data-swap="${tier}:${i}">Swap</button><button class="mini" type="button" data-drop="${tier}:${i}">Remove</button>`
     : `<button class="mini" type="button" data-remove="${esc(m.key)}">Remove</button>`;
   const liveTag = m.live && m.g.liveNow ? `<div class="legsub" style="color:#c62828;font-weight:700">🔴 LIVE: this game has already started. Price from ${Math.max(1, Math.round((Date.now()/1000 - m.liveTs)/60))} min ago (Kalshi ${Math.round(m.ask*100)}¢); check it on Kalshi before adding.</div>` : "";
-  return `<li class="leg" style="--c:var(${color})"><div class="legmain"><div class="legpick">${m.live && m.g.liveNow ? "🔴 " : ""}${esc(m.pick)}</div>${liveTag}${worthHTML(m)}<div class="legsub">${esc(m.g.title)} · ${esc(fmtShort(m.g.date))}${m.g.start?" · "+esc(fmtTime(m.g.start)):""} · <span class="sp">${esc(m.g.sport)}</span>${m.g.women?" · Women":""}</div><div class="legsub legleague">League: <b>${esc(m.g.leagueName)}</b></div>${(pt => pt ? `<div class="legsub legleague">Player: <b>${esc(pt[0])}</b> plays for <b>${esc(pt[1])}</b></div>` : "")(playerTeam(m))}<div class="legsub">On Kalshi: <b>${esc(m.stitle)}</b>${m.type!=="winner"?` · pick “${esc(m.label)}”`:""} · <a href="${kalshiLink(m)}" target="_blank" rel="noopener">Open this game ↗</a></div><div class="legnote mean"><b>To win:</b> ${esc(explain(m))}</div>${comboOK(m)?"":`<div class="legnote mean"><b>Single bet only:</b> Kalshi doesn't let this bet go in a combo. Bet it by itself on Kalshi.</div>`}${gameCall(m)}${legWhy(m, tier, legs)}</div><div class="legright"><div class="pct">${pctTxt(m.p)}</div><div class="legact">${actions}</div></div></li>`;
+  return `<li class="leg" style="--c:var(${color})"><div class="legmain"><div class="legpick">${m.live && m.g.liveNow ? "🔴 " : ""}${esc(m.pick)}</div>${liveTag}${worthHTML(m)}<div class="legsub">${esc(m.g.title)} · ${esc(fmtShort(m.g.date))}${m.g.start?" · "+esc(fmtTime(m.g.start)):""} · <span class="sp">${esc(m.g.sport)}</span>${m.g.women?" · Women":""}</div><div class="legsub legleague">League: <b>${esc(m.g.leagueName)}</b></div>${(pt => pt ? `<div class="legsub legleague">Player: <b>${esc(pt[0])}</b> plays for <b>${esc(pt[1])}</b></div>` : "")(playerTeam(m))}<div class="legsub">On Kalshi: <b>${esc(m.stitle)}</b>${m.type!=="winner"?` · pick “${esc(m.label)}”`:""} · ${betLink(m,"Open this game ↗")}</div><div class="legnote mean"><b>To win:</b> ${esc(explain(m))}</div>${comboOK(m)?"":`<div class="legnote mean"><b>Single bet only:</b> Kalshi doesn't let this bet go in a combo. Bet it by itself on Kalshi.</div>`}${gameCall(m)}${legWhy(m, tier, legs)}</div><div class="legright"><div class="pct">${pctTxt(m.p)}</div><div class="legact">${actions}</div></div></li>`;
 }
 function meaning(m){
   if (m.totalUnder) return explain(m);
@@ -2511,7 +2518,7 @@ function liveCardHTML(x, c){
     : es && es.home != null ? `<div class="legnote mean" style="margin:6px 0">⏸️ <b>No edge right now.</b> Kalshi's price is in line with ESPN's live chance. Wait or skip.</div>`
     : `<div class="legnote mean" style="margin:6px 0">ℹ️ Primo can't see a live win chance for this one${g.facts ? "" : ` (${esc(g.leagueName)} has no free live feed)`}, so it shows Kalshi's live prices only.</div>`;
   const lu = lateUpset(x, c), up = lu ? null : liveUpset(x, c);
-  return `<article class="game" data-eid="${esc(String((g.facts && g.facts.espn || [])[1] || ""))}" style="--c:var(${SPORT_COLOR[g.sport] || "--s-other"});padding:12px 14px;margin-bottom:10px"><div class="gtitle">🔴 ${esc(g.title)}</div>${lu ? lateCardHTML(x, lu) : up ? upsetCardHTML(x, up) : ""}<div class="gsub"><b>${esc(g.leagueName)}</b>${es ? ` · ${esc(es.detail)}` : " · in progress"}${score ? ` · ${score}` : ""}</div>${call}${c.sides.length ? `<ul style="margin:6px 0 0;padding-left:18px">${sideRows}</ul>` : `<p class="muted">No live Kalshi price yet; the live robot checks every few minutes.</p>`}${c.notes.length ? `<p class="muted" style="margin:6px 0 0">${c.notes.map(esc).join(" ")}</p>` : ""}${link ? `<p style="margin:6px 0 0"><a href="${link}" target="_blank" rel="noopener">Open on Kalshi ↗</a></p>` : ""}</article>`;
+  return `<article class="game" data-eid="${esc(String((g.facts && g.facts.espn || [])[1] || ""))}" style="--c:var(${SPORT_COLOR[g.sport] || "--s-other"});padding:12px 14px;margin-bottom:10px"><div class="gtitle">🔴 ${esc(g.title)}</div>${lu ? lateCardHTML(x, lu) : up ? upsetCardHTML(x, up) : ""}<div class="gsub"><b>${esc(g.leagueName)}</b>${es ? ` · ${esc(es.detail)}` : " · in progress"}${score ? ` · ${score}` : ""}</div>${call}${c.sides.length ? `<ul style="margin:6px 0 0;padding-left:18px">${sideRows}</ul>` : `<p class="muted">No live Kalshi price yet; the live robot checks every few minutes.</p>`}${c.notes.length ? `<p class="muted" style="margin:6px 0 0">${c.notes.map(esc).join(" ")}</p>` : ""}${link ? `<p style="margin:6px 0 0">${betLink(g.markets.find(m => m.type === "winner"),"Open on Kalshi ↗")}</p>` : ""}</article>`;
 }
 // Live tab sections: NFL, college football, NBA, soccer... each with its own header and count
 function sectionOf(g){
@@ -3452,7 +3459,7 @@ function legMarket(r){   // the Kalshi bet behind a checked leg
   return null;
 }
 function flipMarket(r){ return r.g && r.opp ? r.g.markets.find(m => m.type === "winner" && r.opp.name && teamIn(r.opp, m.label)) : r.g && r.take && r.take.other ? r.g.markets.find(m => m.type === "winner" && m.label === r.take.other) : null; }
-function openBtns(m){ return m ? ` <a href="${kalshiLink(m)}" target="_blank" rel="noopener">Open ↗</a> <button class="mini" type="button" data-add="${esc(m.key)}">+ Add</button>` : ""; }
+function openBtns(m){ return m ? ` ${betLink(m,"Open ↗")} <button class="mini" type="button" data-add="${esc(m.key)}">+ Add</button>` : ""; }
 function useBtn(markets, label){
   const keys = markets.filter(Boolean).map(m => m.key).filter(k => byKey.has(k));
   if (!keys.length) return "";
@@ -3477,7 +3484,7 @@ function workHTML(){
   const changed = WORK.legs.some((x, i) => x && x.changed);
   return `<div class="game" style="--c:var(--s-other);padding:12px 14px;margin-bottom:12px;border:2px solid rgba(46,160,67,.5)"><div class="gtitle">🧾 Your combo${changed ? " (with your swaps)" : ""}: ${L.length} leg${L.length > 1 ? "s" : ""}</div>
     <p style="margin:6px 0">Chance all hit: <b>${TK.pct(ch)}</b> (about 1 in ${Math.max(1, Math.round(1/ch))}) · $${WORK.stake} wins about <b>${TK.usd(WORK.stake * (1/cost - 1))}</b> <span class="muted">(Kalshi prices; Kalshi shows the exact payout)</span></p>
-    <ol style="margin:4px 0 0;padding-left:20px">${WORK.legs.map((x, i) => x ? `<li style="margin:4px 0">${x.changed ? "🔁 " : ""}<b>${esc(x.m ? x.m.pick : x.text)}</b>${x.m ? ` <span class="muted">(${esc(x.m.g.title)}, ${TK.pct(x.m.p)})</span> <a href="${kalshiLink(x.m)}" target="_blank" rel="noopener">Open ↗</a>` : ` <span class="muted">(not found on Kalshi)</span>`} <button class="mini" type="button" data-workdel="${i}">Remove</button></li>` : "").join("")}</ol>
+    <ol style="margin:4px 0 0;padding-left:20px">${WORK.legs.map((x, i) => x ? `<li style="margin:4px 0">${x.changed ? "🔁 " : ""}<b>${esc(x.m ? x.m.pick : x.text)}</b>${x.m ? ` <span class="muted">(${esc(x.m.g.title)}, ${TK.pct(x.m.p)})</span> ${betLink(x.m,"Open ↗")}` : ` <span class="muted">(not found on Kalshi)</span>`} <button class="mini" type="button" data-workdel="${i}">Remove</button></li>` : "").join("")}</ol>
     <p style="margin:8px 0 0">${L.some(x => x.m) ? `<button class="btn sm" type="button" data-workuse="1">✅ Use this combo</button>` : ""} <button class="btn ghost sm" type="button" data-workreset="1">Undo all swaps</button></p>
     <p class="muted" style="margin:6px 0 0;font-size:.9em">Tap <b>Swap</b>, <b>Flip</b> or <b>Remove</b> below and this box updates. Then tap Use this combo to open each leg on Kalshi from My combo.</p></div>`;
 }
@@ -3592,7 +3599,7 @@ function checkTicket(text){
       ${r.title ? `<div class="gsub"><b>${esc(r.title)}</b>${(r.when || (r.f && r.f.start)) ? ` · ${esc(new Date(r.when || r.f.start).toLocaleString([], {weekday:"short", hour:"numeric", minute:"2-digit"}))}` : ""}</div>` : ""}
       ${r.desc ? `<p style="margin:6px 0">${esc(r.desc)}</p>` : ""}
       ${r.chance != null ? `<p style="margin:6px 0;font-size:17px"><b>Chance it hits: ${TK.pct(r.chance)}</b> <span class="lvl">${r.tag}</span></p>` : ""}
-      ${(m => m ? `<p style="margin:6px 0"><a href="${kalshiLink(m)}" target="_blank" rel="noopener">Open on Kalshi ↗</a> <button class="mini" type="button" data-add="${esc(m.key)}">+ Add to My combo</button></p>` : "")(legMarket(r))}
+      ${(m => m ? `<p style="margin:6px 0">${betLink(m,"Open on Kalshi ↗")} <button class="mini" type="button" data-add="${esc(m.key)}">+ Add to My combo</button></p>` : "")(legMarket(r))}
       ${takeHTMLx(r.take)}
       ${swapHTML(r, stakeN)}
       ${r.price ? `<p style="margin:6px 0">${r.price}</p>` : ""}
