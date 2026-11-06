@@ -1310,6 +1310,17 @@ function fairFromBooks(g, f){
   for (const m of g.markets) if (m.noOf && m.noOf.fair != null){ m.fair = 1 - m.noOf.fair - .02; m.valueEst = true; m.valueTh = 7; m.value = Math.round((m.fair - m.p)*100); }
 }
 const injTxt = r => `${r.player} (${r.team}${r.pos ? ", " + r.pos : ""}): <b>${r.status}</b>${r.injury ? ` (${esc(r.injury.toLowerCase())})` : ""}`;
+// the homework in plain text, for Check my bet: how both teams have played lately, who's hot or slumping, starters
+function formNotes(g){
+  const out = []; if (!g || !g.facts || g.facts.teams.length !== 2) return out;
+  try {
+    const [a, b] = g.facts.teams, n = t => t.short || t.name;
+    for (const [x, y] of [[a, b], [b, a]]) for (const r of playEdge(g.sport, x, y, n(x), n(y))) if (!/^Hot players|slumping/.test(r)) out.push("📊 " + r + ".");
+    for (const h of usageLines(g)) if (/hot players|slumping|player form|starting (pitcher|goalie)/i.test(h)) out.push(h.replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&#39;/g, "'").replace(/&quot;/g, '"'));
+    const L = lineModel(g); if (L){ const c = closeGamesHTML(g, L).replace(/<table[\s\S]*$/, "").replace(/been<\/b>/, "been:</b>").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").replace(/&amp;/g, "&").replace(/&#39;/g, "'").trim(); if (c) out.push(c); }
+  } catch (e) {}
+  return out;
+}
 function usageLines(g){   // who gets the ball, and what each defense has been giving up (last 5 games)
   const f = g.facts, out = []; if (!f || typeof teamUsage !== "function") return out;
   for (const t of f.teams){
@@ -2981,6 +2992,7 @@ function gradeKalshi(leg, m, r){
     r.notes.push(mine ? `✓ Primo's research also leans ${rs.lean}.` : `✗ Primo's research leans ${rs.lean}.`); }
   const l = likedBy(m); if (l) r.notes.push(`✓ Primo likes this bet: ${l.why || l.text || ""}`);
   for (const x of statsText(g)) r.notes.push(x);
+  for (const x of formNotes(g)) r.notes.push(x);
   if (!rs) r.notes.push(g.facts ? `Primo hasn't written research on this ${g.sport === "Tennis" ? "match" : "game"}, so this grade uses the stats: records, form, how both teams have played, hot players and upset checks.` : `Primo hasn't written research on this ${g.sport === "Tennis" ? "match" : "game"} — this grade is Kalshi's price only.`);
   for (const [team, rows] of g.injuries || []){ const out = rows.filter(p => /out|doubtful/i.test(p.status)).slice(0, 4); if (out.length) r.notes.push(`${team} missing: ${out.map(p => `${p.player} (${p.pos || "?"}, ${p.status.toLowerCase()}${p.injury ? " – " + p.injury.toLowerCase() : ""})`).join("; ")}.`); }
   r.tag = r.chance >= .65 ? "Likely" : r.chance >= .52 ? "Leans yes" : r.chance >= .45 ? "Coin flip" : "Long shot";
