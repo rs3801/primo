@@ -392,6 +392,7 @@ function periodOf(text){
 }
 // what has to happen for this bet to pay, in one plain sentence
 function explain(m){
+  if (m.totalUnder){ const n = (/over\s+([\d.]+)/i.exec(m.noOf.label) || [])[1]; return `${/team|TEAMTOTAL/i.test(m.series + m.stitle) ? "That team's" : "The two teams' combined"} score has to stay at ${Math.floor(+n)} points or fewer. On Kalshi, buy "No" on "${m.noOf.label}".`; }
   if (m.noOf && /^[^:]+:/.test(m.noOf.label)){ const [who, what] = m.noOf.label.split(/:\s*/); return `${who} must NOT reach ${what} in this game. On Kalshi, buy "No" on "${m.noOf.label}".`; }
   if (m.noOf) return `${niceName(m.g.sport, m.opp)} has to win, or lose by ${Math.floor(m.line)} ${m.unit} or fewer. On Kalshi, buy "No" on "${m.noOf.label}".`;
   const sp = m.g.sport, L = m.label.replace(/\?$/, "").replace(/^Reg Time:\s*/i, ""), T = m.stitle, both = T + " " + L;
@@ -967,6 +968,15 @@ function propNo(m, est, ins){
            pros: [`📊 ${m.label.split(":")[0]} has been under this line: Primo puts the No at about ${Math.round(pp*100)}% (Kalshi ${Math.round(c*100)}¢).`].concat((ins.cons || []).filter(t => !/^📊/.test(t))), cons: (ins.pros || []).filter(t => !/^📊/.test(t)).slice(0, 2)};
   byKey.set(k, x); return x;
 }
+function totalNo(m){   // the under: buy "No" on "Over X points"
+  const k = m.key + "|NO"; if (byKey.has(k)) return byKey.get(k);
+  const bid = 2 * m.p - m.ask; if (!(bid > .02) || m.fair == null) return null;
+  const under = m.label.replace(/^(.*?)\bover\s+([\d.]+)/i, (a, pre, n) => pre + "Under " + n).replace(/^Full Game:\s*/i, "");
+  const x = Object.assign({}, m, {label: under, pick: under, p: 1 - m.p, ask: Math.min(.99, 1 - bid), noOf: m, key: k, move: -(m.move || 0), fair: null, value: null, totalUnder: true});
+  x.primoP = 1 - m.fair;
+  x._op = {v: x.primoP >= .7 ? "keep" : "okay", badge: x.primoP >= .7 ? "✅ Keep" : "👍 Okay", say: `The sportsbooks' fair price puts the under at about ${Math.round(x.primoP*100)}%, Kalshi asks ${Math.round(x.ask*100)}¢.`, pros: [`The sportsbooks expect fewer points than this line: the under is about ${Math.round(x.primoP*100)}% (Kalshi ${Math.round(x.ask*100)}¢).`], cons: []};
+  byKey.set(k, x); return x;
+}
 function longShotPool(){
   const out = [], now = Date.now();
   for (const g of games){
@@ -981,7 +991,12 @@ function longShotPool(){
         const est = m.p + .5 * (ins.est - m.p);
         if (m.ask >= .5 && m.ask <= .92 && est - m.ask >= .03){ m.primoP = est; out.push({m, pp: est, e: est - m.ask}); }
         else if (1 - m.p >= .5){ const x = propNo(m, est, ins); if (x && x.ask >= .5 && x.ask <= .92 && x.primoP - x.ask >= .03) out.push({m: x, pp: x.primoP, e: x.primoP - x.ask}); }
-      } else if (m.type === "winner" || m.type === "spread" || /TOTAL/i.test(m.series)){
+      } else if (/TOTAL/i.test(m.series) && m.fair != null && /\bover\s+[\d.]+/i.test(m.label)){   // scores: the over, or the under (Kalshi's "No" on the over)
+        const op = opOf(m);
+        // (a gap over 15 points means the line was matched wrong, not a real bargain: skip it)
+        if (m.ask >= .5 && m.ask <= .92 && m.fair - m.ask >= .03 && m.fair - m.ask <= .15 && op && /keep|okay/.test(op.v)) out.push({m, pp: m.fair, e: m.fair - m.ask});
+        else { const x = totalNo(m); if (x && x.ask >= .5 && x.ask <= .92 && x.primoP - x.ask >= .03 && x.primoP - x.ask <= .15) out.push({m: x, pp: x.primoP, e: x.primoP - x.ask}); }
+      } else if (m.type === "winner" || m.type === "spread"){
         lineModel(g); const op = opOf(m); if (!op || !/keep|okay/.test(op.v) || leanClash(m)) continue;
         const pp = m.linePick && m.primoP != null ? m.primoP : m.fair != null ? m.fair : null; if (pp == null) continue;
         if (m.ask >= .5 && m.ask <= .92 && pp - m.ask >= .03) out.push({m, pp, e: pp - m.ask});
@@ -2189,6 +2204,7 @@ function legHTML(m, i, tier, legs){
   return `<li class="leg" style="--c:var(${color})"><div class="legmain"><div class="legpick">${m.live && m.g.liveNow ? "🔴 " : ""}${esc(m.pick)}</div>${liveTag}${worthHTML(m)}<div class="legsub">${esc(m.g.title)} · ${esc(fmtShort(m.g.date))}${m.g.start?" · "+esc(fmtTime(m.g.start)):""} · <span class="sp">${esc(m.g.sport)}</span>${m.g.women?" · Women":""}</div><div class="legsub legleague">League: <b>${esc(m.g.leagueName)}</b></div>${(pt => pt ? `<div class="legsub legleague">Player: <b>${esc(pt[0])}</b> plays for <b>${esc(pt[1])}</b></div>` : "")(playerTeam(m))}<div class="legsub">On Kalshi: <b>${esc(m.stitle)}</b>${m.type!=="winner"?` · pick “${esc(m.label)}”`:""} · <a href="${kalshiLink(m)}" target="_blank" rel="noopener">Open this game ↗</a></div><div class="legnote mean"><b>To win:</b> ${esc(explain(m))}</div>${comboOK(m)?"":`<div class="legnote mean"><b>Single bet only:</b> Kalshi doesn't let this bet go in a combo. Bet it by itself on Kalshi.</div>`}${gameCall(m)}${legWhy(m, tier, legs)}</div><div class="legright"><div class="pct">${pctTxt(m.p)}</div><div class="legact">${actions}</div></div></li>`;
 }
 function meaning(m){
+  if (m.totalUnder) return explain(m);
   if (m.noOf && /^[^:]+:/.test(m.noOf.label)){ const [who, what] = m.noOf.label.split(/:\s*/); return `${who} must NOT reach ${what}. On Kalshi, buy "No" on "${m.noOf.label}".`; }
   const t = m.stitle.toUpperCase();
   let s = "";
