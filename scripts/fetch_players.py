@@ -9,7 +9,7 @@ PT = ZoneInfo("America/Los_Angeles")
 LEAGUES = {"NFL": "football/nfl", "College football": "football/college-football", "NBA": "basketball/nba", "WNBA": "basketball/wnba",
            "College basketball": "basketball/mens-college-basketball", "NHL": "hockey/nhl", "MLB": "baseball/mlb"}
 SOCCER = "soccer/all"   # every soccer league: one team schedule covers league, cup and Europe games
-N_GAMES = 5
+N_GAMES = 10
 MAX_NEW_BOX = 520
 # per-game numbers kept for each player, by sport (order matters: the app reads them by position)
 FB = ["tgt", "rec", "recYds", "recTD", "car", "rushYds", "rushTD", "cmp", "att", "passYds", "passTD", "int", "longRec", "longRush"]
@@ -124,7 +124,7 @@ def main():
     teams = {}   # (league, team name) -> (path, id, sport)
     for g in FXd.get("games") or []:
         path = SOCCER if g.get("sport") == "Soccer" else LEAGUES.get(g.get("league"))
-        if not path or g.get("state") not in (None, "pre"): continue
+        if not path or g.get("state") not in (None, "pre", "in"): continue
         try:
             if datetime.datetime.fromisoformat(g["start"].replace("Z", "+00:00")) > utc + datetime.timedelta(days=7 if g["sport"] == "Football" else 3): continue
         except Exception: continue
