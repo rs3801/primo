@@ -2178,7 +2178,9 @@ function propInsight(m){
     if (proj == null) proj = a;
     // Tested on 1,300+ graded Kalshi player bets: Kalshi's price beat a raw "hit it in X of 5 games" count, so Primo now reads the player's
     // AVERAGE over his last 10 games (a slow 5-game stretch says less than it looks) and leans on Kalshi's price more (K = 10 games' worth)
-    const K = /touchdown|goals|interception|steals|blocks/.test(S[2]) && g.sport !== "Basketball" ? 16 : 10;
+    // tested on graded bets per sport: hockey goals/points homework beat Kalshi (lean on it, K=16); hockey assists and every
+    // football player bet did NOT (Kalshi's price was better), so there Primo mostly trusts the price (K=40)
+    const K = g.sport === "Football" || (g.sport === "Hockey" && /assists/.test(S[2])) ? 40 : g.sport === "Hockey" || (/touchdown|goals|interception|steals|blocks/.test(S[2]) && g.sport !== "Basketball") ? 16 : 10;
     let q = h / vals.length;
     if (g.sport === "Basketball"){ const lam = Math.max(.05, a);
       if (/points/.test(S[2])) q = 1 - ncdf((pp.need - .5 - lam) / Math.max(4, .35 * lam));
