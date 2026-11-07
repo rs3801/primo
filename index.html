@@ -3302,7 +3302,7 @@ function gradeLeg(leg){
   }
   if (rs && rs.take && rs.take.likes && rs.take.likes.length) r.notes.push(`Primo's research likes in this game: ${rs.take.likes.slice(0, 3).map(l => l.text || (l.match || [])[0]).filter(Boolean).join("; ")}.`);
   for (const x of f.notes || []) if (/starting|series|leads|tied/i.test(x)) r.notes.push(x + ".");
-  { const u = g && leg.kind === "ml" && !leg.prop ? upsetFor(g) : null, me = t.short || t.name;
+  { const u = g && (leg.kind === "ml" || leg.kind === "spread") && !leg.prop ? upsetFor(g) : null, me = t.short || t.name;
     if (u && me === u.fav) r.warn.push(`🚨 Upset alert: ${u.fav} are favored, but Primo sees a real chance ${u.dog} wins: ${u.reasons.join("; ")}.`);
     else if (u && me === u.dog) r.notes.unshift(`🚨 Upset pick: Primo sees reasons ${u.dog} can win: ${u.reasons.join("; ")}.`); }
   const big = (tm) => ((FX.injuries || {})[tm.name] || []).filter(p => /out|doubtful/i.test(p.status));
@@ -3310,6 +3310,13 @@ function gradeLeg(leg){
     const rows = big(tm); if (!rows.length) continue;
     const key = rows.filter(p => /^(QB|G|P|SP|C|PG|SG|SF|PF|F|RB|WR|ST|FW|GK)$/.test(p.pos || "")).concat(rows).filter((v, i, a) => a.indexOf(v) === i).slice(0, 4);
     r.notes.push(`${tm.name} missing: ${key.map(p => `${p.player} (${p.pos || "?"}, ${p.status.toLowerCase()}${p.injury ? " – " + p.injury.toLowerCase() : ""})`).join("; ")}${rows.length > key.length ? ` and ${rows.length - key.length} more` : ""}.`);
+  }
+  // how the PLAYERS are doing (hot, slumping, quarterbacks/starters, scoring margins): can they pull an upset, or hold it off?
+  if (g && !leg.prop){
+    const fn = formNotes(g).filter(x => !r.notes.includes(x));
+    const u = upsetFor(g), me = t.short || t.name, dog = (r.chance != null && r.chance < .5) || (winP != null && winP < .5);
+    if (!u && fn.length) r.notes.push(dog ? `🔍 Upset check: Primo looked at both teams' players and recent games and found no strong sign ${me} can pull the upset.` : `🔍 Upset check: Primo looked at both teams' players and recent games and found no strong sign of an upset against ${me}.`);
+    for (const x of fn) r.notes.push(x);
   }
   for (const x of statsText(g || {facts: f, sport: f.sport, leagueName: f.league, markets: []})) if (!/appear about 2 days/.test(x)) r.notes.push(x);
   if (leg.kind === "ml" && !leg.prop) r.take = buildTake(r);
