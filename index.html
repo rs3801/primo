@@ -281,6 +281,7 @@ header.top .hint{color:#FFB52E;border-color:rgba(255,181,46,.6);background:rgba(
             <label for="legs" class="blabel">Legs</label>
             <input id="legs" class="legsin" type="number" min="1" max="40" value="6" inputmode="numeric">
             <button class="btn" id="buildbtn" type="button">Build combos</button>
+            <button class="btn" id="shotbtn" type="button" style="background:#6b3fd6;color:#fff">🎯🎰 Medium &amp; Long shot</button>
           </div>
           <div class="chips" id="legchips"></div>
           <div class="brow stakerow"><label class="blabel" for="stake">Bet</label><span class="dollar">$</span><input id="stake" class="legsin stakein" type="number" min="1" max="100000" step="1" value="10" inputmode="decimal" aria-label="Bet amount in dollars"><div class="chips" id="stakechips"></div></div>
@@ -998,6 +999,7 @@ function longShotPool(){
         // like the winning tickets people post: every leg is LIKELY on its own (Kalshi 50%+), and the player's games say a bit more.
         // Only the Yes side: in Primo's records, "No" on a slumping player lost money (they bounce back)
         const est = ins.est;
+        if (m.fair != null && m.fair < m.ask) continue;   // the sharp sportsbook (Pinnacle) says it's overpriced: don't contradict it
         if (m.ask >= .5 && m.ask <= .92 && est - m.ask >= .03){ m.primoP = est; out.push({m, pp: est, e: est - m.ask}); }
       } else if (/TOTAL/i.test(m.series) && m.fair != null && /\bover\s+[\d.]+/i.test(m.label)){   // scores: the over, or the under (Kalshi's "No" on the over)
         const op = opOf(m);
@@ -1105,12 +1107,14 @@ function applyLive(){
   }
   return n;
 }
-async function build(){
+async function build(mode){
+  mode = mode === "shots" ? "shots" : "combos";
   if (state.live !== false){ if (!LV.data || Date.now() - LV.loaded > 90000) await loadLive(); applyLive(); }
   const n = Math.max(1, Math.min(40, parseInt($("legs").value,10) || 6));
   state.legs = n; $("legs").value = n;
   built = {};
   for (const k of Object.keys(TIERS)){
+    if (!!TIERS[k].custom !== (mode === "shots")) continue;   // two buttons: regular combos, or the Medium & Long shot
     if (TIERS[k].custom && TIERS[k].few){   // 🎯 medium shot: 60-84% legs that beat their price the most, 5 or 6 of them (90%+ "sure things" pay little and, in Primo's records, hit a bit less than their price)
       const pool = n > 1 ? longShotPool().filter(comboOK).filter(m => m.ask >= .6 && m.ask <= .84).sort((a, b) => (b._lse + .4 * b._lsp) - (a._lse + .4 * a._lsp)) : [];
       built[k] = {pool, legs: pickLongShot(pool, n >= 6 ? 6 : 5, [1, 2])}; continue; }
@@ -1122,7 +1126,8 @@ async function build(){
   }
   render();
 }
-$("buildbtn").addEventListener("click", build);
+$("buildbtn").addEventListener("click", () => build("combos"));
+$("shotbtn").addEventListener("click", () => build("shots"));
 $("stake").value = state.stake;
 $("legs").addEventListener("change", e => { state.legs = +e.target.value || 6; renderLegChips(); });
 function renderLegChips(){
@@ -2373,9 +2378,10 @@ function filterSummary(){
 /* ---------- views ---------- */
 function renderBuild(){
   $("filtsum").textContent = filterSummary();
-  if (!built){ $("results").innerHTML = `<div class="empty">Pick how many legs, set the filters, then tap <b>Build combos</b>. Pick 1 for a single bet (one game, one pick), or more for a combo. Primo will make a Primo's picks combo (bets its research likes), a 🎰 Long shot (many likely player bets for a huge payout) plus Safe, Middle and High risk combos, one leg per game when there are enough games, and mixes in more bets from the same game when there aren't.</div>`; return; }
+  if (!built){ $("results").innerHTML = `<div class="empty">Pick how many legs, set the filters, then tap <b>Build combos</b>, or tap <b>🎯🎰 Medium &amp; Long shot</b> for the two big-payout tickets (Medium shot: 5–6 likely legs; Long shot: 10+ legs). Pick 1 for a single bet (one game, one pick), or more for a combo. Primo will make a Primo's picks combo (bets its research likes), plus Best value, Safe, Middle and High risk combos, one leg per game when there are enough games, and mixes in more bets from the same game when there aren't.</div>`; return; }
   let html = state.legs === 1 ? `<p class="filtsum" style="grid-column:1/-1;margin:14px 0 0">Single bet: each box below is one pick at a different risk level. Choose the one you like; you only need one.</p>` : "";
   for (const [k,t] of Object.entries(TIERS)){
+    if (!built[k]) continue;
     const legs = built[k].legs;
     const short = legs.length < state.legs;
     const single = state.legs === 1;
