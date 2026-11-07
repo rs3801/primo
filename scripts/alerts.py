@@ -5,7 +5,8 @@ Runs inside the live robot every few minutes. Uses ESPN's live scores and win ch
     late in the game (4th quarter, 3rd period, 7th inning on, last half hour of soccer).
   - LIVE VALUE: Kalshi sells a team for at least 7 cents less than ESPN's live win chance.
   - CLOSE FINISH: coin-flip games within one score late.
-Every alert says whether the team is REALLY outplaying the other or the score is LUCKY (turnovers, hot shooting, a goalie).
+Every alert says whether the team is REALLY outplaying the other or the score is LUCKY (turnovers, hot shooting, a goalie),
+and starts with the kind of game (COMEBACK BUILDING, FADING, BACK-AND-FORTH, TURNAROUND), whether there is time left, who is hot tonight, and Primo's call.
 Each game alerts once per level (watch -> brewing -> happening), so the phone doesn't buzz nonstop."""
 import json, os, re, time, calendar, unicodedata, urllib.request
 
@@ -187,13 +188,87 @@ def game_story(path, eid, sport, dog_id, fav_id, dog_home, dname, fname):
         wp_now = f(wps[-1]); old = f(wps[-12] if len(wps) > 12 else wps[0]); wp_jump = wp_now - old
         if wp_jump >= .08: reasons.append(f"ESPN's live chance for {dname} rose from {round(old*100)}% to {round(wp_now*100)}% over the last plays")
         elif wp_jump <= -.08: warns.append(f"ESPN's live chance for {dname} dropped from {round(old*100)}% to {round(wp_now*100)}% over the last plays")
+    # game flow: lead changes, biggest leads, who won the latest quarter/period, and who is hot tonight
+    flow = {"lc": None, "big_d": None, "big_f": None, "per_d": [], "per_f": [], "hot_d": [], "hot_f": []}
+    for t in (d.get("boxscore") or {}).get("teams") or []:
+        st_ = {x.get("name"): x.get("displayValue") for x in t.get("statistics") or []}
+        tid = str((t.get("team") or {}).get("id"))
+        lc = num(st_.get("leadChanges")); ll = num(st_.get("largestLead"))
+        if lc is not None: flow["lc"] = int(lc)
+        if tid == str(dog_id): flow["big_d"] = ll
+        elif tid == str(fav_id): flow["big_f"] = ll
+    for x in ((d.get("header") or {}).get("competitions") or [{}])[0].get("competitors") or []:
+        per = [num(l.get("displayValue") if l.get("displayValue") is not None else l.get("value")) or 0 for l in x.get("linescores") or []]
+        if str((x.get("team") or {}).get("id")) == str(dog_id): flow["per_d"] = per
+        elif str((x.get("team") or {}).get("id")) == str(fav_id): flow["per_f"] = per
+    if sport in ("Basketball", "Hockey", "Soccer"):
+        for t in (d.get("boxscore") or {}).get("players") or []:
+            tid = str((t.get("team") or {}).get("id")); cat = (t.get("statistics") or [{}])[0]
+            keys = cat.get("names") or cat.get("labels") or []; ix = {k: i for i, k in enumerate(keys)}
+            rows = []
+            for a in cat.get("athletes") or []:
+                v = a.get("stats") or []; g_ = lambda k: num(v[ix[k]]) if k in ix and ix[k] < len(v) else None
+                who = (a.get("athlete") or {}).get("displayName", "")
+                if sport == "Basketball" and g_("PTS") is not None:
+                    tp = str(v[ix["3PT"]]).split("-")[0] if "3PT" in ix and ix["3PT"] < len(v) else "0"
+                    rows.append((g_("PTS"), f"{who} {int(g_('PTS'))} pts" + (f", {tp} threes" if num(tp) and num(tp) >= 3 else "") + (f", {int(g_('REB'))} reb" if (g_("REB") or 0) >= 10 else "")))
+                elif sport == "Hockey" and (g_("G") or 0) + (g_("A") or 0) >= 2: rows.append(((g_("G") or 0) + (g_("A") or 0), f"{who} {int(g_('G') or 0)}G {int(g_('A') or 0)}A"))
+            rows.sort(key=lambda r: -r[0]); top = [r[1] for r in rows[:2] if sport != "Basketball" or r[0] >= 15]
+            if tid == str(dog_id): flow["hot_d"] = top
+            elif tid == str(fav_id): flow["hot_f"] = top
     try:
         sb_ = {}
         for x in ((d.get("header") or {}).get("competitions") or [{}])[0].get("competitors") or []: sb_[str((x.get("team") or {}).get("id"))] = num(x.get("score")) or 0
         verdict = real_or_lucky(sport, B, F, dname, fname, (sb_.get(str(dog_id), 0) - sb_.get(str(fav_id), 0)))
     except Exception as e:
         print("verdict failed", e); verdict = None
-    return reasons, warns, wp_now, wp_jump, verdict
+    return reasons, warns, wp_now, wp_jump, verdict, flow
+
+def mins_left(sport, path, period, clock):
+    """Rough minutes of game time left (None when it doesn't apply)."""
+    m = re.match(r"(\d+):(\d+)", clock or ""); c = int(m.group(1)) + int(m.group(2)) / 60 if m else (float(clock) / 60 if re.match(r"^[\d.]+$", str(clock or "")) else 0)
+    P = int(period or 0)
+    if sport == "Basketball": return c + (max(0, 2 - P) * 20 if "college" in path else max(0, 4 - P) * (10 if "wnba" in path else 12))
+    if sport == "Football": return c + max(0, 4 - P) * 15
+    if sport == "Hockey": return c + max(0, 3 - P) * 20
+    return None
+
+def story_line(sport, flow, dname, fname, diff, left, verdict, wp, ask, path=""):
+    """The headline the phone shows first: what kind of game this is, whether there's time, and Primo's call."""
+    tag, bits = "", []
+    lc, pd, pf = flow.get("lc"), flow.get("per_d") or [], flow.get("per_f") or []
+    lastd = lastf = None
+    if pd and pf and len(pd) == len(pf):
+        i = len(pd) - 1
+        if i >= 1 and pd[i] + pf[i] < (8 if sport == "Basketball" else 1): i -= 1   # the period just started: use the one before
+        lastd, lastf = pd[i], pf[i]
+        unit = "half" if "college" in path and sport == "Basketball" else "quarter" if sport in ("Basketball", "Football") else "period"
+        if lastd > lastf: bits.append(f"{dname} won the latest {unit} {int(lastd)}-{int(lastf)}")
+        elif lastf > lastd: bits.append(f"{fname} won the latest {unit} {int(lastf)}-{int(lastd)}")
+    near = abs(diff) <= {"Basketball": 8, "Football": 8, "Hockey": 1, "Soccer": 1, "Baseball": 2}.get(sport, 3)
+    if lc is not None and lc >= 6 and near: tag = "BACK-AND-FORTH"; bits.append(f"{lc} lead changes")
+    elif diff < 0 and lastd is not None and lastd > lastf: tag = "COMEBACK BUILDING"
+    elif diff < 0 and lastd is not None and lastf > lastd: tag = "FADING"
+    elif diff >= 0 and (flow.get("big_f") or 0) >= (10 if sport == "Basketball" else 10 if sport == "Football" else 2): tag = "TURNAROUND"; bits.append(f"{fname} once led by {int(flow['big_f'])}")
+    elif diff >= 0: tag = "UPSET IN PROGRESS"
+    else: tag = "CLOSE GAME" if abs(diff) <= (5 if sport == "Basketball" else 8 if sport == "Football" else 1) else "UNDERDOG BEHIND"
+    # is there enough time?
+    if diff < 0 and left is not None:
+        need = -diff
+        if sport == "Basketball": ok = "enough time" if need <= left * .8 else "running out of time" if need > left * 1.4 else "possible but needs a run"
+        elif sport == "Football": sc_ = -(-need // 8); ok = "enough time" if left >= sc_ * 5 else "running out of time" if left < sc_ * 3 else "possible but tight"; bits.append(f"needs {sc_} score{'s' if sc_ > 1 else ''}")
+        elif sport == "Hockey": ok = "enough time" if left >= need * 8 else "running out of time" if left < need * 4 else "possible but tight"
+        else: ok = None
+        if ok: bits.append(f"down {need} with about {int(round(left))} min left: {ok}")
+    if flow.get("hot_d"): bits.append(f"{dname} hot tonight: " + ", ".join(flow["hot_d"]))
+    if flow.get("hot_f"): bits.append(f"{fname}: " + ", ".join(flow["hot_f"]))
+    # Primo's call
+    lab = verdict[1] if verdict else "EVEN"
+    if ask and wp is not None and wp - ask >= .05 and lab != "LUCKY" and tag not in ("FADING",): call = f"Primo: worth a small bet ({dname} {round(ask*100)}c, ESPN {round(wp*100)}%)"
+    elif tag == "FADING" or lab == "LUCKY" or (diff < 0 and bits and "running out of time" in " ".join(bits)): call = f"Primo: skip it, {'they are fading' if tag == 'FADING' else 'the score flatters them' if lab == 'LUCKY' and diff >= 0 else 'not enough time' if 'running out' in ' '.join(bits) else 'being outplayed'}"
+    elif ask and wp is not None: call = f"Primo: fair price ({round(ask*100)}c vs ESPN {round(wp*100)}%), fun-size bet only"
+    else: call = "Primo: check the price"
+    return f"[{tag}] {call}. " + ("; ".join(bits) + "." if bits else "")
 
 def main():
     D = load_js("data/prices.js"); FX = load_js("data/facts.js")
@@ -276,23 +351,24 @@ def main():
                     story = None
                     if sent.get(key, 0) < level:
                         story = game_story(c["_path"], g["espn"][1], g["sport"], (dog.get("team") or {}).get("id"), (fav.get("team") or {}).get("id"), dogHome, nm(dog), nm(fav))
-                        reasons, warns, wpd, jump, verdict = story
+                        reasons, warns, wpd, jump, verdict, flow = story
                         if not stage:   # earlier in the 2nd half: only a real comeback with momentum counts
                             if not (jump is not None and jump >= .12 and len(reasons) >= 3): level = 0
 
                     if level and sent.get(key, 0) < level:
-                        reasons, warns, wpd, jump, verdict = story
+                        reasons, warns, wpd, jump, verdict, flow = story
                         ask, ser = ask_for(dogT)
                         head = {3: "UPSET HAPPENING", 2: "UPSET BREWING", 1: "UPSET WATCH"}[level] if stage else "COMEBACK"
                         title = f"{head}: {nm(dog)} vs {nm(fav)}"
                         when = stage or (str((st.get("type") or {}).get("shortDetail") or ""))
-                        body = f"{nm(dog)} were only {round(pre*100)}% to win before the game. Now {sc(dog)}-{sc(fav)} ({when}{', ' + clock if stage and clock else ''})."
+                        left = mins_left(g["sport"], c["_path"], period, clock)
+                        body = f"Now {sc(dog)}-{sc(fav)} ({when}{', ' + clock if stage and clock else ''}). " + story_line(g["sport"], flow, nm(dog), nm(fav), diff, left, verdict, wpd if wpd is not None else ((wp if dogHome else 1 - wp) if wp is not None else None), ask, c["_path"]) + f"\n{nm(dog)} were only {round(pre*100)}% to win before the game."
                         if ball: body += f" {nm(dog)} have the ball."
                         if wpd is not None: body += f" ESPN live chance: {round(wpd*100)}%."
                         elif wp is not None: body += f" ESPN live: {nm(dog)} {round((wp if dogHome else 1 - wp)*100)}%."
                         if verdict: body += f" {'REAL' if verdict[1] == 'REAL' else ('LUCKY?' if diff >= 0 else 'OUTPLAYED') if verdict[1] == 'LUCKY' else 'EVEN'}: {verdict[0]}"
-                        if reasons: body += " WHY: " + "; ".join(reasons[:4]) + "."
-                        if warns: body += " CAREFUL: " + "; ".join(warns[:2]) + "."
+                        if reasons: body += "\nWHY: " + "; ".join(reasons[:4]) + "."
+                        if warns: body += "\nCAREFUL: " + "; ".join(warns[:2]) + "."
                         ask0, _ = ask_for(dogT)
                         if ask0 and wpd is not None and wpd - ask0 >= .05: body += f" VALUE: Kalshi sells {nm(dog)} at {round(ask0*100)}c but ESPN gives them {round(wpd*100)}%."
                         if ask: body += f" Kalshi: {round(ask*100)}c, $10 wins about ${10/ask - 10:.2f}."
@@ -309,7 +385,8 @@ def main():
             if close:
                 trailT = Ht if trail is H else At
                 story = game_story(c["_path"], g["espn"][1], g["sport"], (trail.get("team") or {}).get("id"), (lead.get("team") or {}).get("id"), trail is H, nm(trail), nm(lead))
-                reasons, warns, wpt, jump, verdict = story
+                reasons, warns, wpt, jump, verdict, flow = story
+                left = mins_left(g["sport"], c["_path"], period, clock); ask_t0, _ = ask_for(trailT)
                 title = f"CLOSE FINISH: {nm(trail)} {sc(trail)} - {nm(lead)} {sc(lead)}" if gap else f"TIED LATE: {nm(H)} {sc(H)} - {nm(A)} {sc(A)}"
                 body = f"{stage}{', ' + clock if clock else ''}. " + (f"{nm(trail)} have the ball{': ' + situation.get('downDistanceText') if situation.get('downDistanceText') else ''}. " if tball else "")
                 parts = []
@@ -320,9 +397,10 @@ def main():
                     if ask and ch is not None and ch - ask >= .05: seg += " (cheaper than it should be)"
                     parts.append(seg)
                 body += " | ".join(parts) + "."
+                body = story_line(g["sport"], flow, nm(trail), nm(lead), -gap, left, verdict, wpt, ask_t0, c["_path"]) + "\n" + body
                 if verdict: body += f" {'REAL' if verdict[1] == 'REAL' else ('LUCKY?' if not gap else 'OUTPLAYED') if verdict[1] == 'LUCKY' else 'EVEN'}: {verdict[0]}"
                 if reasons: body += f" {nm(trail)} WHY: " + "; ".join(reasons[:3]) + "."
-                if warns: body += " CAREFUL: " + "; ".join(warns[:2]) + "."
+                if warns: body += "\nCAREFUL: " + "; ".join(warns[:2]) + "."
                 ask_t, ser_t = ask_for(trailT)
                 kal = f"https://kalshi.com/markets/{ser_t.lower()}/x/{(ser_t + '-' + ((D.get('REMAP') or {}).get(code, {}).get(ser_t, code))).lower()}" if ask_t and code else None
                 msgs.append((title, body, f"{APP}#live-{g['espn'][1]}", kal)); sent[f"close|{g['espn'][1]}"] = 1
@@ -339,6 +417,7 @@ def main():
                         body = f"Kalshi sells it at {round(ask*100)}c but ESPN's live model gives {t.get('short') or t['name']} {round(p*100)}% ({nm(H)} {sc(H)} - {nm(A)} {sc(A)}, {(st.get('type') or {}).get('shortDetail', '')}). $10 wins about ${10/ask - 10:.2f}."
                         me_, op_ = (H, A) if t is Ht else (A, H)
                         stv = game_story(c["_path"], g["espn"][1], g["sport"], (me_.get("team") or {}).get("id"), (op_.get("team") or {}).get("id"), t is Ht, nm(me_), nm(op_))
+                        body = story_line(g["sport"], stv[5], nm(me_), nm(op_), sc(me_) - sc(op_), mins_left(g["sport"], c["_path"], period, clock), stv[4], p, ask, c["_path"]) + "\n" + body
                         if stv[4]: body += f" {'REAL' if stv[4][1] == 'REAL' else 'LUCKY?' if stv[4][1] == 'LUCKY' else 'EVEN'}: {stv[4][0]}"
                         if stv[4] and stv[4][1] == "LUCKY": title = title.replace("LIVE VALUE", "LIVE VALUE (careful)")
                         kal = f"https://kalshi.com/markets/{ser.lower()}/x/{(ser + '-' + ((D.get('REMAP') or {}).get(code, {}).get(ser, code))).lower()}" if code else None
