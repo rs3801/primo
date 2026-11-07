@@ -1,24 +1,18 @@
-import json, urllib.request
-def get(u): return json.load(urllib.request.urlopen(urllib.request.Request(u,headers={"User-Agent":"primo"}),timeout=30))
+import sys, json; sys.path.insert(0, "probe")
+import alerts_t as A
 out=[]
-d=get("https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard")
-for e in d["events"]:
-  c=e["competitions"][0]; st=c["status"]
-  out.append("G %s | %s | %s"%(e["shortName"],st["type"]["shortDetail"]," ".join(t["team"]["abbreviation"]+" "+str(t.get("score")) for t in c["competitors"])))
-  if "POR" in e["shortName"] and "LAL" in e["shortName"]:
-    s=get("https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event="+e["id"])
-    for tb in s.get("boxscore",{}).get("players",[]):
-      sx=tb["statistics"][0]; keys=sx["names"]
-      for a in sx["athletes"]:
-        if a.get("stats"): out.append("P %s %s %s"%(tb["team"]["abbreviation"],a["athlete"]["displayName"],dict(zip(keys,a["stats"]))))
-    for t in s.get("boxscore",{}).get("teams",[]):
-      out.append("T %s %s"%(t["team"]["abbreviation"],{x["label"]:x["displayValue"] for x in t.get("statistics",[])}))
-    pl=s.get("plays",[])
-    out.append("PLAYS %d"%len(pl))
-    for p in pl[-25:]: out.append("pl %s %s %s-%s %s"%(p.get("period",{}).get("number"),p.get("clock",{}).get("displayValue"),p.get("awayScore"),p.get("homeScore"),p.get("text")))
-    # lead changes / scoring by quarter
-    for t in c["competitors"]: out.append("Q %s %s"%(t["team"]["abbreviation"],[x.get("value") for x in t.get("linescores",[])]))
-    wp=s.get("winprobability",[])
-    if wp: out.append("WP last %s"%wp[-1])
-    out.append("LC %s"%json.dumps({k:v for k,v in (s.get("header",{}).get("competitions",[{}])[0]).items() if k in("leadChanges",)}))
+for lg in ["basketball/nba","basketball/mens-college-basketball"]:
+  d=A.get(A.ESPN+lg+"/scoreboard"+("?groups=50&limit=300" if "college" in lg else "")) or {}
+  for e in d.get("events",[])[:60]:
+    c=e["competitions"][0]; st=c["status"]
+    if st["type"]["state"] not in ("in","post"): continue
+    H=[x for x in c["competitors"] if x["homeAway"]=="home"][0]; Aw=[x for x in c["competitors"] if x["homeAway"]=="away"][0]
+    for dog,fav,home in ((Aw,H,False),):
+      try:
+        r=A.game_story(lg,e["id"],"Basketball",dog["team"]["id"],fav["team"]["id"],home,dog["team"]["shortDisplayName"],fav["team"]["shortDisplayName"])
+        diff=int(float(dog["score"]))-int(float(fav["score"]))
+        left=A.mins_left("Basketball",lg,st.get("period"),st.get("displayClock"))
+        out.append(e["shortName"]+" "+st["type"]["shortDetail"]+" | "+A.story_line("Basketball",r[5],dog["team"]["shortDisplayName"],fav["team"]["shortDisplayName"],diff,left,r[4],r[2],None)+" | flow "+json.dumps(r[5]))
+      except Exception as ex: out.append("err %s %s"%(e["shortName"],ex))
+    if len(out)>12: break
 open("probe.txt","w").write("\n".join(out))
