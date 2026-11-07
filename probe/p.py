@@ -1,11 +1,19 @@
-import urllib.request, json, collections
-out = []
-def get(u):
-    with urllib.request.urlopen(urllib.request.Request(u, headers={"User-Agent": "primo-family-app/1.0"}), timeout=30) as r: return json.load(r)
-for s in ["KXNBAPTS", "KXNBAREB", "KXNFLRECYDS", "KXNHLPTS"]:
-    d = get("https://api.elections.kalshi.com/trade-api/v2/markets?limit=1000&status=open&series_ticker=" + s)
-    ms = d.get("markets", [])
-    c = collections.Counter(m["event_ticker"] for m in ms)
-    out.append(f"{s}: {len(ms)} open; events {dict(list(c.items())[:12])}")
-    if ms: out.append("  sample " + json.dumps({k: ms[0].get(k) for k in ("ticker", "yes_sub_title", "volume", "yes_bid", "yes_ask", "open_time")}))
-open("probe.txt", "w").write("\n".join(out))
+import json, urllib.request
+API="https://api.elections.kalshi.com/trade-api/v2"
+def get(p):
+    return json.load(urllib.request.urlopen(urllib.request.Request(API+p,headers={"User-Agent":"primo"}),timeout=30))
+out=[]
+T="KXMVECROSSCATEGORY-S20265PVOW4T4E4PCYKW6-OXE7QWEFF"
+try:
+    m=get("/markets/"+T)["market"]
+    out.append(json.dumps({k:m.get(k) for k in ["title","yes_sub_title","no_sub_title","status","result","yes_ask","yes_bid","last_price","close_time","expected_expiration_time"]}))
+    legs=m.get("mve_selected_legs") or []
+    out.append("LEGS %d"%len(legs))
+    for l in legs:
+        t=l.get("market_ticker"); side=l.get("side")
+        try:
+            x=get("/markets/"+t)["market"]
+            out.append(json.dumps({"t":t,"side":side,"title":x.get("title"),"yes":x.get("yes_sub_title"),"status":x.get("status"),"result":x.get("result"),"ask":x.get("yes_ask"),"bid":x.get("yes_bid"),"last":x.get("last_price"),"exp":x.get("expected_expiration_time")}))
+        except Exception as e: out.append("leg err %s %s"%(t,e))
+except Exception as e: out.append("ERR %s"%e)
+open("probe.txt","w").write("\n".join(out))
