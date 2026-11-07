@@ -1,61 +1,13 @@
-G WSH @ ATL | Final | ATL 139 WSH 132
-G BOS @ CHA | Final | CHA 80 BOS 119
-G PHI @ CLE | Final | CLE 119 PHI 95
-G UTAH @ DAL | Final | DAL 112 UTAH 100
-G OKC @ MEM | Final | MEM 97 OKC 128
-G TOR @ MIL | Final | MIL 107 TOR 121
-G MIN @ NO | Final | NO 109 MIN 115
-G POR @ LAL | 11:14 - 4th | LAL 89 POR 75
-P POR Toumani Camara {'MIN': '21', 'PTS': '8', 'FG': '3-6', '3PT': '2-4', 'FT': '0-0', 'REB': '3', 'AST': '1', 'TO': '0', 'STL': '0', 'BLK': '0', 'OREB': '0', 'DREB': '3', 'PF': '4', '+/-': '-9'}
-P POR Deni Avdija {'MIN': '27', 'PTS': '12', 'FG': '4-10', '3PT': '1-4', 'FT': '3-7', 'REB': '9', 'AST': '7', 'TO': '6', 'STL': '1', 'BLK': '0', 'OREB': '2', 'DREB': '7', 'PF': '3', '+/-': '-8'}
-P POR Donovan Clingan {'MIN': '19', 'PTS': '8', 'FG': '3-5', '3PT': '2-4', 'FT': '0-0', 'REB': '9', 'AST': '0', 'TO': '2', 'STL': '1', 'BLK': '2', 'OREB': '1', 'DREB': '8', 'PF': '3', '+/-': '-7'}
-P POR Damian Lillard {'MIN': '27', 'PTS': '17', 'FG': '4-9', '3PT': '3-6', 'FT': '6-6', 'REB': '0', 'AST': '2', 'TO': '4', 'STL': '1', 'BLK': '0', 'OREB': '0', 'DREB': '0', 'PF': '0', '+/-': '-6'}
-P POR Scoot Henderson {'MIN': '23', 'PTS': '2', 'FG': '0-2', '3PT': '0-1', 'FT': '2-4', 'REB': '2', 'AST': '0', 'TO': '5', 'STL': '0', 'BLK': '0', 'OREB': '0', 'DREB': '2', 'PF': '5', '+/-': '-2'}
-P POR Robert Williams III {'MIN': '14', 'PTS': '9', 'FG': '4-5', '3PT': '0-0', 'FT': '1-1', 'REB': '5', 'AST': '2', 'TO': '1', 'STL': '1', 'BLK': '0', 'OREB': '3', 'DREB': '2', 'PF': '1', '+/-': '-5'}
-P POR Yang Hansen {'MIN': '3', 'PTS': '2', 'FG': '0-0', '3PT': '0-0', 'FT': '2-2', 'REB': '0', 'AST': '0', 'TO': '1', 'STL': '0', 'BLK': '0', 'OREB': '0', 'DREB': '0', 'PF': '0', '+/-': '-2'}
-P POR Jrue Holiday {'MIN': '20', 'PTS': '4', 'FG': '1-2', '3PT': '1-2', 'FT': '1-1', 'REB': '1', 'AST': '3', 'TO': '0', 'STL': '0', 'BLK': '0', 'OREB': '0', 'DREB': '1', 'PF': '2', '+/-': '-16'}
-P POR Chris Youngblood {'MIN': '9', 'PTS': '6', 'FG': '2-4', '3PT': '2-4', 'FT': '0-0', 'REB': '1', 'AST': '0', 'TO': '1', 'STL': '1', 'BLK': '0', 'OREB': '0', 'DREB': '1', 'PF': '2', '+/-': '+7'}
-P POR Sidy Cissoko {'MIN': '18', 'PTS': '7', 'FG': '2-7', '3PT': '2-5', 'FT': '1-2', 'REB': '1', 'AST': '2', 'TO': '0', 'STL': '0', 'BLK': '1', 'OREB': '0', 'DREB': '1', 'PF': '2', '+/-': '-12'}
-P LAL Jake LaRavia {'MIN': '16', 'PTS': '4', 'FG': '1-3', '3PT': '1-2', 'FT': '1-2', 'REB': '5', 'AST': '2', 'TO': '1', 'STL': '1', 'BLK': '0', 'OREB': '4', 'DREB': '1', 'PF': '3', '+/-': '-6'}
-P LAL Walker Kessler {'MIN': '25', 'PTS': '12', 'FG': '5-6', '3PT': '0-0', 'FT': '2-3', 'REB': '10', 'AST': '1', 'TO': '0', 'STL': '1', 'BLK': '0', 'OREB': '2', 'DREB': '8', 'PF': '2', '+/-': '+13'}
-P LAL Matisse Thybulle {'MIN': '19', 'PTS': '0', 'FG': '0-1', '3PT': '0-1', 'FT': '0-0', 'REB': '2', 'AST': '0', 'TO': '2', 'STL': '2', 'BLK': '0', 'OREB': '1', 'DREB': '1', 'PF': '2', '+/-': '-4'}
-P LAL Luka Doncic {'MIN': '31', 'PTS': '40', 'FG': '13-28', '3PT': '4-14', 'FT': '10-14', 'REB': '5', 'AST': '4', 'TO': '1', 'STL': '1', 'BLK': '0', 'OREB': '1', 'DREB': '4', 'PF': '3', '+/-': '+16'}
-P LAL Austin Reaves {'MIN': '26', 'PTS': '10', 'FG': '4-15', '3PT': '0-6', 'FT': '2-2', 'REB': '2', 'AST': '1', 'TO': '2', 'STL': '2', 'BLK': '0', 'OREB': '0', 'DREB': '2', 'PF': '4', '+/-': '0'}
-P LAL Sandro Mamukelashvili {'MIN': '20', 'PTS': '7', 'FG': '2-6', '3PT': '1-3', 'FT': '2-2', 'REB': '3', 'AST': '1', 'TO': '0', 'STL': '1', 'BLK': '1', 'OREB': '1', 'DREB': '2', 'PF': '0', '+/-': '+19'}
-P LAL Ziaire Williams {'MIN': '13', 'PTS': '8', 'FG': '3-5', '3PT': '2-4', 'FT': '0-0', 'REB': '2', 'AST': '1', 'TO': '1', 'STL': '1', 'BLK': '0', 'OREB': '1', 'DREB': '1', 'PF': '1', '+/-': '+10'}
-P LAL Adou Thiero {'MIN': '7', 'PTS': '4', 'FG': '2-4', '3PT': '0-0', 'FT': '0-0', 'REB': '4', 'AST': '2', 'TO': '0', 'STL': '0', 'BLK': '0', 'OREB': '4', 'DREB': '0', 'PF': '1', '+/-': '0'}
-P LAL Collin Sexton {'MIN': '5', 'PTS': '0', 'FG': '0-1', '3PT': '0-1', 'FT': '0-0', 'REB': '0', 'AST': '1', 'TO': '0', 'STL': '0', 'BLK': '0', 'OREB': '0', 'DREB': '0', 'PF': '1', '+/-': '-4'}
-P LAL Quentin Grimes {'MIN': '18', 'PTS': '2', 'FG': '1-3', '3PT': '0-2', 'FT': '0-0', 'REB': '0', 'AST': '0', 'TO': '1', 'STL': '2', 'BLK': '0', 'OREB': '0', 'DREB': '0', 'PF': '2', '+/-': '+16'}
-T POR {'FG': '23-50', 'Field Goal %': '46', '3PT': '13-30', 'Three Point %': '43', 'FT': '16-23', 'Free Throw %': '70', 'Rebounds': '31', 'Offensive Rebounds': '6', 'Defensive Rebounds': '25', 'Assists': '17', 'Steals': '5', 'Blocks': '3', 'Turnovers': '20', 'Team Turnovers': '0', 'Total Turnovers': '20', 'Technical Fouls': '2', 'Total Technical Fouls': '2', 'Flagrant Fouls': '0', 'Points Conceded Off Turnovers': '22', 'Fast Break Points': '11', 'Points in Paint': '18', 'Fouls': '22', 'Largest Lead': '16', 'Lead Changes': '2', 'Percent Led': '75'}
-T LAL {'FG': '31-72', 'Field Goal %': '43', '3PT': '8-33', 'Three Point %': '24', 'FT': '17-23', 'Free Throw %': '74', 'Rebounds': '33', 'Offensive Rebounds': '14', 'Defensive Rebounds': '19', 'Assists': '13', 'Steals': '11', 'Blocks': '1', 'Turnovers': '8', 'Team Turnovers': '0', 'Total Turnovers': '8', 'Technical Fouls': '1', 'Total Technical Fouls': '1', 'Flagrant Fouls': '0', 'Points Conceded Off Turnovers': '11', 'Fast Break Points': '4', 'Points in Paint': '40', 'Fouls': '19', 'Largest Lead': '14', 'Lead Changes': '2', 'Percent Led': '13'}
-PLAYS 393
-pl 3 1:46 75-81 Sidy Cissoko makes 26-foot three point jumper (Damian Lillard assists)
-pl 3 1:20 75-81 Luka Doncic misses 30-foot three point jumper
-pl 3 1:20 75-81 Adou Thiero offensive rebound
-pl 3 1:14 75-84 Ziaire Williams makes 27-foot three point jumper (Adou Thiero assists)
-pl 3 54.3 75-84 Sidy Cissoko misses 26-foot three point jumper
-pl 3 54.3 75-84 Luka Doncic defensive rebound
-pl 3 51.0 75-84 Scoot Henderson personal foul
-pl 3 51.0 75-85 Luka Doncic makes free throw 1 of 2
-pl 3 51.0 75-86 Luka Doncic makes free throw 2 of 2
-pl 3 51.0 75-86 Deni Avdija enters the game for Scoot Henderson
-pl 3 32.0 75-86 Deni Avdija misses 25-foot three point jumper
-pl 3 32.0 75-86 Ziaire Williams defensive rebound
-pl 3 23.9 75-86 Jrue Holiday personal foul
-pl 3 23.9 75-87 Luka Doncic makes free throw 1 of 2
-pl 3 23.9 75-87 Luka Doncic misses free throw 2 of 2
-pl 3 23.9 75-87 Matisse Thybulle enters the game for Sandro Mamukelashvili
-pl 3 23.9 75-87 Deni Avdija defensive rebound
-pl 3 2.6 75-87 Deni Avdija out of bounds bad pass turnover
-pl 3 2.3 75-87 Luka Doncic misses heave jump shot
-pl 3 2.3 75-87 Lakers offensive team rebound
-pl 3 0.0 75-87 End of the 3rd Quarter
-pl 4 12:00 75-87 Walker Kessler enters the game for Adou Thiero
-pl 4 12:00 75-87 Collin Sexton enters the game for Quentin Grimes
-pl 4 12:00 75-87 Austin Reaves enters the game for Luka Doncic
-pl 4 12:00 75-87 Donovan Clingan enters the game for Robert Williams III
-Q LAL [20.0, 33.0, 34.0, 2.0]
-Q POR [29.0, 31.0, 15.0, 0.0]
-WP last {'homeWinPercentage': 0.94, 'tiePercentage': 0.0, 'playId': '401909294584'}
-LC {}
-G SA @ SAC | 9:44 - 4th | SAC 88 SA 102
+WSH @ ATL Final | [COMEBACK BUILDING] Primo: skip it, not enough time. Wizards won the latest quarter 38-34; down 7 with about 0 min left: running out of time; Wizards hot tonight: Kyshawn George 33 pts, 5 threes, Trae Young 23 pts, 3 threes; Hawks: Nickeil Alexander-Walker 28 pts, 4 threes, Luguentz Dort 25 pts, 5 threes. | flow {"lc": 2, "big_d": 4.0, "big_f": 14.0, "per_d": [32.0, 27.0, 35.0, 38.0], "per_f": [28.0, 38.0, 39.0, 34.0], "hot_d": ["Kyshawn George 33 pts, 5 threes", "Trae Young 23 pts, 3 threes"], "hot_f": ["Nickeil Alexander-Walker 28 pts, 4 threes", "Luguentz Dort 25 pts, 5 threes"]}
+BOS @ CHA Final | [UPSET IN PROGRESS] Primo: check the price. Celtics hot tonight: Jayson Tatum 34 pts, 5 threes, Derrick White 18 pts, 4 threes. | flow {"lc": 0, "big_d": 46.0, "big_f": 0.0, "per_d": [40.0, 30.0, 26.0, 23.0], "per_f": [20.0, 19.0, 18.0, 23.0], "hot_d": ["Jayson Tatum 34 pts, 5 threes", "Derrick White 18 pts, 4 threes"], "hot_f": []}
+PHI @ CLE Final | [FADING] Primo: skip it, they are fading. Cavaliers won the latest quarter 28-21; down 24 with about 0 min left: running out of time; 76ers hot tonight: Jaylen Brown 20 pts, VJ Edgecombe 19 pts, 3 threes; Cavaliers: Donovan Mitchell 23 pts, Evan Mobley 22 pts, 3 threes. | flow {"lc": 1, "big_d": 2.0, "big_f": 25.0, "per_d": [22.0, 32.0, 20.0, 21.0], "per_f": [33.0, 29.0, 29.0, 28.0], "hot_d": ["Jaylen Brown 20 pts", "VJ Edgecombe 19 pts, 3 threes"], "hot_f": ["Donovan Mitchell 23 pts", "Evan Mobley 22 pts, 3 threes"]}
+UTAH @ DAL Final | [BACK-AND-FORTH] Primo: skip it, not enough time. Jazz won the latest quarter 24-23; 9 lead changes; down 12 with about 0 min left: running out of time; Jazz hot tonight: Lauri Markkanen 24 pts, 8 threes, Darryn Peterson 21 pts, 3 threes; Mavericks: P.J. Washington 26 pts, 6 threes, Cooper Flagg 21 pts, 10 reb. | flow {"lc": 9, "big_d": 8.0, "big_f": 20.0, "per_d": [28.0, 29.0, 19.0, 24.0], "per_f": [26.0, 31.0, 32.0, 23.0], "hot_d": ["Lauri Markkanen 24 pts, 8 threes", "Darryn Peterson 21 pts, 3 threes"], "hot_f": ["P.J. Washington 26 pts, 6 threes", "Cooper Flagg 21 pts, 10 reb"]}
+OKC @ MEM Final | [UPSET IN PROGRESS] Primo: check the price. Thunder won the latest quarter 30-21; Thunder hot tonight: Ajay Mitchell 35 pts, 4 threes, Shai Gilgeous-Alexander 28 pts, 3 threes; Grizzlies: Ty Jerome 21 pts. | flow {"lc": 2, "big_d": 37.0, "big_f": 6.0, "per_d": [35.0, 36.0, 27.0, 30.0], "per_f": [28.0, 21.0, 27.0, 21.0], "hot_d": ["Ajay Mitchell 35 pts, 4 threes", "Shai Gilgeous-Alexander 28 pts, 3 threes"], "hot_f": ["Ty Jerome 21 pts"]}
+TOR @ MIL Final | [TURNAROUND] Primo: check the price. Raptors won the latest quarter 32-20; Bucks once led by 15; Raptors hot tonight: RJ Barrett 27 pts, Alijah Martin 27 pts, 6 threes; Bucks: Tyler Herro 23 pts, Brayden Burries 21 pts, 11 reb. | flow {"lc": 3, "big_d": 17.0, "big_f": 15.0, "per_d": [24.0, 27.0, 38.0, 32.0], "per_f": [29.0, 31.0, 27.0, 20.0], "hot_d": ["RJ Barrett 27 pts", "Alijah Martin 27 pts, 6 threes"], "hot_f": ["Tyler Herro 23 pts", "Brayden Burries 21 pts, 11 reb"]}
+MIN @ NO Final | [BACK-AND-FORTH] Primo: check the price. Timberwolves won the latest quarter 38-30; 13 lead changes; Timberwolves hot tonight: Ayo Dosunmu 26 pts, 4 threes, Jaden McDaniels 23 pts; Pelicans: Jeremiah Fears 24 pts, Karlo Matkovic 18 pts, 4 threes. | flow {"lc": 13, "big_d": 11.0, "big_f": 7.0, "per_d": [27.0, 30.0, 20.0, 38.0], "per_f": [30.0, 21.0, 28.0, 30.0], "hot_d": ["Ayo Dosunmu 26 pts, 4 threes", "Jaden McDaniels 23 pts"], "hot_f": ["Jeremiah Fears 24 pts", "Karlo Matkovic 18 pts, 4 threes"]}
+POR @ LAL 10:55 - 4th | [FADING] Primo: skip it, they are fading. Lakers won the latest quarter 34-15; down 12 with about 11 min left: possible but needs a run; Trail Blazers hot tonight: Damian Lillard 17 pts, 3 threes; Lakers: Luka Doncic 40 pts, 4 threes. | flow {"lc": 2, "big_d": 16.0, "big_f": 14.0, "per_d": [29.0, 31.0, 15.0, 2.0], "per_f": [20.0, 33.0, 34.0, 2.0], "hot_d": ["Damian Lillard 17 pts, 3 threes"], "hot_f": ["Luka Doncic 40 pts, 4 threes"]}
+SA @ SAC 9:15 - 4th | [BACK-AND-FORTH] Primo: check the price. Kings won the latest quarter 8-5; 10 lead changes; Spurs hot tonight: Victor Wembanyama 27 pts, 3 threes, 13 reb, Stephon Castle 19 pts; Kings: Darius Acuff Jr. 16 pts, 3 threes, Domantas Sabonis 15 pts, 12 reb. | flow {"lc": 10, "big_d": 21.0, "big_f": 3.0, "per_d": [38.0, 37.0, 24.0, 5.0], "per_f": [29.0, 27.0, 24.0, 8.0], "hot_d": ["Victor Wembanyama 27 pts, 3 threes, 13 reb", "Stephon Castle 19 pts"], "hot_f": ["Darius Acuff Jr. 16 pts, 3 threes", "Domantas Sabonis 15 pts, 12 reb"]}
+UNF @ UCLA 7:49 - 2nd | [BACK-AND-FORTH] Primo: skip it, not enough time. UCLA won the latest quarter 46-28; 6 lead changes; down 53 with about 8 min left: running out of time; UCLA: Nikola Kusturica 29 pts, 4 threes, Jaylen Petty 20 pts, 3 threes. | flow {"lc": 6, "big_d": 1.0, "big_f": 53.0, "per_d": [20.0, 28.0], "per_f": [52.0, 46.0], "hot_d": [], "hot_f": ["Nikola Kusturica 29 pts, 4 threes", "Jaylen Petty 20 pts, 3 threes"]}
+TAR @ USD Final/OT | [FADING] Primo: skip it, they are fading. San Diego won the latest quarter 14-8; down 6 with about 0 min left: running out of time; Tarleton St hot tonight: TJ Cope 20 pts, Leroy Kelly IV 18 pts; San Diego: Dusty Stromer 22 pts, Jevon Hill 18 pts, 6 threes. | flow {"lc": 5, "big_d": 15.0, "big_f": 6.0, "per_d": [46.0, 36.0, 8.0], "per_f": [32.0, 50.0, 14.0], "hot_d": ["TJ Cope 20 pts", "Leroy Kelly IV 18 pts"], "hot_f": ["Dusty Stromer 22 pts", "Jevon Hill 18 pts, 6 threes"]}
+CONN VS MICH Final | [UPSET IN PROGRESS] Primo: check the price. Michigan won the latest quarter 47-42; UConn hot tonight: Braylon Mullins 23 pts, 3 threes, Silas Demary Jr. 21 pts; Michigan: Trey McKenney 22 pts, 4 threes, J.P. Estrella 19 pts. | flow {"lc": 1, "big_d": 18.0, "big_f": 2.0, "per_d": [43.0, 42.0], "per_f": [30.0, 47.0], "hot_d": ["Braylon Mullins 23 pts, 3 threes", "Silas Demary Jr. 21 pts"], "hot_f": ["Trey McKenney 22 pts, 4 threes", "J.P. Estrella 19 pts"]}
+NE @ UVA Final | [FADING] Primo: skip it, they are fading. Virginia won the latest quarter 59-41; down 25 with about 0 min left: running out of time; Northeastern hot tonight: Rashad King 26 pts, Louis Bond 23 pts, 3 threes; Virginia: Sam Lewis 20 pts, Chance Mallory 20 pts, 3 threes. | flow {"lc": 1, "big_d": 5.0, "big_f": 27.0, "per_d": [31.0, 41.0], "per_f": [38.0, 59.0], "hot_d": ["Rashad King 26 pts", "Louis Bond 23 pts, 3 threes"], "hot_f": ["Sam Lewis 20 pts", "Chance Mallory 20 pts, 3 threes"]}
