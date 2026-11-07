@@ -341,7 +341,8 @@ const TIERS = {
   best:   {name:"Best value", lo:.60, hi:.90, sort:"score", blurb:"Primo's smartest mix: likely bets (60–90%) that are cheaper on Kalshi than the sportsbooks' fair price (winners, spreads and totals), rated well by Primo, or that the money is moving toward. Each combo shows its expected return."},
   safe:   {name:"Safe",   lo:.80, hi:.97, sort:"p",   blurb:"Biggest favorites. Smallest payout, best chance."},
   middle: {name:"Middle", lo:.58, hi:.82, sort:"score", blurb:"Solid favorites with a few closer calls, edges first."},
-  longshot: {name:"🎰 Long shot", custom:true, blurb:"A lottery ticket built from Primo's homework: player bets (Yes and No) where each player's recent games beat Kalshi's price, plus line picks. Many legs, huge payout, small chance. Bet only a few dollars."},
+  medium: {name:"🎯 Medium shot", custom:true, few:true, blurb:"Built like the Long shot (only legs where Primo's homework beats Kalshi's price) but just 5–6 of the most likely ones, so it hits far more often. Pays roughly 4 to 15 times your money."},
+  longshot: {name:"🎰 Long shot", custom:true, blurb:"A lottery ticket built from Primo's homework: player bets where each player's recent games beat Kalshi's price, plus line picks. Many legs, huge payout, small chance. Bet only a few dollars."},
   high:   {name:"High risk", lo:.30, hi:.60, sort:"score", blurb:"Close games and underdogs for a big payout, picking the ones with an edge first (cheaper than the sportsbooks, liked by Primo, or money moving in). Expect most of these to miss."}
 };
 
@@ -1011,12 +1012,13 @@ function longShotPool(){
     }
   }
   out.sort((a, b) => (b.e + .25 * b.pp) - (a.e + .25 * a.pp));   // a good price first, but likely legs win ties
+  for (const x of out){ x.m._lsp = x.pp; x.m._lse = x.e; }
   return out.map(x => x.m);
 }
-function pickLongShot(pool, n){
+function pickLongShot(pool, n, passes = [4, 6]){
   const legs = [], perGame = new Map(), seen = new Set(), sided = new Set();
   const statKey = m => { const b = m.noOf || m; const pl = playerOf(b); if (!pl) return null; const pp = propParse(b); return pl + "|" + (pp ? (pp.stat || pp.dd) : b.series); };
-  for (const pass of [4, 6]){   // first at most 4 legs from one game, then up to 6 if more legs are needed
+  for (const pass of passes){   // first at most 4 legs from one game, then up to 6 if more legs are needed
     for (const m of pool){
       if (legs.length >= n) break;
       if (legs.includes(m) || (perGame.get(m.g) || 0) >= pass) continue;
@@ -1109,6 +1111,9 @@ async function build(){
   state.legs = n; $("legs").value = n;
   built = {};
   for (const k of Object.keys(TIERS)){
+    if (TIERS[k].custom && TIERS[k].few){   // 🎯 medium shot: 60-84% legs that beat their price the most, 5 or 6 of them (90%+ "sure things" pay little and, in Primo's records, hit a bit less than their price)
+      const pool = n > 1 ? longShotPool().filter(comboOK).filter(m => m.ask >= .6 && m.ask <= .84).sort((a, b) => (b._lse + .4 * b._lsp) - (a._lse + .4 * a._lsp)) : [];
+      built[k] = {pool, legs: pickLongShot(pool, n >= 6 ? 6 : 5, [1, 2])}; continue; }
     if (TIERS[k].custom){ const pool = n > 1 ? longShotPool().filter(comboOK) : []; built[k] = {pool, legs: pickLongShot(pool, n >= 8 ? n : 10)}; continue; }
     const pool = candidatesFor(k);
     if (n > 1) pool.splice(0, pool.length, ...pool.filter(comboOK));   // combos: only bets Kalshi lets you combine
@@ -2378,7 +2383,8 @@ function renderBuild(){
     html += legs.length ? totalsHTML(legs) : "";
     if (t.custom && legs.length){
       const kp = legs.reduce((a, m) => a * m.p, 1), pp = legs.reduce((a, m) => a * (m.primoP ?? m.p), 1), cost = comboCost(legs), one = x => Math.max(1, Math.round(1 / x)).toLocaleString();
-      html += `<p class="warn" style="color:var(--ink)">🎰 Kalshi's chance all ${legs.length} hit: about <b>1 in ${one(kp)}</b>. If Primo's homework is right on every leg: about <b>1 in ${one(pp)}</b>${pp > kp * 1.15 ? " (each leg beat its price; homework is never perfect, so expect something in between)" : ""}. <b>$5 pays about ${TK.usd(5 / cost)}</b> if all hit. This is a lottery ticket: bet only what you're happy to lose, and expect it to miss most of the time.</p>`;
+      if (t.few) html += `<p class="warn" style="color:var(--ink)">🎯 Kalshi's chance all ${legs.length} hit: about <b>1 in ${one(kp)}</b>${pp > kp * 1.1 ? `; with Primo's homework about <b>1 in ${one(pp)}</b>` : ""}. <b>$10 pays about ${TK.usd(10 / cost)}</b> if all hit. Every leg is 60–84% and beats its Kalshi price.</p>`;
+      else html += `<p class="warn" style="color:var(--ink)">🎰 Kalshi's chance all ${legs.length} hit: about <b>1 in ${one(kp)}</b>. If Primo's homework is right on every leg: about <b>1 in ${one(pp)}</b>${pp > kp * 1.15 ? " (each leg beat its price; homework is never perfect, so expect something in between)" : ""}. <b>$5 pays about ${TK.usd(5 / cost)}</b> if all hit. This is a lottery ticket: bet only what you're happy to lose, and expect it to miss most of the time.</p>`;
     }
     const poolGames = new Set(built[k].pool.map(m => m.g)).size, sportsTxt = [...new Set(built[k].pool.map(m => m.g.sport))].join(" and ").toLowerCase() || "these";
     const allGames = Math.max(...Object.values(built).map(b => new Set(b.pool.map(m => m.g)).size)), fights = built[k].pool.length && built[k].pool.every(m => m.g.sport === "Boxing" || m.g.sport === "MMA"), GW = fights ? "fights" : "games";
