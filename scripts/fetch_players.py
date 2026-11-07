@@ -1,7 +1,7 @@
 """Player usage and recent game logs (free ESPN box scores) -> data/players.js
 For every team playing in the next few days: its last 5 finished games, each player's numbers in them,
 how the team spreads the ball around (targets, carries), and how much its defense has been giving up."""
-import json, time, datetime, urllib.request, os
+import json, time, datetime, urllib.request, os, re
 from zoneinfo import ZoneInfo
 
 ESPN = "https://site.api.espn.com/apis/site/v2/sports/"
@@ -209,7 +209,25 @@ def main():
     sched = {k: v for k, v in sched.items() if now - v.get("t", 0) < 7 * 86400}
     json.dump(boxes, open("data/box_cache.json", "w"), separators=(",", ":"))
     json.dump(sched, open("data/sched_cache.json", "w"), separators=(",", ":"))
-    data = {"asof": datetime.datetime.now(PT).strftime("%b %d, %I:%M %p PT"), "keys": {"Football": FB, "Basketball": BB, "Hockey": HK, "Soccer": SC, "Baseball": BS}, "starters": starters, "teams": out_teams, "players": out_players}
+    # self-check: every player Kalshi has bets on, does Primo have his recent games?
+    audit = {"checked": 0, "missing": []}
+    try:
+        import unicodedata
+        fold = lambda x: "".join(c for c in unicodedata.normalize("NFD", (x or "").lower()) if unicodedata.category(c) != "Mn")
+        t = open("data/prices.js").read(); PD = json.loads(t[t.index("{"):t.rindex("}") + 1]); have = {fold(n) for n in out_players}; seen = set()
+        for kg in PD.get("G") or []:
+            if kg[0] not in ("Football", "Basketball", "Hockey", "Baseball"): continue
+            teams = [fold(r[1]) for r in kg[3] if ":" not in r[1]]
+            for r in kg[3]:
+                m = re.match(r"^(.+?):\s*(\d+\+|over|double|triple)", r[1], re.I)
+                if not m: continue
+                who = m.group(1).strip(); fw = fold(who)
+                if fw in seen or "d/st" in fw or len(who.split()) < 2 or any(fw in x for x in teams): continue
+                seen.add(fw); audit["checked"] += 1
+                if fw not in have: audit["missing"].append(who)
+    except Exception as e: print("audit failed", e)
+    print("self-check:", audit["checked"], "players with Kalshi bets,", len(audit["missing"]), "without recent games")
+    data = {"asof": datetime.datetime.now(PT).strftime("%b %d, %I:%M %p PT"), "audit": audit, "keys": {"Football": FB, "Basketball": BB, "Hockey": HK, "Soccer": SC, "Baseball": BS}, "starters": starters, "teams": out_teams, "players": out_players}
     with open("data/players.js", "w") as f:
         f.write("window.PRIMO_PLAYERS=" + json.dumps(data, separators=(",", ":"), ensure_ascii=False).replace("</", "<\\/") + ";\n")
     print("players:", len(out_players), "teams:", len(out_teams), "new box scores:", new_box, "schedules:", new_sched, "calls:", CALLS["n"], "size:", os.path.getsize("data/players.js"))

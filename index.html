@@ -309,7 +309,11 @@ header.top .hint{color:#FFB52E;border-color:rgba(255,181,46,.6);background:rgba(
         <div class="brow"><button class="btn" type="button" id="askgo">Ask Primo</button><button class="btn ghost sm" type="button" id="askstop" hidden>Stop</button></div>
         <p class="filtsum" id="askstatus" role="status" aria-live="polite"></p>
         <p class="stakenote" style="margin:0">Ask Primo uses your own Claude account; the first time, Claude asks you to allow it.</p>
-      </div><div id="askout" style="margin-top:14px"></div></section>
+      </div><div id="askout" style="margin-top:14px"></div>
+      <details class="builder" id="rcbox" style="margin-top:14px"><summary class="blabel" style="cursor:pointer">📋 Player report card</summary>
+        <p class="filtsum">Type any player: games played lately, averages, and how often he went over points, threes, rebounds, yards and more.</p>
+        <input id="rcname" class="search" type="search" placeholder="Luka Doncic" autocomplete="off" list="rclist"><datalist id="rclist"></datalist>
+        <p class="filtsum" id="rcaudit"></p><div id="rcout"></div></details></section>
     </main>
   </div>
 </div>
@@ -2093,9 +2097,50 @@ function defense0(team){
   d.rk = {pass: rank("pass", fa("netPassingYards")), rush: rank("rush", fa("rushingYards")), pts: rank("pts", v => { const a = v.g.map(x => x.pa).filter(x => x != null); return a.length ? avg(a) : null; }), shots: rank("shots", fa("shotsTotal"))};
   return d;
 }
+
+// 📋 Player report card: how many games he played lately, his averages, and how often he went over common lines
+const RC = {
+  Basketball: [["Points", r => r[1], [10, 15, 20, 25, 30, 35, 40]], ["Rebounds", r => r[2], [2, 4, 6, 8, 10, 12, 14]], ["Assists", r => r[3], [2, 4, 6, 8, 10, 12]], ["Threes", r => r[4], [1, 2, 3, 4, 5, 6, 7]]],
+  Football: [["Passing yards", r => r[9], [150, 200, 250, 300, 350], r => (r[8] || 0) >= 10], ["TD passes", r => r[10], [1, 2, 3], r => (r[8] || 0) >= 10], ["Rushing yards", r => r[5], [25, 40, 60, 80, 100], r => (r[4] || 0) >= 4], ["Catches", r => r[1], [2, 3, 4, 5, 6, 7], r => (r[0] || r[1] || 0) >= 2], ["Receiving yards", r => r[2], [25, 40, 60, 80, 100], r => (r[0] || r[1] || 0) >= 2], ["Touchdowns", r => (r[3] || 0) + (r[6] || 0), [1, 2], r => (r[4] || 0) + (r[1] || 0) >= 3]],
+  Hockey: [["Points", r => r[0] == null ? null : (r[0] || 0) + (r[1] || 0), [1, 2]], ["Goals", r => r[0], [1, 2]], ["Shots on goal", r => r[2], [1, 2, 3, 4, 5]], ["Saves", r => r[3], [20, 25, 30, 35]]],
+  Soccer: [["Goals", r => r[0], [1, 2]], ["Shots on target", r => r[2], [1, 2, 3]], ["Shots", r => r[3], [1, 2, 3, 4]]],
+  Baseball: [["Hits", r => r[0] ? r[1] : null, [1, 2, 3]], ["Home runs", r => r[0] ? r[4] : null, [1]], ["Hits + runs + RBI", r => r[0] ? (r[1] || 0) + (r[2] || 0) + (r[3] || 0) : null, [1, 2, 3, 4]], ["Strikeouts (pitching)", r => r[7] ? r[11] : null, [3, 4, 5, 6, 7, 8]]]};
+function reportCard(name){
+  const e = playerByName(name); if (!e) return null;
+  const [n, P] = e, T = (PL.teams || {})[P.tm] || {}, sport = T.sp; if (!RC[sport]) return null;
+  const L = freshLog(P), played = L.filter(Boolean), total = L.length;
+  const stats = [];
+  for (const [lab, f, lines, use] of RC[sport]){
+    const rows = played.filter(r => !use || use(r)), v = rows.map(f).filter(x => x != null);
+    if (v.length < 2) continue;
+    const a = v.reduce((x, y) => x + y, 0) / v.length;
+    if (a < (sport === "Basketball" ? .6 : sport === "Football" ? (lab === "Touchdowns" || lab === "TD passes" ? .25 : 1) : sport === "Baseball" && lab === "Home runs" ? .15 : .25)) continue;
+    // the lines around his average: the one he usually clears, and the next ones up
+    let i = lines.findIndex(x => x > a); if (i < 0) i = lines.length; const pick = lines.slice(Math.max(0, i - 2), Math.max(0, i - 2) + 3);
+    stats.push({lab, avg: a, last: v.slice().reverse().slice(0, 5).map(x => Math.round(x)), hits: pick.map(x => [x, v.filter(y => y >= x).length, v.length])});
+  }
+  const hot = hotPlayers(P.tm, sport).find(x => x.n === n), cold = coldPlayers(P.tm, sport).find(x => x.n === n);
+  const last = (T.g || []).slice(-1)[0];
+  return {n, tm: P.tm, sport, played: played.length, total, stats, hot, cold, lastDate: last && last.d};
+}
+function reportCardText(name, only){
+  const c = reportCard(name); if (!c) return "";
+  const st = only ? c.stats.filter(x => x.lab.toLowerCase().startsWith(only)) : c.stats;
+  const parts = (st.length ? st : c.stats).slice(0, only ? 1 : 4).map(x => `${x.lab} avg ${x.avg >= 10 ? Math.round(x.avg) : x.avg.toFixed(1)} (${x.hits.map(([l, h, t]) => `${l}+ in ${h} of ${t}`).join(", ")})`);
+  return `📋 Report card: ${c.n} played ${c.played} of his team's last ${c.total} games${c.hot ? " · 🔥 " + c.hot.txt : c.cold ? " · 🥶 slumping: " + c.cold.txt : ""}. ${parts.join(" · ")}.`;
+}
+function reportCardHTML(name){
+  const c = reportCard(name); if (!c) return "";
+  const rows = c.stats.map(x => `<tr><td><b>${esc(x.lab)}</b><br><span class="muted" style="font-size:12px">latest first: ${x.last.join(", ")}</span></td><td style="text-align:center">${x.avg >= 10 ? Math.round(x.avg) : x.avg.toFixed(1)}</td>${x.hits.map(([l, h, t]) => `<td style="text-align:center;${h / t >= .7 ? "color:#1a8f3a;font-weight:700" : h / t <= .3 ? "opacity:.6" : ""}">${l}+<br>${h} of ${t}</td>`).join("")}</tr>`).join("");
+  return `<div class="legnote" style="margin:8px 0;padding:10px;border-radius:12px;background:var(--card,#fff);box-shadow:0 1px 3px rgba(0,0,0,.08)"><b>📋 ${esc(c.n)}</b> · ${esc(c.tm)} · ${esc(c.sport)}<br>Played <b>${c.played} of his team's last ${c.total}</b> games${c.lastDate ? ` (team's latest: ${esc(c.lastDate)})` : ""}.${c.hot ? `<br>🔥 <b>Hot:</b> ${esc(c.hot.txt)}` : ""}${c.cold ? `<br>🥶 <b>Slumping:</b> ${esc(c.cold.txt)}` : ""}${c.played < 3 ? `<br>⚠️ Only ${c.played} recent game${c.played === 1 ? "" : "s"}: too few to judge.` : ""}<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;margin-top:6px;font-size:13px"><tr class="muted" style="font-size:12px"><td></td><td style="text-align:center">Avg</td><td colspan="3" style="text-align:center">How often he got there</td></tr>${rows}</table></div><p class="muted" style="margin:6px 0 0;font-size:12px">From ESPN box scores. Green = he got there in 70%+ of games. Kalshi's price already knows his average: look for lines he clears more often than the price says.</p></div>`;
+}
 function propInsight(m){
   const g = m.g, f = g.facts, pp = propParse(m); if (!pp) return null;
-  const P = PLX.get(ffold(pp.who)); if (!P) return null;
+  const P = PLX.get(ffold(pp.who));
+  if (!P){   // a real player Kalshi has bets on, but no recent games in Primo's box scores (backup, new, or hurt)
+    const isTeam = f && f.teams.some(t => teamIn(t, pp.who)) || /D\/ST|full game|1st half|2nd half/i.test(pp.who) || pp.who.trim().split(/\s+/).length < 2;
+    return isTeam || !["Football", "Basketball", "Hockey", "Baseball", "Soccer"].includes(g.sport) ? null : {pros: [], cons: [`⚠️ Primo has no recent games for ${pp.who} (a backup, new to the team, or coming back from injury): no homework on this player, so this is Kalshi's price only.`], lines: [], est: null, n: 0, proj: null};
+  }
   const T = PL.teams[P.tm]; if (!T) return null;
   const pros = [], cons = [], lines = [], nm = pp.who;
   const played = P.log.map((r, i) => r ? {r, o: (T.g[i] || {}).o} : null).filter(Boolean), missed = P.log.length - played.length;
@@ -2151,6 +2196,7 @@ function propInsight(m){
     if ((/yards|saves/.test(S[2]) || (g.sport === "Basketball" && /points|rebounds/.test(S[2]))) && proj > 0) lines.push(`Primo's projection: about ${Math.round(proj)} ${S[2]} in this game (recent average, adjusted for the opponent).`);
   }
   if (missed) lines.push(`${nm} didn't play in ${missed} of the team's last ${P.log.length} games.`);
+  { const rc = reportCardText(P.name); if (rc) lines.push(rc); }
   const c = isNaN(m.ask) ? m.p : m.ask;
   if (est != null && vals.length >= 3){
     const e = est - c;
@@ -2672,6 +2718,13 @@ $("filterbox").open = true;
 function openFromLink(){ const h = /^#live-(\d+)/.exec(location.hash || ""); if (!h) return false; LV.focus = h[1]; LV.view = "all"; LV.sport = "all"; state.tab = "live"; history.replaceState(null, "", location.pathname + location.search); return true; }
 window.addEventListener("hashchange", () => { if (openFromLink()){ render(); window.scrollTo({top: 0}); } });
 openFromLink();
+(function(){ const box = $("rcname"); if (!box) return; let filled = false;
+  { const A = PL.audit; if (A && A.checked) $("rcaudit").innerHTML = `✅ <b>Primo's hourly self-check:</b> ${A.checked - A.missing.length} of ${A.checked} players with Kalshi bets have recent games on file${A.missing.length ? `. No recent games (backups, new or hurt): ${esc(A.missing.slice(0, 20).join(", "))}${A.missing.length > 20 ? "…" : ""}` : ""}.`; }
+  const show = () => { const q = ffold(box.value.trim()); if (q.length < 3){ $("rcout").innerHTML = ""; return; }
+    const hits = Object.keys(PL.players || {}).filter(n => ffold(n).includes(q)).sort((a, b) => (ffold(a).startsWith(q) ? 0 : 1) - (ffold(b).startsWith(q) ? 0 : 1)).slice(0, 4);
+    $("rcout").innerHTML = hits.map(reportCardHTML).join("") || `<p class="muted">Primo has no recent games for “${esc(box.value)}”. Check the spelling, or he may be a backup, new, or hurt.</p>`; };
+  box.addEventListener("focus", () => { if (filled) return; filled = true; const names = Object.entries(PL.players || {}).filter(([n, p]) => ["Basketball", "Football", "Hockey", "Baseball"].includes(((PL.teams || {})[p.tm] || {}).sp)).map(([n]) => n); $("rclist").innerHTML = names.slice(0, 3000).map(n => `<option value="${esc(n)}">`).join(""); });
+  let t; box.addEventListener("input", () => { clearTimeout(t); t = setTimeout(show, 250); }); })();
 buildFilters(); renderLegChips(); render();
 
 /* ---------- Ask Primo: check the viewer's own picks (typed or a screenshot) ---------- */
