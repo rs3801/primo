@@ -268,7 +268,18 @@ def story_line(sport, flow, dname, fname, diff, left, verdict, wp, ask, path="")
     elif tag == "FADING" or lab == "LUCKY" or (diff < 0 and bits and "running out of time" in " ".join(bits)): call = f"Primo: skip it, {'they are fading' if tag == 'FADING' else 'the score flatters them' if lab == 'LUCKY' and diff >= 0 else 'not enough time' if 'running out' in ' '.join(bits) else 'being outplayed'}"
     elif ask and wp is not None: call = f"Primo: fair price ({round(ask*100)}c vs ESPN {round(wp*100)}%), fun-size bet only"
     else: call = "Primo: check the price"
+    STORY["last"] = (tag, call.replace("Primo: ", ""), bits)
     return f"[{tag}] {call}. " + ("; ".join(bits) + "." if bits else "")
+
+STORY = {}
+def short(score, last=None, extra=""):
+    """What the phone shows: the call, the clock and one eye-catching fact; the full story is in Primo when tapped."""
+    tag, call, bits = last or ("", "", [])
+    pick = next((b for b in bits if "min left" in b or "needs" in b), None)
+    hot = next((b for b in bits if "hot tonight" in b), None)
+    if hot: hot = hot.split(": ", 1)[1].split(",")[0]
+    out = f"{call[0].upper() + call[1:] if call else ''}. {score}" + (f" {pick.split(': ')[-1].capitalize()}." if pick and ": " in pick else "") + (f" 🔥 {hot}." if hot else "") + (" " + extra if extra else "")
+    return out.strip(), tag
 
 def main():
     D = load_js("data/prices.js"); FX = load_js("data/facts.js")
@@ -374,7 +385,7 @@ def main():
                         if ask: body += f" Kalshi: {round(ask*100)}c, $10 wins about ${10/ask - 10:.2f}."
                         else: body += " Check Kalshi's live price."
                         kal = f"https://kalshi.com/markets/{ser.lower()}/x/{(ser + '-' + ((D.get('REMAP') or {}).get(code, {}).get(ser, code))).lower()}" if ask and code else None
-                        msgs.append((title, body, f"{APP}#live-{g['espn'][1]}", kal)); sent[key] = level
+                        msgs.append((title, body, f"{APP}#live-{g['espn'][1]}", kal, f"{nm(dog)} {sc(dog)}-{sc(fav)}{', ' + clock + ' ' + stage if stage and clock else ''}.", STORY.get("last"))); sent[key] = level
         # 1b) close finish: a coin-flip game (neither team a real underdog) that's within one score late
         big_lg = g.get("league") in ("NFL", "NBA", "WNBA", "NHL", "MLB", "College football", "College basketball") and not c.get("_fcs")
         if stage and big_lg and Ht and At and f"late|{g['espn'][1]}" not in sent and f"close|{g['espn'][1]}" not in sent:
@@ -403,7 +414,7 @@ def main():
                 if warns: body += "\nCAREFUL: " + "; ".join(warns[:2]) + "."
                 ask_t, ser_t = ask_for(trailT)
                 kal = f"https://kalshi.com/markets/{ser_t.lower()}/x/{(ser_t + '-' + ((D.get('REMAP') or {}).get(code, {}).get(ser_t, code))).lower()}" if ask_t and code else None
-                msgs.append((title, body, f"{APP}#live-{g['espn'][1]}", kal)); sent[f"close|{g['espn'][1]}"] = 1
+                msgs.append((title, body, f"{APP}#live-{g['espn'][1]}", kal, f"{clock + ' ' if clock else ''}{stage}.", STORY.get("last"))); sent[f"close|{g['espn'][1]}"] = 1
         # 2) live value: Kalshi well below ESPN's live chance
         fresh = now - (LV.get("ts") or 0) < 8 * 60
         big = g.get("league") in ("NFL", "NBA", "WNBA", "NHL", "MLB", "College football") and not c.get("_fcs")
@@ -421,9 +432,14 @@ def main():
                         if stv[4]: body += f" {'REAL' if stv[4][1] == 'REAL' else 'LUCKY?' if stv[4][1] == 'LUCKY' else 'EVEN'}: {stv[4][0]}"
                         if stv[4] and stv[4][1] == "LUCKY": title = title.replace("LIVE VALUE", "LIVE VALUE (careful)")
                         kal = f"https://kalshi.com/markets/{ser.lower()}/x/{(ser + '-' + ((D.get('REMAP') or {}).get(code, {}).get(ser, code))).lower()}" if code else None
-                        msgs.append((title, body, f"{APP}#live-{g['espn'][1]}", kal)); sent[key] = now
+                        msgs.append((title, body, f"{APP}#live-{g['espn'][1]}", kal, f"Kalshi {round(ask*100)}c, ESPN {round(p*100)}%.", STORY.get("last"))); sent[key] = now
         for m in msgs[:2]:
-            send(*m); n_alerts += 1
+            title, body, click, kal = m[:4]
+            sm, tag = short(m[4] if len(m) > 4 else "", m[5] if len(m) > 5 else None)
+            if tag: title = re.sub(r"^[A-Z ()]+:", tag + ":", title) if not title.startswith("LIVE VALUE") else title
+            send(title, sm or body[:160], click, kal); n_alerts += 1
+            T = sent.setdefault("texts", {}); T[str(g["espn"][1])] = {"t": now, "title": title, "body": body}
+    sent["texts"] = {k: v for k, v in (sent.get("texts") or {}).items() if now - v.get("t", 0) < 8 * 3600}
     json.dump(sent, open(STATE, "w"))
     print("alerts:", len(cand), "games checked,", n_alerts, "sent")
 

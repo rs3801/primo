@@ -2387,6 +2387,10 @@ async function loadLive(){
     const r = await fetch("https://raw.githubusercontent.com/rs3801/primo/live/live.json?t=" + Math.floor(Date.now() / 60000), {cache: "no-store"});
     if (r.ok){ LV.data = await r.json(); LV.loaded = Date.now(); }
   } catch (e) {}
+  try {   // the full story behind each phone alert (the alert itself stays short)
+    const r = await fetch("https://raw.githubusercontent.com/rs3801/primo/live/alerts_state.json?t=" + Math.floor(Date.now() / 60000), {cache: "no-store"});
+    if (r.ok){ const a = await r.json(); LV.alerts = a.texts || {}; }
+  } catch (e) {}
 }
 async function loadEspn(list){
   const per = g => { const e = g.facts && g.facts.espn, s = e && LV.sb[e[1]]; return s ? s.period || 0 : 0; };
@@ -2539,7 +2543,9 @@ function liveCardHTML(x, c){
     : es && es.home != null ? `<div class="legnote mean" style="margin:6px 0">⏸️ <b>No edge right now.</b> Kalshi's price is in line with ESPN's live chance. Wait or skip.</div>`
     : `<div class="legnote mean" style="margin:6px 0">ℹ️ Primo can't see a live win chance for this one${g.facts ? "" : ` (${esc(g.leagueName)} has no free live feed)`}, so it shows Kalshi's live prices only.</div>`;
   const lu = lateUpset(x, c), up = lu ? null : liveUpset(x, c);
-  return `<article class="game" data-eid="${esc(String((g.facts && g.facts.espn || [])[1] || ""))}" style="--c:var(${SPORT_COLOR[g.sport] || "--s-other"});padding:12px 14px;margin-bottom:10px"><div class="gtitle">🔴 ${esc(g.title)}</div>${lu ? lateCardHTML(x, lu) : up ? upsetCardHTML(x, up) : ""}<div class="gsub"><b>${esc(g.leagueName)}</b>${es ? ` · ${esc(es.detail)}` : " · in progress"}${score ? ` · ${score}` : ""}</div>${call}${c.sides.length ? `<ul style="margin:6px 0 0;padding-left:18px">${sideRows}</ul>` : `<p class="muted">No live Kalshi price yet; the live robot checks every few minutes.</p>`}${c.notes.length ? `<p class="muted" style="margin:6px 0 0">${c.notes.map(esc).join(" ")}</p>` : ""}${link ? `<p style="margin:6px 0 0">${betLink(g.markets.find(m => m.type === "winner"),"Open on Kalshi ↗")}</p>` : ""}</article>`;
+  const eid = String((g.facts && g.facts.espn || [])[1] || ""), al = eid && (LV.alerts || {})[eid];
+  const alertBox = al ? `<div class="legnote" style="margin:6px 0;padding:8px 10px;border-radius:10px;background:rgba(255,170,0,.13)"><b>🚨 Primo's alert (${esc(new Date(al.t*1000).toLocaleTimeString([], {hour: "numeric", minute: "2-digit"}))}): ${esc(al.title)}</b><br>${esc(al.body).replace(/\n/g, "<br>").replace(/(WHY:|CAREFUL:|VALUE:|REAL:|LUCKY\?:|OUTPLAYED:|EVEN:)/g, "<b>$1</b>")}</div>` : "";
+  return `<article class="game" data-eid="${esc(eid)}" style="--c:var(${SPORT_COLOR[g.sport] || "--s-other"});padding:12px 14px;margin-bottom:10px"><div class="gtitle">🔴 ${esc(g.title)}</div>${alertBox}${lu ? lateCardHTML(x, lu) : up ? upsetCardHTML(x, up) : ""}<div class="gsub"><b>${esc(g.leagueName)}</b>${es ? ` · ${esc(es.detail)}` : " · in progress"}${score ? ` · ${score}` : ""}</div>${call}${c.sides.length ? `<ul style="margin:6px 0 0;padding-left:18px">${sideRows}</ul>` : `<p class="muted">No live Kalshi price yet; the live robot checks every few minutes.</p>`}${c.notes.length ? `<p class="muted" style="margin:6px 0 0">${c.notes.map(esc).join(" ")}</p>` : ""}${link ? `<p style="margin:6px 0 0">${betLink(g.markets.find(m => m.type === "winner"),"Open on Kalshi ↗")}</p>` : ""}</article>`;
 }
 // Live tab sections: NFL, college football, NBA, soccer... each with its own header and count
 function sectionOf(g){
