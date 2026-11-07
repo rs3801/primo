@@ -1,44 +1,61 @@
-{"status": "active", "result": "", "close_time": "2027-11-03T15:00:00Z"}
-{"t": "KXNBAGAME-26NOV06SASSAC-SAS", "side": "yes", "title": "San Antonio wins", "status": "active", "result": "", "bid": "0.9800", "ask": "0.9900", "last": "0.9900", "exp": "2026-11-07T06:00:00Z"}
-{"t": "KXNCAAFGAME-26NOV07ACTARL-TARL", "side": "yes", "title": "Tarleton St. wins", "status": "active", "result": "", "bid": "0.7600", "ask": "0.7700", "last": "0.7700", "exp": "2026-11-08T03:00:00Z"}
-{"t": "KXNCAAFGAME-26NOV07BSUCSU-BSU", "side": "yes", "title": "Boise St. wins", "status": "active", "result": "", "bid": "0.8700", "ask": "0.8800", "last": "0.8800", "exp": "2026-11-08T02:00:00Z"}
-{"t": "KXNCAAFGAME-26NOV07CHARUAB-UAB", "side": "yes", "title": "UAB wins", "status": "active", "result": "", "bid": "0.7500", "ask": "0.7600", "last": "0.7600", "exp": "2026-11-07T23:00:00Z"}
-{"t": "KXNCAAFGAME-26NOV07EWUIDHO-IDHO", "side": "yes", "title": "Idaho wins", "status": "active", "result": "", "bid": "0.7600", "ask": "0.7700", "last": "0.7800", "exp": "2026-11-08T01:00:00Z"}
-{"t": "KXNCAAFGAME-26NOV07FAMUALCN-ALCN", "side": "yes", "title": "Alcorn St. wins", "status": "active", "result": "", "bid": "0.7800", "ask": "0.7900", "last": "0.7900", "exp": "2026-11-07T23:00:00Z"}
-{"t": "KXNCAAFGAME-26NOV07LIBNMSU-LIB", "side": "yes", "title": "Liberty wins", "status": "active", "result": "", "bid": "0.8600", "ask": "0.8700", "last": "0.8700", "exp": "2026-11-08T01:00:00Z"}
-{"t": "KXNCAAFGAME-26NOV07LOUGT-LOU", "side": "yes", "title": "Louisville wins", "status": "active", "result": "", "bid": "0.8400", "ask": "0.8500", "last": "0.8500", "exp": "2026-11-07T23:00:00Z"}
-{"t": "KXNCAAFGAME-26NOV07LTTROY-LT", "side": "yes", "title": "Louisiana Tech wins", "status": "active", "result": "", "bid": "0.6600", "ask": "0.6700", "last": "0.6700", "exp": "2026-11-08T00:00:00Z"}
-{"t": "KXNCAAFGAME-26NOV07MIAND-ND", "side": "yes", "title": "Notre Dame wins", "status": "active", "result": "", "bid": "0.7000", "ask": "0.7100", "last": "0.7100", "exp": "2026-11-08T03:30:00Z"}
-{"t": "KXNCAAFGAME-26NOV07MSUMICH-MICH", "side": "yes", "title": "Michigan wins", "status": "active", "result": "", "bid": "0.8400", "ask": "0.8500", "last": "0.8500", "exp": "2026-11-08T03:30:00Z"}
-{"t": "KXNCAAFGAME-26NOV07MTSTIDST-MTST", "side": "yes", "title": "Montana St. wins", "status": "active", "result": "", "bid": "0.8300", "ask": "0.8400", "last": "0.8400", "exp": "2026-11-08T02:00:00Z"}
-{"t": "KXNCAAFGAME-26NOV07MVSUJKST-JKST", "side": "yes", "title": "Jackson St. wins", "status": "active", "result": "", "bid": "0.9500", "ask": "0.9600", "last": "0.9600", "exp": "2026-11-07T23:00:00Z"}
-{"t": "KXNCAAFGAME-26NOV07NAUCP-NAU", "side": "yes", "title": "Northern Arizona wins", "status": "active", "result": "", "bid": "0.8200", "ask": "0.8300", "last": "0.8300", "exp": "2026-11-08T01:00:00Z"}
-{"t": "KXNCAAFGAME-26NOV07NIUSJSU-SJSU", "side": "yes", "title": "San Jose St. wins", "status": "active", "result": "", "bid": "0.7800", "ask": "0.7900", "last": "0.7900", "exp": "2026-11-08T00:00:00Z"}
-{"t": "KXNCAAFGAME-26NOV07OKSTKSU-OKST", "side": "yes", "title": "Oklahoma St. wins", "status": "active", "result": "", "bid": "0.6800", "ask": "0.6900", "last": "0.6900", "exp": "2026-11-07T23:00:00Z"}
-{"t": "KXNCAAFGAME-26NOV07OREOSU-OSU", "side": "yes", "title": "Ohio St. wins", "status": "active", "result": "", "bid": "0.7200", "ask": "0.7300", "last": "0.7300", "exp": "2026-11-07T23:30:00Z"}
-{"t": "KXNCAAFGAME-26NOV07PRSTMONT-MONT", "side": "yes", "title": "Montana wins", "status": "active", "result": "", "bid": "0.9300", "ask": "0.9400", "last": "0.9300", "exp": "2026-11-07T23:00:00Z"}
-{"t": "KXNCAAFGAME-26NOV07RICEUNT-UNT", "side": "yes", "title": "North Texas wins", "status": "active", "result": "", "bid": "0.8600", "ask": "0.8700", "last": "0.8700", "exp": "2026-11-07T23:00:00Z"}
-{"t": "KXNCAAFGAME-26NOV07RUTGWIS-WIS", "side": "yes", "title": "Wisconsin wins", "status": "active", "result": "", "bid": "0.8900", "ask": "0.9000", "last": "0.9000", "exp": "2026-11-07T23:00:00Z"}
-{"t": "KXNCAAFGAME-26NOV07SEMOTNST-SEMO", "side": "yes", "title": "Southeast Missouri St. wins", "status": "active", "result": "", "bid": "0.7800", "ask": "0.7900", "last": "0.7900", "exp": "2026-11-07T23:30:00Z"}
-{"t": "KXNCAAFGAME-26NOV07SHSUJVST-JVST", "side": "yes", "title": "Jacksonville St. wins", "status": "active", "result": "", "bid": "0.8600", "ask": "0.8700", "last": "0.8700", "exp": "2026-11-08T03:00:00Z"}
-{"t": "KXNCAAFGAME-26NOV07SIUINST-SIU", "side": "yes", "title": "Southern Illinois wins", "status": "active", "result": "", "bid": "0.6000", "ask": "0.6100", "last": "0.6000", "exp": "2026-11-08T02:00:00Z"}
-{"t": "KXNCAAFGAME-26NOV07TEMNAVY-NAVY", "side": "yes", "title": "Navy wins", "status": "active", "result": "", "bid": "0.7100", "ask": "0.7200", "last": "0.7200", "exp": "2026-11-07T23:30:00Z"}
-{"t": "KXNCAAFGAME-26NOV07TXSTORST-ORST", "side": "yes", "title": "Oregon St. wins", "status": "active", "result": "", "bid": "0.6700", "ask": "0.6800", "last": "0.6800", "exp": "2026-11-08T06:30:00Z"}
-{"t": "KXNCAAFGAME-26NOV07UCLAMINN-UCLA", "side": "yes", "title": "UCLA wins", "status": "active", "result": "", "bid": "0.6400", "ask": "0.6500", "last": "0.6500", "exp": "2026-11-07T23:00:00Z"}
-{"t": "KXNCAAFGAME-26NOV07ULMARST-ARST", "side": "yes", "title": "Arkansas St. wins", "status": "active", "result": "", "bid": "0.8500", "ask": "0.8600", "last": "0.8600", "exp": "2026-11-07T23:00:00Z"}
-{"t": "KXNCAAFGAME-26NOV07UTRGVNWST-UTRGV", "side": "yes", "title": "UT Rio Grande Valley wins", "status": "active", "result": "", "bid": "0.9000", "ask": "0.9100", "last": "0.9100", "exp": "2026-11-07T22:00:00Z"}
-{"t": "KXNCAAFGAME-26NOV07UTUUCD-UCD", "side": "yes", "title": "UC Davis wins", "status": "active", "result": "", "bid": "0.8600", "ask": "0.8700", "last": "0.8600", "exp": "2026-11-08T03:00:00Z"}
-{"t": "KXNCAAFGAME-26NOV07VMITNTC-TNTC", "side": "yes", "title": "Tennessee Tech wins", "status": "active", "result": "", "bid": "0.9800", "ask": "0.9900", "last": "0.9900", "exp": "2026-11-07T22:30:00Z"}
-{"t": "KXNCAAFGAME-26NOV07YSUMURR-YSU", "side": "yes", "title": "Youngstown St. wins", "status": "active", "result": "", "bid": "0.9400", "ask": "0.9500", "last": "0.9400", "exp": "2026-11-07T22:00:00Z"}
-{"t": "KXNFLGAME-26NOV08DALIND-DAL", "side": "yes", "title": "Dallas wins", "status": "active", "result": "", "bid": "0.6800", "ask": "0.6900", "last": "0.6900", "exp": "2026-11-08T21:00:00Z"}
-{"t": "KXNFLGAME-26NOV08DETMIA-DET", "side": "yes", "title": "Detroit wins", "status": "active", "result": "", "bid": "0.7400", "ask": "0.7500", "last": "0.7500", "exp": "2026-11-08T21:00:00Z"}
-{"t": "KXNFLGAME-26NOV08HOULAC-HOU", "side": "yes", "title": "Houston wins", "status": "active", "result": "", "bid": "0.6900", "ask": "0.7000", "last": "0.7000", "exp": "2026-11-09T00:05:00Z"}
-{"t": "KXNFLGAME-26NOV08LARWAS-LAR", "side": "yes", "title": "Los Angeles R wins", "status": "active", "result": "", "bid": "0.6600", "ask": "0.6700", "last": "0.6700", "exp": "2026-11-08T21:00:00Z"}
-{"t": "KXNFLGAME-26NOV08LVSF-SF", "side": "yes", "title": "San Francisco wins", "status": "active", "result": "", "bid": "0.7900", "ask": "0.8000", "last": "0.8000", "exp": "2026-11-09T00:25:00Z"}
-{"t": "KXNFLGAME-26NOV08NYJKC-KC", "side": "yes", "title": "Kansas City wins", "status": "active", "result": "", "bid": "0.8000", "ask": "0.8100", "last": "0.8000", "exp": "2026-11-08T21:00:00Z"}
-{"t": "SENATEAK-26-D", "side": "yes", "title": "Will Democratics win the Senate race in Alaska?", "status": "active", "result": "", "bid": "0.9770", "ask": "0.9780", "last": "0.9770", "exp": "2027-01-04T15:00:00Z"}
-{"t": "SENATEMS-26-D", "side": "yes", "title": "Will Democratics win the Senate race in Mississippi?", "status": "active", "result": "", "bid": "0.9870", "ask": "0.9890", "last": "0.9870", "exp": "2027-01-04T15:00:00Z"}
-sb err basketball/nba HTTP Error 400: Bad Request
-sb err basketball/mens-college-basketball HTTP Error 400: Bad Request
-sb err football/college-football HTTP Error 400: Bad Request
-sb err hockey/nhl HTTP Error 400: Bad Request
+G WSH @ ATL | Final | ATL 139 WSH 132
+G BOS @ CHA | Final | CHA 80 BOS 119
+G PHI @ CLE | Final | CLE 119 PHI 95
+G UTAH @ DAL | Final | DAL 112 UTAH 100
+G OKC @ MEM | Final | MEM 97 OKC 128
+G TOR @ MIL | Final | MIL 107 TOR 121
+G MIN @ NO | Final | NO 109 MIN 115
+G POR @ LAL | 11:14 - 4th | LAL 89 POR 75
+P POR Toumani Camara {'MIN': '21', 'PTS': '8', 'FG': '3-6', '3PT': '2-4', 'FT': '0-0', 'REB': '3', 'AST': '1', 'TO': '0', 'STL': '0', 'BLK': '0', 'OREB': '0', 'DREB': '3', 'PF': '4', '+/-': '-9'}
+P POR Deni Avdija {'MIN': '27', 'PTS': '12', 'FG': '4-10', '3PT': '1-4', 'FT': '3-7', 'REB': '9', 'AST': '7', 'TO': '6', 'STL': '1', 'BLK': '0', 'OREB': '2', 'DREB': '7', 'PF': '3', '+/-': '-8'}
+P POR Donovan Clingan {'MIN': '19', 'PTS': '8', 'FG': '3-5', '3PT': '2-4', 'FT': '0-0', 'REB': '9', 'AST': '0', 'TO': '2', 'STL': '1', 'BLK': '2', 'OREB': '1', 'DREB': '8', 'PF': '3', '+/-': '-7'}
+P POR Damian Lillard {'MIN': '27', 'PTS': '17', 'FG': '4-9', '3PT': '3-6', 'FT': '6-6', 'REB': '0', 'AST': '2', 'TO': '4', 'STL': '1', 'BLK': '0', 'OREB': '0', 'DREB': '0', 'PF': '0', '+/-': '-6'}
+P POR Scoot Henderson {'MIN': '23', 'PTS': '2', 'FG': '0-2', '3PT': '0-1', 'FT': '2-4', 'REB': '2', 'AST': '0', 'TO': '5', 'STL': '0', 'BLK': '0', 'OREB': '0', 'DREB': '2', 'PF': '5', '+/-': '-2'}
+P POR Robert Williams III {'MIN': '14', 'PTS': '9', 'FG': '4-5', '3PT': '0-0', 'FT': '1-1', 'REB': '5', 'AST': '2', 'TO': '1', 'STL': '1', 'BLK': '0', 'OREB': '3', 'DREB': '2', 'PF': '1', '+/-': '-5'}
+P POR Yang Hansen {'MIN': '3', 'PTS': '2', 'FG': '0-0', '3PT': '0-0', 'FT': '2-2', 'REB': '0', 'AST': '0', 'TO': '1', 'STL': '0', 'BLK': '0', 'OREB': '0', 'DREB': '0', 'PF': '0', '+/-': '-2'}
+P POR Jrue Holiday {'MIN': '20', 'PTS': '4', 'FG': '1-2', '3PT': '1-2', 'FT': '1-1', 'REB': '1', 'AST': '3', 'TO': '0', 'STL': '0', 'BLK': '0', 'OREB': '0', 'DREB': '1', 'PF': '2', '+/-': '-16'}
+P POR Chris Youngblood {'MIN': '9', 'PTS': '6', 'FG': '2-4', '3PT': '2-4', 'FT': '0-0', 'REB': '1', 'AST': '0', 'TO': '1', 'STL': '1', 'BLK': '0', 'OREB': '0', 'DREB': '1', 'PF': '2', '+/-': '+7'}
+P POR Sidy Cissoko {'MIN': '18', 'PTS': '7', 'FG': '2-7', '3PT': '2-5', 'FT': '1-2', 'REB': '1', 'AST': '2', 'TO': '0', 'STL': '0', 'BLK': '1', 'OREB': '0', 'DREB': '1', 'PF': '2', '+/-': '-12'}
+P LAL Jake LaRavia {'MIN': '16', 'PTS': '4', 'FG': '1-3', '3PT': '1-2', 'FT': '1-2', 'REB': '5', 'AST': '2', 'TO': '1', 'STL': '1', 'BLK': '0', 'OREB': '4', 'DREB': '1', 'PF': '3', '+/-': '-6'}
+P LAL Walker Kessler {'MIN': '25', 'PTS': '12', 'FG': '5-6', '3PT': '0-0', 'FT': '2-3', 'REB': '10', 'AST': '1', 'TO': '0', 'STL': '1', 'BLK': '0', 'OREB': '2', 'DREB': '8', 'PF': '2', '+/-': '+13'}
+P LAL Matisse Thybulle {'MIN': '19', 'PTS': '0', 'FG': '0-1', '3PT': '0-1', 'FT': '0-0', 'REB': '2', 'AST': '0', 'TO': '2', 'STL': '2', 'BLK': '0', 'OREB': '1', 'DREB': '1', 'PF': '2', '+/-': '-4'}
+P LAL Luka Doncic {'MIN': '31', 'PTS': '40', 'FG': '13-28', '3PT': '4-14', 'FT': '10-14', 'REB': '5', 'AST': '4', 'TO': '1', 'STL': '1', 'BLK': '0', 'OREB': '1', 'DREB': '4', 'PF': '3', '+/-': '+16'}
+P LAL Austin Reaves {'MIN': '26', 'PTS': '10', 'FG': '4-15', '3PT': '0-6', 'FT': '2-2', 'REB': '2', 'AST': '1', 'TO': '2', 'STL': '2', 'BLK': '0', 'OREB': '0', 'DREB': '2', 'PF': '4', '+/-': '0'}
+P LAL Sandro Mamukelashvili {'MIN': '20', 'PTS': '7', 'FG': '2-6', '3PT': '1-3', 'FT': '2-2', 'REB': '3', 'AST': '1', 'TO': '0', 'STL': '1', 'BLK': '1', 'OREB': '1', 'DREB': '2', 'PF': '0', '+/-': '+19'}
+P LAL Ziaire Williams {'MIN': '13', 'PTS': '8', 'FG': '3-5', '3PT': '2-4', 'FT': '0-0', 'REB': '2', 'AST': '1', 'TO': '1', 'STL': '1', 'BLK': '0', 'OREB': '1', 'DREB': '1', 'PF': '1', '+/-': '+10'}
+P LAL Adou Thiero {'MIN': '7', 'PTS': '4', 'FG': '2-4', '3PT': '0-0', 'FT': '0-0', 'REB': '4', 'AST': '2', 'TO': '0', 'STL': '0', 'BLK': '0', 'OREB': '4', 'DREB': '0', 'PF': '1', '+/-': '0'}
+P LAL Collin Sexton {'MIN': '5', 'PTS': '0', 'FG': '0-1', '3PT': '0-1', 'FT': '0-0', 'REB': '0', 'AST': '1', 'TO': '0', 'STL': '0', 'BLK': '0', 'OREB': '0', 'DREB': '0', 'PF': '1', '+/-': '-4'}
+P LAL Quentin Grimes {'MIN': '18', 'PTS': '2', 'FG': '1-3', '3PT': '0-2', 'FT': '0-0', 'REB': '0', 'AST': '0', 'TO': '1', 'STL': '2', 'BLK': '0', 'OREB': '0', 'DREB': '0', 'PF': '2', '+/-': '+16'}
+T POR {'FG': '23-50', 'Field Goal %': '46', '3PT': '13-30', 'Three Point %': '43', 'FT': '16-23', 'Free Throw %': '70', 'Rebounds': '31', 'Offensive Rebounds': '6', 'Defensive Rebounds': '25', 'Assists': '17', 'Steals': '5', 'Blocks': '3', 'Turnovers': '20', 'Team Turnovers': '0', 'Total Turnovers': '20', 'Technical Fouls': '2', 'Total Technical Fouls': '2', 'Flagrant Fouls': '0', 'Points Conceded Off Turnovers': '22', 'Fast Break Points': '11', 'Points in Paint': '18', 'Fouls': '22', 'Largest Lead': '16', 'Lead Changes': '2', 'Percent Led': '75'}
+T LAL {'FG': '31-72', 'Field Goal %': '43', '3PT': '8-33', 'Three Point %': '24', 'FT': '17-23', 'Free Throw %': '74', 'Rebounds': '33', 'Offensive Rebounds': '14', 'Defensive Rebounds': '19', 'Assists': '13', 'Steals': '11', 'Blocks': '1', 'Turnovers': '8', 'Team Turnovers': '0', 'Total Turnovers': '8', 'Technical Fouls': '1', 'Total Technical Fouls': '1', 'Flagrant Fouls': '0', 'Points Conceded Off Turnovers': '11', 'Fast Break Points': '4', 'Points in Paint': '40', 'Fouls': '19', 'Largest Lead': '14', 'Lead Changes': '2', 'Percent Led': '13'}
+PLAYS 393
+pl 3 1:46 75-81 Sidy Cissoko makes 26-foot three point jumper (Damian Lillard assists)
+pl 3 1:20 75-81 Luka Doncic misses 30-foot three point jumper
+pl 3 1:20 75-81 Adou Thiero offensive rebound
+pl 3 1:14 75-84 Ziaire Williams makes 27-foot three point jumper (Adou Thiero assists)
+pl 3 54.3 75-84 Sidy Cissoko misses 26-foot three point jumper
+pl 3 54.3 75-84 Luka Doncic defensive rebound
+pl 3 51.0 75-84 Scoot Henderson personal foul
+pl 3 51.0 75-85 Luka Doncic makes free throw 1 of 2
+pl 3 51.0 75-86 Luka Doncic makes free throw 2 of 2
+pl 3 51.0 75-86 Deni Avdija enters the game for Scoot Henderson
+pl 3 32.0 75-86 Deni Avdija misses 25-foot three point jumper
+pl 3 32.0 75-86 Ziaire Williams defensive rebound
+pl 3 23.9 75-86 Jrue Holiday personal foul
+pl 3 23.9 75-87 Luka Doncic makes free throw 1 of 2
+pl 3 23.9 75-87 Luka Doncic misses free throw 2 of 2
+pl 3 23.9 75-87 Matisse Thybulle enters the game for Sandro Mamukelashvili
+pl 3 23.9 75-87 Deni Avdija defensive rebound
+pl 3 2.6 75-87 Deni Avdija out of bounds bad pass turnover
+pl 3 2.3 75-87 Luka Doncic misses heave jump shot
+pl 3 2.3 75-87 Lakers offensive team rebound
+pl 3 0.0 75-87 End of the 3rd Quarter
+pl 4 12:00 75-87 Walker Kessler enters the game for Adou Thiero
+pl 4 12:00 75-87 Collin Sexton enters the game for Quentin Grimes
+pl 4 12:00 75-87 Austin Reaves enters the game for Luka Doncic
+pl 4 12:00 75-87 Donovan Clingan enters the game for Robert Williams III
+Q LAL [20.0, 33.0, 34.0, 2.0]
+Q POR [29.0, 31.0, 15.0, 0.0]
+WP last {'homeWinPercentage': 0.94, 'tiePercentage': 0.0, 'playId': '401909294584'}
+LC {}
+G SA @ SAC | 9:44 - 4th | SAC 88 SA 102
