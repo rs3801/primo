@@ -3215,12 +3215,13 @@ function gradeLeg(leg){
   if (leg.kalshi && /:/.test(leg.who)){ const ph = kalshiProp(leg); if (ph) return gradeProp(leg, r, ph); }
   if (leg.kalshi && leg.ctx){ const hit = kalshiInGame(leg); if (hit) return gradeKalshi(leg, hit, r); }
   if (leg.kalshi && !leg.ctx && /\b(wins by|over|under)\b/i.test(leg.who || "")){   // no game name came through: look for this exact Kalshi bet in every game
-    const want = ffold(leg.who).replace(/[^a-z0-9.]/g, ""), now = Date.now();
+    const fl = x => ffold(x).replace(/^(full game|reg time):\s*/, "").replace(/\b(scored|the)\b/g, "").replace(/[^a-z0-9.]/g, "");   // Kalshi adds "scored" on team totals; tickets often drop it
+    const want = fl(leg.who), now = Date.now();
     const hits = [];
-    for (const g of games) for (const m of g.markets) if (!m.noOf && ffold(m.label).replace(/[^a-z0-9.]/g, "") === want) hits.push(m);
+    for (const g of games) for (const m of g.markets) if (!m.noOf && fl(m.label) === want) hits.push(m);
     hits.sort((a, b) => Math.abs((a.g.start || 0) - now) - Math.abs((b.g.start || 0) - now));
     if (hits.length && (hits.length === 1 || !/^(over|under)/i.test(leg.who))) return gradeKalshi(leg, hits[0], r);
-    if (/wins by/i.test(leg.who)){ r.chance = leg.paid; r.warn.push("Primo couldn't find this exact spread on Kalshi right now, so it uses the price on your ticket."); r.desc = leg.who; r.tag = r.chance == null ? "" : r.chance >= .65 ? "Likely" : r.chance >= .52 ? "Leans yes" : r.chance >= .45 ? "Coin flip" : "Long shot"; return r; }
+    if (/wins by|\bover\s+[\d.]+\s+(points|runs|goals)/i.test(leg.who)){ r.chance = leg.paid; r.warn.push("Primo couldn't find this exact bet on Kalshi right now, so it uses the price on your ticket."); r.desc = leg.who; r.tag = r.chance == null ? "" : r.chance >= .65 ? "Likely" : r.chance >= .52 ? "Leans yes" : r.chance >= .45 ? "Coin flip" : "Long shot"; return r; }
   }
   const both = leg.opp ? findTicketGame(leg.who, leg.opp) : null;
   const km0 = both && both.both ? null : kalshiFind(leg);
